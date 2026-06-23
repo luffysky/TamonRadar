@@ -23,8 +23,19 @@ def _build_url() -> tuple[str, dict]:
             url = "postgresql+psycopg://" + url[len("postgres://"):]
         elif url.startswith("postgresql://"):
             url = "postgresql+psycopg://" + url[len("postgresql://"):]
-        return url, {}
-    # 本機 fallback:SQLite
+
+        if url.startswith("postgresql+psycopg://"):
+            return url, {}
+        if url.startswith("sqlite://"):
+            return url, {"check_same_thread": False}
+
+        # 格式不對(例如有人填了 https://...)→ 不要讓整個 app 在 import 就崩潰,
+        # 退回本機 SQLite 並印出明確警告,方便排查。
+        print(
+            f"[db] ⚠️ DATABASE_URL 格式不正確,必須是 postgresql://使用者:密碼@主機:5432/資料庫。"
+            f"收到的開頭是「{url[:15]}…」。暫時改用本機 SQLite(資料不會保留)。"
+        )
+
     Path("data").mkdir(exist_ok=True)
     return "sqlite:///./data/tamonradar.db", {"check_same_thread": False}
 

@@ -31,8 +31,15 @@ app.include_router(google_router)
 
 @app.on_event("startup")
 def _startup():
-    db.init_db()
-    scheduler.start()
+    # 即使 DB 連不上也別讓服務崩潰重啟(才看得到 log、health 仍可回應)
+    try:
+        db.init_db()
+    except Exception as e:
+        print(f"[startup] ⚠️ 資料庫初始化失敗,請檢查 DATABASE_URL:{e}")
+    try:
+        scheduler.start()
+    except Exception as e:
+        print(f"[startup] ⚠️ 排程啟動失敗:{e}")
 
 # 允許跨來源的前端網址,可用環境變數 CORS_ORIGINS(逗號分隔)覆寫。
 # 去掉結尾斜線:瀏覽器送的 Origin 不含斜線,帶斜線會比對失敗。
