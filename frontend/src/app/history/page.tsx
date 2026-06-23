@@ -4,18 +4,28 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getHistory } from "@/lib/api";
 import type { HistoryRun } from "@/lib/types";
+import { useRequireAuth } from "@/components/AuthProvider";
 
 export default function HistoryPage() {
+  const { user, ready } = useRequireAuth();
   const [runs, setRuns] = useState<HistoryRun[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
     getHistory()
       .then((d) => setRuns(d.runs))
-      .catch(() => setError("讀取歷史失敗,請確認後端是否啟動。"))
+      .catch((e) => {
+        if (e instanceof Error && e.message === "UNAUTHORIZED") return;
+        setError("讀取歷史失敗,請確認後端是否啟動。");
+      })
       .finally(() => setLoading(false));
-  }, []);
+  }, [user]);
+
+  if (!ready || !user) {
+    return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
+  }
 
   return (
     <div className="space-y-4">

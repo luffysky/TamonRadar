@@ -50,6 +50,8 @@ npm run dev
 
 ## 功能
 
+- ✅ 多使用者帳號(註冊/登入,每人有自己的歷史紀錄)
+- ✅ 任務佇列:限制同時爬蟲數,避免多人同時用爆記憶體
 - ✅ 前端輸入關鍵字即時爬取(SSE 進度條 + 即時訊息)
 - ✅ 自動分類(計分制)、抓價格(結構化優先 + 雜訊過濾)
 - ✅ 統計卡片、分類/來源長條圖、商品候選卡
@@ -68,10 +70,17 @@ npm run dev
 2. 設定 **Root Directory = `backend`**。
    後端有 `Dockerfile`(內含 Chromium),Zeabur 會用它建置,Selenium 才能在雲端跑。
 3. 環境變數(參考 `backend/.env.example`):
+   - `DATABASE_URL` = Supabase 連線字串(**雲端必填**,否則資料會在每次重部署後消失)
+   - `JWT_SECRET` = 自己亂打一長串(**雲端必填**,帳號 token 的簽章密鑰)
    - `CORS_ORIGINS` = 你的前端網域(例:`https://tamonradar.zeabur.app`)
    - `BRAVE_API_KEY` 或 `SERPAPI_KEY`(**雲端強烈建議**,否則 Selenium 會被 Google 擋)
    - `SEARCH_PROVIDER`(選用,`brave`/`serpapi`/`selenium`,留空會自動依金鑰決定)
    - `ANTHROPIC_API_KEY`(選用,要 AI 摘要才需要)
+
+### 資料庫服務(Supabase / Postgres)
+在同一個 Zeabur 專案 Add Service → Supabase / PostgreSQL,把它給的連線字串填到後端的
+`DATABASE_URL`。後端啟動時會自動建表(users / runs)。本機開發不設 `DATABASE_URL`
+則自動用 SQLite 檔(`backend/data/tamonradar.db`)。
 4. 部署完成後記下後端網域,例如 `https://tamonradar-api.zeabur.app`。
 
 ### 前端服務(Next.js)

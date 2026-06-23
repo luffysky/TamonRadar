@@ -1,22 +1,28 @@
-"""爬蟲任務管理:把一次爬蟲跑在背景執行緒,事件存在緩衝區供 SSE 即時讀取。
+"""爬蟲任務管理:背景執行緒跑爬蟲,事件存緩衝區供 SSE 即時讀取。
 
-設計選擇:事件用 list 緩衝(而非只用 queue),這樣 SSE 端點可以「補播」已發生的
-事件,使用者中途連線也看得到完整進度,對教學除錯也友善。
+- 每個 job 綁定發起的使用者(user_id),完成後存進資料庫。
+- 用 Semaphore 限制同時執行的爬蟲數量,避免多人同時用把記憶體/瀏覽器爆掉。
 """
+import os
 import threading
 import uuid
 from datetime import datetime, timezone
 
 from crawler.config import CrawlConfig
 from crawler.runner import run_crawl
-import history
+import db
+
+# 同時最多幾個爬蟲在跑;其餘排隊等待
+MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT_CRAWLS", "2"))
+_slots = threading.Semaphore(MAX_CONCURRENT)
 
 
 class Job:
-    def __init__(self, config: CrawlConfig):
+    def __init__(self, config: CrawlConfig, user_id: int):
         self.id = uuid.uuid4().hex[:12]
         self.config = config
-        self.status = "pending"          # pending | running | done | error | stopped
+        self.user_id = user_id
+        self.status = "pending"          # pending | queued | running | done | error | stopped
         self.events: list[dict] = []
         self.result: dict | None = None
         self.error: str | None = None
@@ -49,35 +55,42 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
-    def create(self, config: CrawlConfig) -> Job:
-        job = Job(config)
+    def create(self, config: CrawlConfig, user_id: int) -> Job:
+        job = Job(config, user_id)
         with self._lock:
             self._jobs[job.id] = job
-        thread = threading.Thread(target=self._run, args=(job,), daemon=True)
-        thread.start()
+        threading.Thread(target=self._run, args=(job,), daemon=True).start()
         return job
 
     def get(self, job_id: str) -> Job | None:
         return self._jobs.get(job_id)
 
     def _run(self, job: Job) -> None:
-        job.status = "running"
+        # 併發控制:槽位滿了就排隊
+        if not _slots.acquire(blocking=False):
+            job.status = "queued"
+            job.add_event({"type": "queued", "message": "前面還有爬蟲在跑,排隊中…"})
+            _slots.acquire()
         try:
-            result = run_crawl(
-                job.config,
-                on_event=job.add_event,
-                should_stop=job.should_stop,
-            )
-            job.result = result
-            job.status = "stopped" if job.should_stop() else "done"
+            job.status = "running"
             try:
-                history.save_run(job)
-            except Exception as e:  # 歷史存檔失敗不該讓整個任務算失敗
-                job.add_event({"type": "warning", "message": f"歷史存檔失敗:{e}"})
-        except Exception as e:
-            job.status = "error"
-            job.error = str(e)
-            job.add_event({"type": "error", "message": f"爬蟲發生錯誤:{e}"})
+                result = run_crawl(
+                    job.config,
+                    on_event=job.add_event,
+                    should_stop=job.should_stop,
+                )
+                job.result = result
+                job.status = "stopped" if job.should_stop() else "done"
+                try:
+                    db.save_run(job, job.user_id)
+                except Exception as e:
+                    job.add_event({"type": "warning", "message": f"歷史存檔失敗:{e}"})
+            except Exception as e:
+                job.status = "error"
+                job.error = str(e)
+                job.add_event({"type": "error", "message": f"爬蟲發生錯誤:{e}"})
+        finally:
+            _slots.release()
 
 
 manager = JobManager()

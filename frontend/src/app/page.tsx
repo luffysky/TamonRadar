@@ -12,10 +12,12 @@ const PROVIDER_LABELS: Record<string, string> = {
 };
 import ProgressPanel from "@/components/ProgressPanel";
 import ResultsView from "@/components/ResultsView";
+import { useRequireAuth } from "@/components/AuthProvider";
 
 const DEFAULT_KEYWORDS = "多聞 週邊\n多聞 公仔\n多聞 壓克力\n現在的是哪一個多聞";
 
 export default function HomePage() {
+  const { user, ready } = useRequireAuth();
   const [keywords, setKeywords] = useState(DEFAULT_KEYWORDS);
   const [pages, setPages] = useState(2);
   const [maxDetail, setMaxDetail] = useState(20);
@@ -78,6 +80,10 @@ export default function HomePage() {
 
   function handleStop() {
     if (jobId) stopCrawl(jobId);
+  }
+
+  if (!ready || !user) {
+    return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
   }
 
   return (
