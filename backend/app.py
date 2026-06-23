@@ -96,6 +96,9 @@ class SettingsRequest(BaseModel):
     discord_webhook: str = ""
     telegram_token: str = ""
     telegram_chat_id: str = ""
+    openai_key: str = ""
+    anthropic_key: str = ""
+    ai_provider: str = ""
 
 
 class ScheduleRequest(BaseModel):
@@ -389,18 +392,29 @@ def _slim_records(records: list[dict], limit: int = 80) -> list[dict]:
     return [{k: r.get(k, "") for k in keys} for r in records[:limit]]
 
 
+def _ai_args(user) -> dict:
+    """讀使用者自備的 AI 金鑰(沒填則 ai 模組會自動退回後端共用金鑰)。"""
+    st = db.get_settings(user.id)
+    return {
+        "openai_key": st.get("openai_key", ""),
+        "anthropic_key": st.get("anthropic_key", ""),
+        "prefer": st.get("ai_provider", ""),
+    }
+
+
 @app.post("/api/ai/chat")
 def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
     records = _user_records(req.run_id, user)
-    if not ai.ai_available():
-        return {"available": False, "answer": "尚未設定 AI 金鑰(OPENAI_API_KEY 或 ANTHROPIC_API_KEY)。"}
+    args = _ai_args(user)
+    if not ai.ai_available(**args):
+        return {"available": False, "answer": "尚未設定 AI 金鑰(可在「設定」填自己的,或由後端提供)。"}
     prompt = (
         "你是一個資料查詢助理。以下是一批網路搜尋結果(JSON)。請根據這些資料用繁體中文回答"
         "使用者的問題;提到具體項目時附上連結(若有價格、日期、數據也一併附上),"
         "資料裡沒有就老實說。\n\n"
         f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
     )
-    answer, model = ai.ai_complete(prompt, max_tokens=1500)
+    answer, model = ai.ai_complete(prompt, max_tokens=1500, **args)
     return {"available": True, "answer": answer, "model": model}
 
 
@@ -409,7 +423,8 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
     if not req.run_id:
         raise HTTPException(400, "請提供 run_id")
     records = _user_records(req.run_id, user)
-    if not ai.ai_available():
+    args = _ai_args(user)
+    if not ai.ai_available(**args):
         return {"available": False, "noise_urls": [], "message": "尚未設定 AI 金鑰"}
     prompt = (
         "以下是一批網路搜尋結果 JSON。請判斷哪些是『沒有實質內容的雜訊』"
@@ -417,7 +432,7 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
         "只回傳 JSON,格式:{\"noise_urls\": [\"...\"]},不要其他文字。\n\n"
         f"資料:\n{json.dumps(_slim_records(records, 100), ensure_ascii=False)}"
     )
-    text, _ = ai.ai_complete(prompt, max_tokens=1500)
+    text, _ = ai.ai_complete(prompt, max_tokens=1500, **args)
     noise: list[str] = []
     try:
         start, end = (text or "").find("{"), (text or "").rfind("}")
@@ -439,10 +454,11 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
     else:
         raise HTTPException(400, "請提供 run_id 或 records")
 
-    if not ai.ai_available():
+    args = _ai_args(user)
+    if not ai.ai_available(**args):
         return {
             "available": False,
-            "summary": "尚未設定 AI 金鑰(OPENAI_API_KEY 或 ANTHROPIC_API_KEY),無法產生 AI 摘要。",
+            "summary": "尚未設定 AI 金鑰(可在「設定」填自己的,或由後端提供),無法產生 AI 摘要。",
         }
 
     # 自動讀出這次搜尋的主題,讓 AI 針對主題抓重點(支援搜尋任何東西)
@@ -461,7 +477,7 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
         "若資料不足以回答,就誠實說明。\n\n"
         f"資料:\n{json.dumps(_slim_records(records, 60), ensure_ascii=False)}"
     )
-    text, model = ai.ai_complete(prompt, max_tokens=2000)
+    text, model = ai.ai_complete(prompt, max_tokens=2000, **args)
     return {"available": True, "summary": text, "model": model}
 
 
@@ -474,7 +490,14 @@ def get_settings(user=Depends(auth.get_current_user)):
 
 @app.put("/api/settings")
 def put_settings(req: SettingsRequest, user=Depends(auth.get_current_user)):
-    db.save_settings(user.id, req.discord_webhook.strip(), req.telegram_token.strip(), req.telegram_chat_id.strip())
+    db.save_settings(user.id, {
+        "discord_webhook": req.discord_webhook.strip(),
+        "telegram_token": req.telegram_token.strip(),
+        "telegram_chat_id": req.telegram_chat_id.strip(),
+        "openai_key": req.openai_key.strip(),
+        "anthropic_key": req.anthropic_key.strip(),
+        "ai_provider": req.ai_provider.strip(),
+    })
     return {"ok": True}
 
 

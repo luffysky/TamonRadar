@@ -89,6 +89,10 @@ class Settings(Base):
     discord_webhook: Mapped[str] = mapped_column(String(500), default="")
     telegram_token: Mapped[str] = mapped_column(String(200), default="")
     telegram_chat_id: Mapped[str] = mapped_column(String(100), default="")
+    # 使用者自備的 AI 金鑰(BYO);留空則用後端共用金鑰
+    openai_key: Mapped[str] = mapped_column(String(255), default="")
+    anthropic_key: Mapped[str] = mapped_column(String(255), default="")
+    ai_provider: Mapped[str] = mapped_column(String(20), default="")  # ""=自動, openai, anthropic
 
 
 class Schedule(Base):
@@ -131,12 +135,24 @@ def init_db() -> None:
 def _ensure_columns() -> None:
     """相容既有資料庫:補上後來新增的欄位(create_all 不會改既有表)。"""
     insp = inspect(engine)
-    if "tr_users" not in insp.get_table_names():
-        return
-    cols = {c["name"] for c in insp.get_columns("tr_users")}
-    if "provider" not in cols:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE tr_users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"))
+    tables = set(insp.get_table_names())
+
+    if "tr_users" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_users")}
+        if "provider" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE tr_users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"))
+
+    if "tr_user_settings" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_user_settings")}
+        for col, ddl in (
+            ("openai_key", "ALTER TABLE tr_user_settings ADD COLUMN openai_key VARCHAR(255) DEFAULT ''"),
+            ("anthropic_key", "ALTER TABLE tr_user_settings ADD COLUMN anthropic_key VARCHAR(255) DEFAULT ''"),
+            ("ai_provider", "ALTER TABLE tr_user_settings ADD COLUMN ai_provider VARCHAR(20) DEFAULT ''"),
+        ):
+            if col not in cols:
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
 
 
 # ---------- Run 持久化 ----------
@@ -226,26 +242,34 @@ def create_run_record(user_id: int, run_id: str, keywords: list, result: dict) -
 # ---------- 通知設定 ----------
 
 def get_settings(user_id: int) -> dict:
+    empty = {
+        "discord_webhook": "", "telegram_token": "", "telegram_chat_id": "",
+        "openai_key": "", "anthropic_key": "", "ai_provider": "",
+    }
     with SessionLocal() as s:
         st = s.get(Settings, user_id)
         if st is None:
-            return {"discord_webhook": "", "telegram_token": "", "telegram_chat_id": ""}
+            return empty
         return {
             "discord_webhook": st.discord_webhook or "",
             "telegram_token": st.telegram_token or "",
             "telegram_chat_id": st.telegram_chat_id or "",
+            "openai_key": st.openai_key or "",
+            "anthropic_key": st.anthropic_key or "",
+            "ai_provider": st.ai_provider or "",
         }
 
 
-def save_settings(user_id: int, discord_webhook: str, telegram_token: str, telegram_chat_id: str) -> None:
+def save_settings(user_id: int, data: dict) -> None:
     with SessionLocal() as s:
         st = s.get(Settings, user_id)
         if st is None:
             st = Settings(user_id=user_id)
             s.add(st)
-        st.discord_webhook = discord_webhook
-        st.telegram_token = telegram_token
-        st.telegram_chat_id = telegram_chat_id
+        for key in ("discord_webhook", "telegram_token", "telegram_chat_id",
+                    "openai_key", "anthropic_key", "ai_provider"):
+            if key in data and data[key] is not None:
+                setattr(st, key, data[key])
         s.commit()
 
 

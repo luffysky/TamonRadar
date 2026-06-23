@@ -234,6 +234,9 @@ export interface NotifySettings {
   discord_webhook: string;
   telegram_token: string;
   telegram_chat_id: string;
+  openai_key: string;
+  anthropic_key: string;
+  ai_provider: string;
 }
 
 export async function getSettings(): Promise<NotifySettings> {

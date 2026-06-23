@@ -8,6 +8,7 @@ export default function SettingsPage() {
   const { user, ready } = useRequireAuth();
   const [form, setForm] = useState<NotifySettings>({
     discord_webhook: "", telegram_token: "", telegram_chat_id: "",
+    openai_key: "", anthropic_key: "", ai_provider: "",
   });
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -84,6 +85,32 @@ export default function SettingsPage() {
           <p className="mt-1 text-xs text-slate-400">
             跟 @BotFather 建立 bot 拿 token;chat id 可向 @userinfobot 詢問。
           </p>
+        </div>
+
+        <div className="border-t border-slate-100 pt-4 dark:border-slate-700">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">AI 金鑰(自備,選用)</label>
+          <p className="mb-2 text-xs text-slate-400">
+            填自己的金鑰,AI 摘要/對話/濾雜訊就用你的額度(各付各的);留空則用網站提供的。
+          </p>
+          <input
+            type="password" value={form.openai_key}
+            onChange={(e) => setForm({ ...form, openai_key: e.target.value })}
+            placeholder="OpenAI API Key(sk-...)" className={field}
+          />
+          <input
+            type="password" value={form.anthropic_key}
+            onChange={(e) => setForm({ ...form, anthropic_key: e.target.value })}
+            placeholder="Anthropic API Key(sk-ant-...)" className={`${field} mt-2`}
+          />
+          <select
+            value={form.ai_provider}
+            onChange={(e) => setForm({ ...form, ai_provider: e.target.value })}
+            className={`${field} mt-2`}
+          >
+            <option value="">自動(優先 GPT)</option>
+            <option value="openai">優先用 GPT</option>
+            <option value="anthropic">優先用 Claude</option>
+          </select>
         </div>
 
         <div className="flex items-center gap-3">
