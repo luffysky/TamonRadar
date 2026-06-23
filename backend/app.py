@@ -20,9 +20,11 @@ from crawler.reporter import to_dataframe, save_excel, save_markdown_report
 import db
 import auth
 import ai
+import mailer
 import notify
 import scheduler
 from oauth_google import router as google_router
+from oauth_google import _frontend as _frontend_url
 from jobs import manager
 
 app = FastAPI(title="TamonRadar API", version="2.0")
@@ -80,6 +82,15 @@ class AuthRequest(BaseModel):
     password: str
 
 
+class ForgotRequest(BaseModel):
+    email: str
+
+
+class ResetRequest(BaseModel):
+    token: str
+    password: str
+
+
 class SettingsRequest(BaseModel):
     discord_webhook: str = ""
     telegram_token: str = ""
@@ -133,6 +144,42 @@ def login(req: AuthRequest):
 @app.get("/api/auth/me")
 def me(user=Depends(auth.get_current_user)):
     return {"user": _public_user(user)}
+
+
+@app.post("/api/auth/forgot")
+def forgot_password(req: ForgotRequest):
+    email = req.email.strip().lower()
+    with db.SessionLocal() as s:
+        user = s.scalar(select(db.User).where(db.User.email == email))
+    # 不論帳號是否存在都回相同訊息,避免洩漏哪些 email 有註冊
+    if user and user.provider == "local" and mailer.mail_available():
+        token = auth.create_reset_token(user.id)
+        link = f"{_frontend_url()}/reset#token={token}"
+        html = (
+            "<div style='font-family:sans-serif'>"
+            "<h2>📡 TamonRadar 密碼重設</h2>"
+            "<p>點下面的連結重設密碼(1 小時內有效):</p>"
+            f"<p><a href='{link}'>{link}</a></p>"
+            "<p>如果不是你本人申請,忽略這封信即可。</p></div>"
+        )
+        mailer.send_email(email, "TamonRadar 密碼重設", html)
+    return {"ok": True, "message": "若這個 email 有註冊,我們已寄出重設連結,請查收信箱。"}
+
+
+@app.post("/api/auth/reset")
+def reset_password(req: ResetRequest):
+    user_id = auth.verify_reset_token(req.token)
+    if not user_id:
+        raise HTTPException(400, "重設連結已失效或不正確,請重新申請")
+    if len(req.password) < 6:
+        raise HTTPException(400, "密碼至少 6 個字")
+    with db.SessionLocal() as s:
+        user = s.get(db.User, user_id)
+        if not user:
+            raise HTTPException(404, "使用者不存在")
+        user.password_hash = auth.hash_password(req.password)
+        s.commit()
+    return {"ok": True}
 
 
 # ---------- crawl ----------

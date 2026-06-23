@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { login, register, googleLoginUrl } from "@/lib/api";
+import { login, register, googleLoginUrl, forgotPassword } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 
 export default function LoginPage() {
   const { user, ready, signIn } = useAuth();
   const router = useRouter();
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "forgot">("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -21,8 +22,14 @@ export default function LoginPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     setLoading(true);
     try {
+      if (mode === "forgot") {
+        const r = await forgotPassword(email.trim());
+        setNotice(r.message);
+        return;
+      }
       const fn = mode === "login" ? login : register;
       const res = await fn(email.trim(), password);
       signIn(res.token, res.user);
@@ -43,19 +50,23 @@ export default function LoginPage() {
           <p className="text-sm text-slate-400">多聞情報雷達</p>
         </div>
 
-        <div className="mb-4 grid grid-cols-2 rounded-lg bg-slate-100 dark:bg-slate-700 p-1 text-sm">
-          {(["login", "register"] as const).map((m) => (
-            <button
-              key={m}
-              onClick={() => { setMode(m); setError(null); }}
-              className={`rounded-md py-1.5 font-medium transition ${
-                mode === m ? "bg-white dark:bg-slate-800 text-brand-600 shadow-sm" : "text-slate-500 dark:text-slate-400"
-              }`}
-            >
-              {m === "login" ? "登入" : "註冊"}
-            </button>
-          ))}
-        </div>
+        {mode !== "forgot" ? (
+          <div className="mb-4 grid grid-cols-2 rounded-lg bg-slate-100 dark:bg-slate-700 p-1 text-sm">
+            {(["login", "register"] as const).map((m) => (
+              <button
+                key={m}
+                onClick={() => { setMode(m); setError(null); setNotice(null); }}
+                className={`rounded-md py-1.5 font-medium transition ${
+                  mode === m ? "bg-white dark:bg-slate-800 text-brand-600 shadow-sm" : "text-slate-500 dark:text-slate-400"
+                }`}
+              >
+                {m === "login" ? "登入" : "註冊"}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <h2 className="mb-4 text-center text-sm font-medium text-slate-600 dark:text-slate-300">忘記密碼</h2>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
@@ -63,38 +74,62 @@ export default function LoginPage() {
             placeholder="email" autoComplete="email"
             className="w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           />
-          <input
-            type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-            placeholder="密碼(至少 6 字)" autoComplete={mode === "login" ? "current-password" : "new-password"}
-            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
-          />
+          {mode !== "forgot" && (
+            <input
+              type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+              placeholder="密碼(至少 6 字)" autoComplete={mode === "login" ? "current-password" : "new-password"}
+              className="w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            />
+          )}
           {error && <p className="text-sm text-rose-600">{error}</p>}
+          {notice && <p className="text-sm text-emerald-600">{notice}</p>}
           <button
             type="submit" disabled={loading}
             className="w-full rounded-lg bg-brand-600 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-50"
           >
-            {loading ? "處理中…" : mode === "login" ? "登入" : "建立帳號"}
+            {loading ? "處理中…" : mode === "login" ? "登入" : mode === "register" ? "建立帳號" : "寄送重設連結"}
           </button>
         </form>
 
-        <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
-          <span className="h-px flex-1 bg-slate-200" />
-          或
-          <span className="h-px flex-1 bg-slate-200" />
-        </div>
+        {mode === "login" && (
+          <button
+            onClick={() => { setMode("forgot"); setError(null); setNotice(null); }}
+            className="mt-3 w-full text-center text-xs text-brand-600 hover:underline dark:text-brand-300"
+          >
+            忘記密碼?
+          </button>
+        )}
+        {mode === "forgot" && (
+          <button
+            onClick={() => { setMode("login"); setError(null); setNotice(null); }}
+            className="mt-3 w-full text-center text-xs text-slate-500 hover:underline dark:text-slate-400"
+          >
+            ← 返回登入
+          </button>
+        )}
 
-        <a
-          href={googleLoginUrl()}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:bg-slate-900"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
-            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
-            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
-            <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
-            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
-          </svg>
-          使用 Google 登入
-        </a>
+        {mode !== "forgot" && (
+          <>
+            <div className="my-4 flex items-center gap-3 text-xs text-slate-400">
+              <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+              或
+              <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+            </div>
+
+            <a
+              href={googleLoginUrl()}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            >
+              <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+                <path fill="#FBBC05" d="M5.84 14.1a6.6 6.6 0 0 1 0-4.2V7.06H2.18a11 11 0 0 0 0 9.88l3.66-2.84z" />
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.06l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z" />
+              </svg>
+              使用 Google 登入
+            </a>
+          </>
+        )}
       </div>
     </div>
   );

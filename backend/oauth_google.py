@@ -26,9 +26,15 @@ def _cfg() -> tuple[str | None, str | None]:
     return os.environ.get("GOOGLE_CLIENT_ID"), os.environ.get("GOOGLE_CLIENT_SECRET")
 
 
+CALLBACK_PATH = "/api/auth/google/callback"
+
+
 def _redirect_uri(request: Request) -> str:
-    base = os.environ.get("OAUTH_REDIRECT_BASE") or str(request.base_url).rstrip("/")
-    return f"{base.rstrip('/')}/api/auth/google/callback"
+    base = (os.environ.get("OAUTH_REDIRECT_BASE") or str(request.base_url)).strip().rstrip("/")
+    # 容錯:若有人把整段 callback 路徑也填進 OAUTH_REDIRECT_BASE,去掉它避免重複
+    if base.endswith(CALLBACK_PATH):
+        base = base[: -len(CALLBACK_PATH)].rstrip("/")
+    return f"{base}{CALLBACK_PATH}"
 
 
 def _frontend() -> str:

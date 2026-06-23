@@ -39,6 +39,25 @@ export function googleLoginUrl(): string {
   return `${API_BASE}/api/auth/google/login`;
 }
 
+export async function forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
+  const res = await fetch(`${API_BASE}/api/auth/forgot`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error("申請失敗");
+  return res.json();
+}
+
+export async function resetPassword(token: string, password: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/reset`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "重設失敗");
+}
+
 export async function login(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: "POST",

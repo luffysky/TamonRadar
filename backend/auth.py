@@ -73,6 +73,27 @@ def verify_state(state: str) -> bool:
         return False
 
 
+# ---------- 密碼重設 token(短效)----------
+
+def create_reset_token(user_id: int) -> str:
+    payload = {
+        "sub": str(user_id),
+        "typ": "pwreset",
+        "exp": datetime.now(timezone.utc) + timedelta(hours=1),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def verify_reset_token(token: str) -> int | None:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        if payload.get("typ") != "pwreset":
+            return None
+        return int(payload["sub"])
+    except Exception:
+        return None
+
+
 # ---------- FastAPI 依賴 ----------
 
 def get_current_user(
