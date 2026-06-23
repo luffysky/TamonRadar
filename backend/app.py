@@ -29,8 +29,9 @@ def _startup():
     db.init_db()
 
 # 允許跨來源的前端網址,可用環境變數 CORS_ORIGINS(逗號分隔)覆寫。
+# 去掉結尾斜線:瀏覽器送的 Origin 不含斜線,帶斜線會比對失敗。
 _cors = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
-_allow_origins = [o.strip() for o in _cors.split(",") if o.strip()]
+_allow_origins = [o.strip().rstrip("/") for o in _cors.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
@@ -191,6 +192,23 @@ def get_history_run(run_id: str, user=Depends(auth.get_current_user)):
     if not run:
         raise HTTPException(404, "找不到這筆歷史紀錄")
     return run
+
+
+@app.get("/api/history/{run_id}/diff")
+def history_diff(run_id: str, user=Depends(auth.get_current_user)):
+    import radar
+    run = db.get_run(run_id, user.id)
+    if not run:
+        raise HTTPException(404, "找不到這筆歷史紀錄")
+    prev = db.previous_run(user.id, run.get("finished_at") or "", run_id)
+    if not prev:
+        return {"has_previous": False}
+    return {
+        "has_previous": True,
+        "previous_id": prev["id"],
+        "previous_at": prev["finished_at"],
+        "diff": radar.compute_diff(run.get("records", []), prev.get("records", [])),
+    }
 
 
 # ---------- export ----------

@@ -107,6 +107,26 @@ def list_runs(user_id: int) -> list[dict]:
         } for r in rows]
 
 
+def previous_run(user_id: int, before_iso: str, exclude_id: str) -> dict | None:
+    """同一使用者、比指定時間更早完成的最近一次成功爬蟲(給價格雷達比較用)。"""
+    with SessionLocal() as s:
+        rows = s.scalars(
+            select(Run)
+            .where(Run.user_id == user_id, Run.id != exclude_id, Run.status == "done")
+            .order_by(Run.finished_at.desc())
+        ).all()
+        for r in rows:
+            iso = r.finished_at.isoformat() if r.finished_at else ""
+            if iso < before_iso:
+                return {
+                    "id": r.id,
+                    "finished_at": iso,
+                    "keywords": r.keywords or [],
+                    "records": r.records or [],
+                }
+    return None
+
+
 def get_run(run_id: str, user_id: int | None = None) -> dict | None:
     with SessionLocal() as s:
         run = s.get(Run, run_id)

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getHistoryRun } from "@/lib/api";
 import type { CrawlResult } from "@/lib/types";
 import ResultsView from "@/components/ResultsView";
+import RadarPanel from "@/components/RadarPanel";
 import { useRequireAuth } from "@/components/AuthProvider";
 
 export default function HistoryDetailPage({ params }: { params: { id: string } }) {
@@ -36,6 +37,7 @@ export default function HistoryDetailPage({ params }: { params: { id: string } }
           <h1 className="text-xl font-bold text-slate-800">
             {data.keywords?.join("、") || "歷史紀錄"}
           </h1>
+          <RadarPanel runId={params.id} />
           <ResultsView runId={params.id} result={{ records: data.records, summary: data.summary }} />
         </>
       )}

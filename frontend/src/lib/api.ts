@@ -143,3 +143,37 @@ export async function summarize(runId: string): Promise<{ available: boolean; su
 export function exportUrl(runId: string, fmt: "csv" | "xlsx" | "md"): string {
   return `${API_BASE}/api/export/${runId}.${fmt}`;
 }
+
+// ---------- 價格雷達 ----------
+
+export interface RadarItem {
+  title: string;
+  url: string;
+  domain: string;
+  category: string;
+  price: string;
+  price_twd: number | null;
+  image_url: string;
+  old_price?: string;
+  old_twd?: number;
+  drop_pct?: number;
+}
+
+export interface RadarDiff {
+  has_previous: boolean;
+  previous_id?: string;
+  previous_at?: string;
+  diff?: {
+    counts: { new: number; price_drops: number; restock: number };
+    new_items: RadarItem[];
+    price_drops: RadarItem[];
+    restock: RadarItem[];
+  };
+}
+
+export async function getHistoryDiff(id: string): Promise<RadarDiff> {
+  const res = await fetch(`${API_BASE}/api/history/${id}/diff`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取價格雷達失敗");
+  return res.json();
+}
