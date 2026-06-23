@@ -70,6 +70,7 @@ class CrawlRequest(BaseModel):
 class SummarizeRequest(BaseModel):
     run_id: str | None = None
     records: list[dict] | None = None
+    query: str | None = None
 
 
 class ChatRequest(BaseModel):
@@ -385,8 +386,9 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
     if not ai.ai_available():
         return {"available": False, "answer": "尚未設定 AI 金鑰(OPENAI_API_KEY 或 ANTHROPIC_API_KEY)。"}
     prompt = (
-        "你是「多聞」周邊情報助理。根據以下 JSON 搜尋結果,用繁體中文回答使用者問題;"
-        "提到具體商品時附上其連結與價格,答不出來就老實說資料裡沒有。\n\n"
+        "你是一個資料查詢助理。以下是一批網路搜尋結果(JSON)。請根據這些資料用繁體中文回答"
+        "使用者的問題;提到具體項目時附上連結(若有價格、日期、數據也一併附上),"
+        "資料裡沒有就老實說。\n\n"
         f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
     )
     answer, model = ai.ai_complete(prompt, max_tokens=1500)
@@ -401,8 +403,8 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
     if not ai.ai_available():
         return {"available": False, "noise_urls": [], "message": "尚未設定 AI 金鑰"}
     prompt = (
-        "以下是一批「多聞」周邊的搜尋結果 JSON。請判斷哪些『不是真正的商品/情報頁』"
-        "(例如純搜尋結果頁、空白頁、與多聞無關的雜訊)。\n"
+        "以下是一批網路搜尋結果 JSON。請判斷哪些是『沒有實質內容的雜訊』"
+        "(例如純搜尋結果頁、空白/錯誤頁、與搜尋主題明顯無關的內容)。\n"
         "只回傳 JSON,格式:{\"noise_urls\": [\"...\"]},不要其他文字。\n\n"
         f"資料:\n{json.dumps(_slim_records(records, 100), ensure_ascii=False)}"
     )
@@ -434,13 +436,20 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
             "summary": "尚未設定 AI 金鑰(OPENAI_API_KEY 或 ANTHROPIC_API_KEY),無法產生 AI 摘要。",
         }
 
+    # 自動讀出這次搜尋的主題,讓 AI 針對主題抓重點(支援搜尋任何東西)
+    topics = ", ".join(sorted({r.get("keyword", "") for r in records if r.get("keyword")}))[:200] or "(未指定)"
+    if req.query:
+        topics = req.query
+
     prompt = (
-        "你是一個專門整理「多聞」相關情報的助理。以下是一批爬蟲抓到的搜尋結果(JSON)。\n"
-        "請用繁體中文輸出 Markdown,包含:\n"
-        "1. 整體重點摘要(3-5 點)\n"
-        "2. 最值得關注的周邊/商品(含價格與連結,挑 5-8 個)\n"
-        "3. 哪些可能是重複或雜訊資料\n"
+        "你是一個情報研究助理。使用者搜尋的主題是「" + topics + "」。\n"
+        "以下是針對這個主題抓到的一批網路搜尋結果(JSON)。請用繁體中文輸出 Markdown,"
+        "從中抓出對這個主題『最重要』的資訊:\n"
+        "1. 重點摘要(3-6 點,針對主題)\n"
+        "2. 最值得關注的項目/來源(附連結;若資料中有價格、日期、數據、規格等就一併列出)\n"
+        "3. 哪些可能是重複、過期或與主題無關的雜訊\n"
         "4. 一句總結建議\n\n"
+        "若資料不足以回答,就誠實說明。\n\n"
         f"資料:\n{json.dumps(_slim_records(records, 60), ensure_ascii=False)}"
     )
     text, model = ai.ai_complete(prompt, max_tokens=2000)

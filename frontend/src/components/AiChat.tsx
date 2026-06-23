@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { aiChat } from "@/lib/api";
 
-const SUGGESTIONS = ["最便宜的壓克力立牌是哪個?", "有哪些福原多聞的周邊?", "幫我整理值得買的前五名"];
+const SUGGESTIONS = ["幫我整理這次搜尋的重點", "最重要的幾個來源是哪些?", "有哪些值得注意的項目?"];
 
 export default function AiChat({ runId }: { runId: string }) {
   const [question, setQuestion] = useState("");
