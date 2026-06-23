@@ -41,6 +41,7 @@ class CrawlRequest(BaseModel):
     max_detail_pages: int = 20
     headless: bool = True
     scrape_details: bool = True
+    search_provider: str | None = None   # brave | serpapi | selenium;None=自動
 
 
 class SummarizeRequest(BaseModel):
@@ -52,7 +53,14 @@ class SummarizeRequest(BaseModel):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "default_keywords": DEFAULT_KEYWORDS}
+    from crawler.search_api import available_providers
+    from crawler.config import _default_provider
+    return {
+        "ok": True,
+        "default_keywords": DEFAULT_KEYWORDS,
+        "search_providers": available_providers(),
+        "default_provider": _default_provider(),
+    }
 
 
 @app.post("/api/crawl")
@@ -63,6 +71,7 @@ def start_crawl(req: CrawlRequest):
         max_detail_pages=req.max_detail_pages,
         headless=req.headless,
         scrape_details=req.scrape_details,
+        search_provider=req.search_provider or CrawlConfig().search_provider,
     )
     job = manager.create(config)
     return {"job_id": job.id, "status": job.status}

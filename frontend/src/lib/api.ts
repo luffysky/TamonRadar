@@ -9,6 +9,20 @@ export interface CrawlParams {
   max_detail_pages: number;
   headless: boolean;
   scrape_details: boolean;
+  search_provider?: string;
+}
+
+export interface HealthInfo {
+  ok: boolean;
+  default_keywords: string[];
+  search_providers: Record<string, boolean>;
+  default_provider: string;
+}
+
+export async function getHealth(): Promise<HealthInfo> {
+  const res = await fetch(`${API_BASE}/api/health`);
+  if (!res.ok) throw new Error("無法連線後端");
+  return res.json();
 }
 
 export async function startCrawl(params: CrawlParams): Promise<{ job_id: string }> {

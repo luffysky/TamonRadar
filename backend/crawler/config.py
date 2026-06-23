@@ -3,6 +3,7 @@
 原本是寫死的常數,現在改成 dataclass,讓前端每次請求可以帶不同關鍵字/頁數進來,
 同時保留一組合理的預設值(舊的 CLI 行為)。
 """
+import os
 from dataclasses import dataclass, field
 
 
@@ -23,6 +24,21 @@ SKIP_EXTENSIONS = (
 )
 
 
+# 預設搜尋來源:有設 Brave/Serp 金鑰就優先用,否則退回 selenium(本機才建議)
+def _default_provider() -> str:
+    env = os.environ.get("SEARCH_PROVIDER")
+    if env:
+        return env
+    if os.environ.get("BRAVE_API_KEY"):
+        return "brave"
+    if os.environ.get("SERPAPI_KEY"):
+        return "serpapi"
+    return "selenium"
+
+
+VALID_PROVIDERS = ("brave", "serpapi", "selenium")
+
+
 @dataclass
 class CrawlConfig:
     keywords: list[str] = field(default_factory=lambda: list(DEFAULT_KEYWORDS))
@@ -32,6 +48,7 @@ class CrawlConfig:
     max_sleep: float = 5.0
     headless: bool = True
     scrape_details: bool = True
+    search_provider: str = field(default_factory=_default_provider)
     output_dir: str = "output"
 
     def normalized(self) -> "CrawlConfig":
@@ -39,6 +56,7 @@ class CrawlConfig:
         keywords = [k.strip() for k in self.keywords if k and k.strip()]
         if not keywords:
             keywords = list(DEFAULT_KEYWORDS)
+        provider = self.search_provider if self.search_provider in VALID_PROVIDERS else _default_provider()
         return CrawlConfig(
             keywords=keywords,
             google_pages_per_keyword=max(1, min(self.google_pages_per_keyword, 5)),
@@ -47,5 +65,6 @@ class CrawlConfig:
             max_sleep=max(float(self.min_sleep), float(self.max_sleep)),
             headless=self.headless,
             scrape_details=self.scrape_details,
+            search_provider=provider,
             output_dir=self.output_dir,
         )

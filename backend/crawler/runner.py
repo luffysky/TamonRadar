@@ -6,6 +6,7 @@
 - 回傳結構化結果(records + summary),而不是只寫檔。
 """
 import os
+from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
@@ -16,6 +17,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from .config import CrawlConfig, SKIP_EXTENSIONS
 from .google_search import search_google, BlockedError
+from .search_api import search_api, SearchApiError
 from .detail_scraper import scrape_detail_page, classify_search_only
 from .reporter import to_dataframe, build_summary
 from .utils import is_valid_url
@@ -77,10 +79,29 @@ def run_crawl(
 ) -> dict:
     """執行一次完整爬蟲。回傳 {records, summary}。"""
     config = config.normalized()
-    on_event({"type": "phase", "phase": "starting", "message": "啟動瀏覽器中..."})
+    use_api = config.search_provider in ("brave", "serpapi")
+    need_driver = (not use_api) or config.scrape_details
 
-    driver = build_driver(config.headless)
+    driver = None
     try:
+        # 只有需要時才開 Chrome:用 API 搜尋又不抓詳細頁,就完全不需要瀏覽器(雲端友善)
+        if need_driver:
+            on_event({"type": "phase", "phase": "starting", "message": "啟動瀏覽器中..."})
+            try:
+                driver = build_driver(config.headless)
+            except Exception as e:
+                if use_api:
+                    # 搜尋用 API 沒問題,只是開不了瀏覽器 → 降級成不進詳細頁,不讓整批失敗
+                    on_event({"type": "warning",
+                              "message": f"瀏覽器啟動失敗,改為只用搜尋結果(不進詳細頁):{e}"})
+                    config = replace(config, scrape_details=False)
+                    driver = None
+                else:
+                    raise
+        else:
+            on_event({"type": "phase", "phase": "starting",
+                      "message": f"使用搜尋 API:{config.search_provider}"})
+
         all_search_results: list[dict] = []
 
         total_kw = len(config.keywords)
@@ -93,22 +114,31 @@ def run_crawl(
                 "message": f"搜尋關鍵字:{keyword}",
                 "current": idx, "total": total_kw, "keyword": keyword,
             })
-            try:
-                results = search_google(
-                    driver=driver,
-                    keyword=keyword,
-                    pages=config.google_pages_per_keyword,
-                    min_sleep=config.min_sleep,
-                    max_sleep=config.max_sleep,
-                )
-                on_event({
-                    "type": "search_done", "keyword": keyword,
-                    "found": len(results), "message": f"「{keyword}」找到 {len(results)} 筆",
-                })
-                all_search_results.extend(results)
-            except BlockedError as e:
-                on_event({"type": "blocked", "keyword": keyword, "message": str(e)})
-                continue
+            if use_api:
+                try:
+                    results = search_api(config.search_provider, keyword, config.google_pages_per_keyword)
+                except SearchApiError as e:
+                    # API 出錯(沒金鑰/額度用完)通常每個關鍵字都會失敗,直接停止整批
+                    on_event({"type": "error", "message": f"搜尋 API 失敗:{e}"})
+                    break
+            else:
+                try:
+                    results = search_google(
+                        driver=driver,
+                        keyword=keyword,
+                        pages=config.google_pages_per_keyword,
+                        min_sleep=config.min_sleep,
+                        max_sleep=config.max_sleep,
+                    )
+                except BlockedError as e:
+                    on_event({"type": "blocked", "keyword": keyword, "message": str(e)})
+                    continue
+
+            on_event({
+                "type": "search_done", "keyword": keyword,
+                "found": len(results), "message": f"「{keyword}」找到 {len(results)} 筆",
+            })
+            all_search_results.extend(results)
 
         deduped = dedupe_results(all_search_results)
         on_event({

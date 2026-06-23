@@ -69,6 +69,8 @@ npm run dev
    後端有 `Dockerfile`(內含 Chromium),Zeabur 會用它建置,Selenium 才能在雲端跑。
 3. 環境變數(參考 `backend/.env.example`):
    - `CORS_ORIGINS` = 你的前端網域(例:`https://tamonradar.zeabur.app`)
+   - `BRAVE_API_KEY` 或 `SERPAPI_KEY`(**雲端強烈建議**,否則 Selenium 會被 Google 擋)
+   - `SEARCH_PROVIDER`(選用,`brave`/`serpapi`/`selenium`,留空會自動依金鑰決定)
    - `ANTHROPIC_API_KEY`(選用,要 AI 摘要才需要)
 4. 部署完成後記下後端網域,例如 `https://tamonradar-api.zeabur.app`。
 

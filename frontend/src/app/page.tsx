@@ -1,8 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { startCrawl, streamCrawl, stopCrawl } from "@/lib/api";
+import { useEffect, useRef, useState } from "react";
+import { startCrawl, streamCrawl, stopCrawl, getHealth } from "@/lib/api";
+import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
+
+const PROVIDER_LABELS: Record<string, string> = {
+  brave: "Brave Search API",
+  serpapi: "SerpAPI",
+  selenium: "Selenium(本機開 Chrome)",
+};
 import ProgressPanel from "@/components/ProgressPanel";
 import ResultsView from "@/components/ResultsView";
 
@@ -13,6 +20,8 @@ export default function HomePage() {
   const [pages, setPages] = useState(2);
   const [maxDetail, setMaxDetail] = useState(20);
   const [scrapeDetails, setScrapeDetails] = useState(true);
+  const [provider, setProvider] = useState<string>("");
+  const [health, setHealth] = useState<HealthInfo | null>(null);
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -20,6 +29,15 @@ export default function HomePage() {
   const [result, setResult] = useState<CrawlResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const closeRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    getHealth()
+      .then((h) => {
+        setHealth(h);
+        setProvider(h.default_provider);
+      })
+      .catch(() => {});
+  }, []);
 
   async function handleStart() {
     setError(null);
@@ -35,6 +53,7 @@ export default function HomePage() {
         max_detail_pages: maxDetail,
         headless: true,
         scrape_details: scrapeDetails,
+        search_provider: provider || undefined,
       });
       setJobId(job_id);
 
@@ -81,6 +100,29 @@ export default function HomePage() {
             disabled={running}
             className="mt-2 w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-brand-500 focus:outline-none disabled:bg-slate-50"
           />
+
+          <label className="mt-3 flex flex-col gap-1 text-sm">
+            <span className="text-slate-600">搜尋來源</span>
+            <select
+              value={provider}
+              disabled={running}
+              onChange={(e) => setProvider(e.target.value)}
+              className="rounded-lg border border-slate-300 px-2 py-1.5"
+            >
+              {["brave", "serpapi", "selenium"].map((p) => {
+                const ok = health?.search_providers?.[p];
+                return (
+                  <option key={p} value={p} disabled={ok === false}>
+                    {PROVIDER_LABELS[p]}
+                    {ok === false ? "(未設定金鑰)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+            <span className="text-xs text-slate-400">
+              雲端建議用 Brave / SerpAPI(穩定不被擋);Selenium 適合本機。
+            </span>
+          </label>
 
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <label className="flex flex-col gap-1">
