@@ -16,6 +16,8 @@ export default function Nav() {
         <nav className="flex items-center gap-1 text-sm">
           <Link href="/" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">搜尋</Link>
           <Link href="/history" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">歷史紀錄</Link>
+          {user && <Link href="/schedules" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">排程</Link>}
+          {user && <Link href="/settings" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">設定</Link>}
           <Link href="/about" className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100">如何運作</Link>
           {user ? (
             <div className="ml-2 flex items-center gap-2 border-l border-slate-200 pl-2">

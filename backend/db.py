@@ -71,6 +71,31 @@ class Run(Base):
     user: Mapped["User"] = relationship(back_populates="runs")
 
 
+class Settings(Base):
+    __tablename__ = "user_settings"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    discord_webhook: Mapped[str] = mapped_column(String(500), default="")
+    telegram_token: Mapped[str] = mapped_column(String(200), default="")
+    telegram_chat_id: Mapped[str] = mapped_column(String(100), default="")
+
+
+class Schedule(Base):
+    __tablename__ = "schedules"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    keywords: Mapped[list] = mapped_column(JSON, default=list)
+    provider: Mapped[str] = mapped_column(String(32), default="brave")
+    pages: Mapped[int] = mapped_column(default=2)
+    max_detail: Mapped[int] = mapped_column(default=0)
+    scrape_details: Mapped[bool] = mapped_column(default=False)
+    interval_hours: Mapped[int] = mapped_column(default=24)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     _ensure_columns()
@@ -156,3 +181,128 @@ def get_run(run_id: str, user_id: int | None = None) -> dict | None:
             "summary": run.summary or {},
             "records": run.records or [],
         }
+
+
+def create_run_record(user_id: int, run_id: str, keywords: list, result: dict) -> None:
+    """給排程的爬蟲用:直接寫入一筆 Run(不經過記憶體 job)。"""
+    with SessionLocal() as s:
+        run = Run(
+            id=run_id, user_id=user_id, status="done",
+            keywords=list(keywords),
+            summary=result.get("summary", {}),
+            records=result.get("records", []),
+        )
+        s.add(run)
+        s.commit()
+
+
+# ---------- 通知設定 ----------
+
+def get_settings(user_id: int) -> dict:
+    with SessionLocal() as s:
+        st = s.get(Settings, user_id)
+        if st is None:
+            return {"discord_webhook": "", "telegram_token": "", "telegram_chat_id": ""}
+        return {
+            "discord_webhook": st.discord_webhook or "",
+            "telegram_token": st.telegram_token or "",
+            "telegram_chat_id": st.telegram_chat_id or "",
+        }
+
+
+def save_settings(user_id: int, discord_webhook: str, telegram_token: str, telegram_chat_id: str) -> None:
+    with SessionLocal() as s:
+        st = s.get(Settings, user_id)
+        if st is None:
+            st = Settings(user_id=user_id)
+            s.add(st)
+        st.discord_webhook = discord_webhook
+        st.telegram_token = telegram_token
+        st.telegram_chat_id = telegram_chat_id
+        s.commit()
+
+
+# ---------- 排程 ----------
+
+def _schedule_dict(sc: "Schedule") -> dict:
+    return {
+        "id": sc.id,
+        "user_id": sc.user_id,
+        "keywords": sc.keywords or [],
+        "provider": sc.provider,
+        "pages": sc.pages,
+        "max_detail": sc.max_detail,
+        "scrape_details": sc.scrape_details,
+        "interval_hours": sc.interval_hours,
+        "enabled": sc.enabled,
+        "last_run": sc.last_run.isoformat() if sc.last_run else None,
+    }
+
+
+def list_schedules(user_id: int) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Schedule).where(Schedule.user_id == user_id).order_by(Schedule.id.desc())).all()
+        return [_schedule_dict(r) for r in rows]
+
+
+def list_enabled_schedules() -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Schedule).where(Schedule.enabled == True)).all()  # noqa: E712
+        return [_schedule_dict(r) for r in rows]
+
+
+def get_schedule(schedule_id: int, user_id: int | None = None) -> dict | None:
+    with SessionLocal() as s:
+        sc = s.get(Schedule, schedule_id)
+        if sc is None or (user_id is not None and sc.user_id != user_id):
+            return None
+        return _schedule_dict(sc)
+
+
+def create_schedule(user_id: int, data: dict) -> dict:
+    with SessionLocal() as s:
+        sc = Schedule(
+            user_id=user_id,
+            keywords=data.get("keywords", []),
+            provider=data.get("provider", "brave"),
+            pages=data.get("pages", 2),
+            max_detail=data.get("max_detail", 0),
+            scrape_details=data.get("scrape_details", False),
+            interval_hours=data.get("interval_hours", 24),
+            enabled=data.get("enabled", True),
+        )
+        s.add(sc)
+        s.commit()
+        s.refresh(sc)
+        return _schedule_dict(sc)
+
+
+def update_schedule(schedule_id: int, user_id: int, data: dict) -> dict | None:
+    with SessionLocal() as s:
+        sc = s.get(Schedule, schedule_id)
+        if sc is None or sc.user_id != user_id:
+            return None
+        for key in ("keywords", "provider", "pages", "max_detail", "scrape_details", "interval_hours", "enabled"):
+            if key in data and data[key] is not None:
+                setattr(sc, key, data[key])
+        s.commit()
+        s.refresh(sc)
+        return _schedule_dict(sc)
+
+
+def touch_schedule(schedule_id: int) -> None:
+    with SessionLocal() as s:
+        sc = s.get(Schedule, schedule_id)
+        if sc:
+            sc.last_run = _now()
+            s.commit()
+
+
+def delete_schedule(schedule_id: int, user_id: int) -> bool:
+    with SessionLocal() as s:
+        sc = s.get(Schedule, schedule_id)
+        if sc is None or sc.user_id != user_id:
+            return False
+        s.delete(sc)
+        s.commit()
+        return True

@@ -188,3 +188,86 @@ export async function getHistoryDiff(id: string): Promise<RadarDiff> {
   if (!res.ok) throw new Error("讀取價格雷達失敗");
   return res.json();
 }
+
+// ---------- 通知設定 ----------
+
+export interface NotifySettings {
+  discord_webhook: string;
+  telegram_token: string;
+  telegram_chat_id: string;
+}
+
+export async function getSettings(): Promise<NotifySettings> {
+  const res = await fetch(`${API_BASE}/api/settings`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取設定失敗");
+  return res.json();
+}
+
+export async function saveSettings(s: NotifySettings): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/settings`, {
+    method: "PUT", headers: jsonAuthHeaders(), body: JSON.stringify(s),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("儲存設定失敗");
+}
+
+export async function testNotify(): Promise<{ results: Record<string, { ok: boolean; msg: string }> }> {
+  const res = await fetch(`${API_BASE}/api/settings/test`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "測試失敗");
+  return res.json();
+}
+
+// ---------- 排程 ----------
+
+export interface Schedule {
+  id: number;
+  keywords: string[];
+  provider: string;
+  pages: number;
+  max_detail: number;
+  scrape_details: boolean;
+  interval_hours: number;
+  enabled: boolean;
+  last_run: string | null;
+}
+
+export type ScheduleInput = Omit<Schedule, "id" | "last_run">;
+
+export async function getSchedules(): Promise<{ schedules: Schedule[] }> {
+  const res = await fetch(`${API_BASE}/api/schedules`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取排程失敗");
+  return res.json();
+}
+
+export async function createSchedule(data: ScheduleInput): Promise<Schedule> {
+  const res = await fetch(`${API_BASE}/api/schedules`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data),
+  });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "建立排程失敗");
+  return res.json();
+}
+
+export async function updateSchedule(id: number, data: ScheduleInput): Promise<Schedule> {
+  const res = await fetch(`${API_BASE}/api/schedules/${id}`, {
+    method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify(data),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("更新排程失敗");
+  return res.json();
+}
+
+export async function deleteSchedule(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/schedules/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("刪除排程失敗");
+}
+
+export async function runSchedule(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/schedules/${id}/run`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("執行排程失敗");
+}

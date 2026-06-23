@@ -19,6 +19,8 @@ from crawler.config import CrawlConfig, DEFAULT_KEYWORDS
 from crawler.reporter import to_dataframe, save_excel, save_markdown_report
 import db
 import auth
+import notify
+import scheduler
 from oauth_google import router as google_router
 from jobs import manager
 
@@ -29,6 +31,7 @@ app.include_router(google_router)
 @app.on_event("startup")
 def _startup():
     db.init_db()
+    scheduler.start()
 
 # 允許跨來源的前端網址,可用環境變數 CORS_ORIGINS(逗號分隔)覆寫。
 # 去掉結尾斜線:瀏覽器送的 Origin 不含斜線,帶斜線會比對失敗。
@@ -62,6 +65,22 @@ class SummarizeRequest(BaseModel):
 class AuthRequest(BaseModel):
     email: str
     password: str
+
+
+class SettingsRequest(BaseModel):
+    discord_webhook: str = ""
+    telegram_token: str = ""
+    telegram_chat_id: str = ""
+
+
+class ScheduleRequest(BaseModel):
+    keywords: list[str] = Field(default_factory=list)
+    provider: str = "brave"
+    pages: int = 2
+    max_detail: int = 0
+    scrape_details: bool = False
+    interval_hours: int = 24
+    enabled: bool = True
 
 
 # ---------- auth ----------
@@ -331,3 +350,68 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
     )
     text = "".join(block.text for block in message.content if getattr(block, "type", "") == "text")
     return {"available": True, "summary": text, "model": model}
+
+
+# ---------- 通知設定 ----------
+
+@app.get("/api/settings")
+def get_settings(user=Depends(auth.get_current_user)):
+    return db.get_settings(user.id)
+
+
+@app.put("/api/settings")
+def put_settings(req: SettingsRequest, user=Depends(auth.get_current_user)):
+    db.save_settings(user.id, req.discord_webhook.strip(), req.telegram_token.strip(), req.telegram_chat_id.strip())
+    return {"ok": True}
+
+
+@app.post("/api/settings/test")
+def test_settings(user=Depends(auth.get_current_user)):
+    st = db.get_settings(user.id)
+    results = notify.notify_all(st, "📡 TamonRadar 測試通知:設定成功!")
+    if not results:
+        raise HTTPException(400, "尚未設定任何通知管道(Discord 或 Telegram)")
+    return {"results": results}
+
+
+# ---------- 排程 ----------
+
+@app.get("/api/schedules")
+def get_schedules(user=Depends(auth.get_current_user)):
+    return {"schedules": db.list_schedules(user.id)}
+
+
+@app.post("/api/schedules")
+def create_schedule(req: ScheduleRequest, user=Depends(auth.get_current_user)):
+    if not [k for k in req.keywords if k.strip()]:
+        raise HTTPException(400, "請至少設定一個關鍵字")
+    sc = db.create_schedule(user.id, req.model_dump())
+    scheduler.sync(sc)
+    return sc
+
+
+@app.patch("/api/schedules/{schedule_id}")
+def patch_schedule(schedule_id: int, req: ScheduleRequest, user=Depends(auth.get_current_user)):
+    sc = db.update_schedule(schedule_id, user.id, req.model_dump())
+    if not sc:
+        raise HTTPException(404, "找不到這個排程")
+    scheduler.sync(sc)
+    return sc
+
+
+@app.delete("/api/schedules/{schedule_id}")
+def delete_schedule(schedule_id: int, user=Depends(auth.get_current_user)):
+    if not db.delete_schedule(schedule_id, user.id):
+        raise HTTPException(404, "找不到這個排程")
+    scheduler.remove(schedule_id)
+    return {"ok": True}
+
+
+@app.post("/api/schedules/{schedule_id}/run")
+def run_schedule_now(schedule_id: int, user=Depends(auth.get_current_user)):
+    import threading
+    sc = db.get_schedule(schedule_id, user.id)
+    if not sc:
+        raise HTTPException(404, "找不到這個排程")
+    threading.Thread(target=scheduler.run_now, args=(schedule_id,), daemon=True).start()
+    return {"ok": True, "message": "已在背景開始執行,完成後會依設定推播"}
