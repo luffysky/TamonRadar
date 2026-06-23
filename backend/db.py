@@ -56,7 +56,7 @@ def _now() -> datetime:
 
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "tr_users"  # 加 tr_ 前綴,避開 Supabase 內建的 users 表
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
@@ -68,10 +68,10 @@ class User(Base):
 
 
 class Run(Base):
-    __tablename__ = "runs"
+    __tablename__ = "tr_runs"
 
     id: Mapped[str] = mapped_column(String(32), primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
     status: Mapped[str] = mapped_column(String(32), default="done")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     finished_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -83,19 +83,19 @@ class Run(Base):
 
 
 class Settings(Base):
-    __tablename__ = "user_settings"
+    __tablename__ = "tr_user_settings"
 
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), primary_key=True)
     discord_webhook: Mapped[str] = mapped_column(String(500), default="")
     telegram_token: Mapped[str] = mapped_column(String(200), default="")
     telegram_chat_id: Mapped[str] = mapped_column(String(100), default="")
 
 
 class Schedule(Base):
-    __tablename__ = "schedules"
+    __tablename__ = "tr_schedules"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
     keywords: Mapped[list] = mapped_column(JSON, default=list)
     provider: Mapped[str] = mapped_column(String(32), default="brave")
     pages: Mapped[int] = mapped_column(default=2)
@@ -115,12 +115,12 @@ def init_db() -> None:
 def _ensure_columns() -> None:
     """相容既有資料庫:補上後來新增的欄位(create_all 不會改既有表)。"""
     insp = inspect(engine)
-    if "users" not in insp.get_table_names():
+    if "tr_users" not in insp.get_table_names():
         return
-    cols = {c["name"] for c in insp.get_columns("users")}
+    cols = {c["name"] for c in insp.get_columns("tr_users")}
     if "provider" not in cols:
         with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"))
+            conn.execute(text("ALTER TABLE tr_users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"))
 
 
 # ---------- Run 持久化 ----------
