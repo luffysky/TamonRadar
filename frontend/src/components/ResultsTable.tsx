@@ -1,0 +1,133 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import type { CrawlRecord } from "@/lib/types";
+import { categoryClass } from "@/lib/format";
+
+type SortKey = "title" | "category" | "domain" | "price";
+
+function priceValue(p: string): number {
+  const n = parseInt((p || "").replace(/[^0-9]/g, ""), 10);
+  return Number.isNaN(n) ? -1 : n;
+}
+
+export default function ResultsTable({ records }: { records: CrawlRecord[] }) {
+  const [query, setQuery] = useState("");
+  const [category, setCategory] = useState("全部");
+  const [onlyPrice, setOnlyPrice] = useState(false);
+  const [sortKey, setSortKey] = useState<SortKey>("category");
+  const [sortAsc, setSortAsc] = useState(true);
+
+  const categories = useMemo(() => {
+    const set = new Set(records.map((r) => r.category).filter(Boolean));
+    return ["全部", ...Array.from(set)];
+  }, [records]);
+
+  const filtered = useMemo(() => {
+    let rows = records;
+    if (category !== "全部") rows = rows.filter((r) => r.category === category);
+    if (onlyPrice) rows = rows.filter((r) => (r.price || "").trim() !== "");
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      rows = rows.filter(
+        (r) =>
+          r.title?.toLowerCase().includes(q) ||
+          r.snippet?.toLowerCase().includes(q) ||
+          r.domain?.toLowerCase().includes(q)
+      );
+    }
+    const sorted = [...rows].sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === "price") cmp = priceValue(a.price) - priceValue(b.price);
+      else cmp = String(a[sortKey] ?? "").localeCompare(String(b[sortKey] ?? ""), "zh-Hant");
+      return sortAsc ? cmp : -cmp;
+    });
+    return sorted;
+  }, [records, category, onlyPrice, query, sortKey, sortAsc]);
+
+  function toggleSort(key: SortKey) {
+    if (key === sortKey) setSortAsc(!sortAsc);
+    else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+  }
+
+  const Th = ({ k, children }: { k: SortKey; children: React.ReactNode }) => (
+    <th
+      className="cursor-pointer select-none px-3 py-2 text-left font-semibold hover:text-brand-600"
+      onClick={() => toggleSort(k)}
+    >
+      {children}
+      {sortKey === k ? <span className="ml-1 text-brand-500">{sortAsc ? "▲" : "▼"}</span> : null}
+    </th>
+  );
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜尋標題 / 摘要 / 網域…"
+          className="w-56 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+        />
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+        >
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
+        <label className="flex items-center gap-1.5 text-sm text-slate-600">
+          <input type="checkbox" checked={onlyPrice} onChange={(e) => setOnlyPrice(e.target.checked)} />
+          只看有價格
+        </label>
+        <span className="ml-auto text-xs text-slate-400">顯示 {filtered.length} / {records.length} 筆</span>
+      </div>
+
+      <div className="scroll-thin max-h-[560px] overflow-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead className="sticky top-0 bg-slate-50 text-slate-600">
+            <tr>
+              <Th k="category">分類</Th>
+              <Th k="title">標題</Th>
+              <Th k="price">價格</Th>
+              <Th k="domain">來源</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((r, i) => (
+              <tr key={`${r.url}-${i}`} className="border-t border-slate-100 align-top hover:bg-slate-50">
+                <td className="px-3 py-2">
+                  <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${categoryClass(r.category)}`}>
+                    {r.category || "其他"}
+                  </span>
+                </td>
+                <td className="px-3 py-2">
+                  <a href={r.url} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:underline">
+                    {r.title}
+                  </a>
+                  {r.snippet ? <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{r.snippet}</p> : null}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 font-semibold text-rose-600">{r.price || "—"}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">{r.domain}</td>
+              </tr>
+            ))}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-10 text-center text-slate-400">
+                  沒有符合條件的資料
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

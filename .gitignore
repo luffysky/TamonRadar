@@ -1,0 +1,30 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# ---- Node / Next.js ----
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+frontend/next-env.d.ts
+
+# ---- 環境變數 / 機密 ----
+.env
+.env*.local
+*.key
+
+# ---- 執行時產生的資料 ----
+backend/data/
+backend/output/
+
+# ---- 編輯器 / 系統 ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
