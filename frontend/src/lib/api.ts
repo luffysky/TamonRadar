@@ -2,7 +2,7 @@ import type { CrawlResult, HistoryRun, ProgressEvent } from "./types";
 import { authHeaders, clearSession, type AuthUser } from "./auth";
 
 export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000";
+  (process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 /** 401 代表 token 失效:清掉登入狀態並丟出特定錯誤,讓畫面導回登入頁。 */
 function check401(res: Response): void {

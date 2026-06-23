@@ -19,6 +19,18 @@ body {
   min-height: 100vh;
 }
 
+@layer base {
+  /* 所有輸入框預設顏色,避免深色模式白底白字 */
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  select {
+    @apply bg-white text-slate-900 placeholder:text-slate-400 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500;
+  }
+  option {
+    @apply bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100;
+  }
+}
+
 /* 細捲軸 */
 .scroll-thin::-webkit-scrollbar { height: 8px; width: 8px; }
 .scroll-thin::-webkit-scrollbar-thumb { @apply rounded-full bg-slate-300 dark:bg-slate-600; }
