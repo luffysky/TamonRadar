@@ -144,8 +144,28 @@ def run_crawl(
                         max_sleep=config.max_sleep,
                     )
                 except BlockedError as e:
-                    on_event({"type": "blocked", "keyword": keyword, "message": str(e)})
-                    continue
+                    # Selenium 被 Google 擋(雲端常見)→ 若有搜尋 API 金鑰就自動改用
+                    fallback = resolve_order("serpapi")
+                    if not fallback:
+                        on_event({"type": "blocked", "keyword": keyword, "message": str(e)})
+                        continue
+                    on_event({"type": "warning",
+                              "message": f"Selenium 被 Google 攔截,自動改用搜尋 API({fallback[0]})"})
+                    use_api = True
+                    api_order = fallback
+                    results = None
+                    for prov in api_order:
+                        if prov in api_dead:
+                            continue
+                        try:
+                            results = search_api(prov, keyword, config.google_pages_per_keyword)
+                            break
+                        except SearchApiError as e2:
+                            on_event({"type": "warning", "message": f"{prov} 不可用:{e2}"})
+                            api_dead.add(prov)
+                    if results is None:
+                        on_event({"type": "error", "message": "搜尋 API 也不可用(沒金鑰或額度用完)"})
+                        break
 
             on_event({
                 "type": "search_done", "keyword": keyword,
