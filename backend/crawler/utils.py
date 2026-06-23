@@ -99,7 +99,8 @@ def extract_price(text: str) -> str:
     if not text:
         return ""
 
-    candidates: dict[str, int] = {}   # 顯示字串 -> 出現次數
+    # display -> {count, pos(最早出現位置)}
+    info: dict[str, dict] = {}
 
     for pattern_def in _PRICE_PATTERNS:
         pattern = pattern_def[0]
@@ -112,19 +113,17 @@ def extract_price(text: str) -> str:
             if value < _MIN_REASONABLE_PRICE:
                 continue
             display = f"{prefix}{num_text}{suffix}"
-            candidates[display] = candidates.get(display, 0) + 1
+            if display not in info:
+                info[display] = {"count": 0, "pos": match.start()}
+            info[display]["count"] += 1
+            info[display]["pos"] = min(info[display]["pos"], match.start())
 
-    if not candidates:
+    if not info:
         return ""
 
-    # 先比出現次數,再比數值大小(同次數時取較大者,通常較像售價)
-    def sort_key(item: tuple[str, int]) -> tuple[int, int]:
-        display, count = item
-        digits = re.search(r"[0-9,]+", display)
-        value = _to_int(digits.group(0)) if digits else 0
-        return (count, value)
-
-    best = max(candidates.items(), key=sort_key)
+    # 選法:出現次數最多者優先(真正售價常重複出現);
+    # 次數相同時取「最早出現」的,而不是最大值——避免被頁面其他大數字(如 30000)蓋過真正的 200。
+    best = min(info.items(), key=lambda kv: (-kv[1]["count"], kv[1]["pos"]))
     return best[0]
 
 
