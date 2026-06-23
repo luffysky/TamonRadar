@@ -108,6 +108,15 @@ class ScheduleRequest(BaseModel):
     enabled: bool = True
 
 
+class WatchRequest(BaseModel):
+    name: str = ""
+    url: str
+    available_keywords: list[str] = Field(default_factory=list)
+    unavailable_keywords: list[str] = Field(default_factory=list)
+    interval_minutes: int = 5
+    enabled: bool = True
+
+
 # ---------- auth ----------
 
 def _public_user(user) -> dict:
@@ -519,3 +528,45 @@ def run_schedule_now(schedule_id: int, user=Depends(auth.get_current_user)):
         raise HTTPException(404, "找不到這個排程")
     threading.Thread(target=scheduler.run_now, args=(schedule_id,), daemon=True).start()
     return {"ok": True, "message": "已在背景開始執行,完成後會依設定推播"}
+
+
+# ---------- 監看(到貨/開賣通知)----------
+
+@app.get("/api/watches")
+def get_watches(user=Depends(auth.get_current_user)):
+    return {"watches": db.list_watches(user.id)}
+
+
+@app.post("/api/watches")
+def create_watch(req: WatchRequest, user=Depends(auth.get_current_user)):
+    if not req.url.strip().startswith("http"):
+        raise HTTPException(400, "請輸入有效的網址(http/https)")
+    w = db.create_watch(user.id, req.model_dump())
+    scheduler.sync_watch(w)
+    return w
+
+
+@app.patch("/api/watches/{watch_id}")
+def patch_watch(watch_id: int, req: WatchRequest, user=Depends(auth.get_current_user)):
+    w = db.update_watch(watch_id, user.id, req.model_dump())
+    if not w:
+        raise HTTPException(404, "找不到這個監看")
+    scheduler.sync_watch(w)
+    return w
+
+
+@app.delete("/api/watches/{watch_id}")
+def delete_watch(watch_id: int, user=Depends(auth.get_current_user)):
+    if not db.delete_watch(watch_id, user.id):
+        raise HTTPException(404, "找不到這個監看")
+    scheduler.remove_watch(watch_id)
+    return {"ok": True}
+
+
+@app.post("/api/watches/{watch_id}/check")
+def check_watch_now(watch_id: int, user=Depends(auth.get_current_user)):
+    import threading
+    if not db.get_watch(watch_id, user.id):
+        raise HTTPException(404, "找不到這個監看")
+    threading.Thread(target=scheduler.check_watch_now, args=(watch_id,), daemon=True).start()
+    return {"ok": True, "message": "已在背景檢查一次"}

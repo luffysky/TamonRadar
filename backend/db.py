@@ -107,6 +107,22 @@ class Schedule(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Watch(Base):
+    __tablename__ = "tr_watches"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(200), default="")
+    url: Mapped[str] = mapped_column(String(1000))
+    available_keywords: Mapped[list] = mapped_column(JSON, default=list)
+    unavailable_keywords: Mapped[list] = mapped_column(JSON, default=list)
+    interval_minutes: Mapped[int] = mapped_column(default=5)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    last_status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown|available|unavailable
+    last_checked: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     _ensure_columns()
@@ -315,5 +331,91 @@ def delete_schedule(schedule_id: int, user_id: int) -> bool:
         if sc is None or sc.user_id != user_id:
             return False
         s.delete(sc)
+        s.commit()
+        return True
+
+
+# ---------- 監看(到貨/開賣通知)----------
+
+def _watch_dict(w: "Watch") -> dict:
+    return {
+        "id": w.id,
+        "user_id": w.user_id,
+        "name": w.name,
+        "url": w.url,
+        "available_keywords": w.available_keywords or [],
+        "unavailable_keywords": w.unavailable_keywords or [],
+        "interval_minutes": w.interval_minutes,
+        "enabled": w.enabled,
+        "last_status": w.last_status,
+        "last_checked": w.last_checked.isoformat() if w.last_checked else None,
+    }
+
+
+def list_watches(user_id: int) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Watch).where(Watch.user_id == user_id).order_by(Watch.id.desc())).all()
+        return [_watch_dict(w) for w in rows]
+
+
+def list_enabled_watches() -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Watch).where(Watch.enabled == True)).all()  # noqa: E712
+        return [_watch_dict(w) for w in rows]
+
+
+def get_watch(watch_id: int, user_id: int | None = None) -> dict | None:
+    with SessionLocal() as s:
+        w = s.get(Watch, watch_id)
+        if w is None or (user_id is not None and w.user_id != user_id):
+            return None
+        return _watch_dict(w)
+
+
+def create_watch(user_id: int, data: dict) -> dict:
+    with SessionLocal() as s:
+        w = Watch(
+            user_id=user_id,
+            name=data.get("name", "")[:200],
+            url=data.get("url", ""),
+            available_keywords=data.get("available_keywords", []),
+            unavailable_keywords=data.get("unavailable_keywords", []),
+            interval_minutes=max(1, min(int(data.get("interval_minutes", 5)), 1440)),
+            enabled=data.get("enabled", True),
+        )
+        s.add(w)
+        s.commit()
+        s.refresh(w)
+        return _watch_dict(w)
+
+
+def update_watch(watch_id: int, user_id: int, data: dict) -> dict | None:
+    with SessionLocal() as s:
+        w = s.get(Watch, watch_id)
+        if w is None or w.user_id != user_id:
+            return None
+        for key in ("name", "url", "available_keywords", "unavailable_keywords", "interval_minutes", "enabled"):
+            if key in data and data[key] is not None:
+                setattr(w, key, data[key])
+        s.commit()
+        s.refresh(w)
+        return _watch_dict(w)
+
+
+def set_watch_status(watch_id: int, status: str) -> None:
+    with SessionLocal() as s:
+        w = s.get(Watch, watch_id)
+        if w:
+            w.last_status = status
+            w.last_checked = _now()
+            s.commit()
+
+
+def delete_watch(watch_id: int, user_id: int) -> bool:
+    with SessionLocal() as s:
+        w = s.get(Watch, watch_id)
+        if w is None or w.user_id != user_id:
+            return False
+        s.delete(w)
         s.commit()
         return True

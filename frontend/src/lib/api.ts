@@ -310,3 +310,56 @@ export async function runSchedule(id: number): Promise<void> {
   check401(res);
   if (!res.ok) throw new Error("執行排程失敗");
 }
+
+// ---------- 監看(到貨/開賣通知)----------
+
+export interface Watch {
+  id: number;
+  name: string;
+  url: string;
+  available_keywords: string[];
+  unavailable_keywords: string[];
+  interval_minutes: number;
+  enabled: boolean;
+  last_status: string;
+  last_checked: string | null;
+}
+
+export type WatchInput = Omit<Watch, "id" | "last_status" | "last_checked">;
+
+export async function getWatches(): Promise<{ watches: Watch[] }> {
+  const res = await fetch(`${API_BASE}/api/watches`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取監看失敗");
+  return res.json();
+}
+
+export async function createWatch(data: WatchInput): Promise<Watch> {
+  const res = await fetch(`${API_BASE}/api/watches`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data),
+  });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "建立監看失敗");
+  return res.json();
+}
+
+export async function updateWatch(id: number, data: WatchInput): Promise<Watch> {
+  const res = await fetch(`${API_BASE}/api/watches/${id}`, {
+    method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify(data),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("更新監看失敗");
+  return res.json();
+}
+
+export async function deleteWatch(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/watches/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("刪除監看失敗");
+}
+
+export async function checkWatch(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/watches/${id}/check`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("檢查失敗");
+}

@@ -19,6 +19,7 @@ export default function Nav() {
           <Link href="/" className={link}>搜尋</Link>
           <Link href="/history" className={link}>歷史</Link>
           {user && <Link href="/schedules" className={link}>排程</Link>}
+          {user && <Link href="/watches" className={link}>監看</Link>}
           {user && <Link href="/settings" className={link}>設定</Link>}
           <Link href="/about" className={link}>說明</Link>
           <ThemeToggle />

@@ -10,6 +10,7 @@ import db
 import jobs
 import notify
 import radar
+import watcher
 
 _sched = BackgroundScheduler(timezone="UTC")
 _started = False
@@ -23,6 +24,8 @@ def start() -> None:
     _started = True
     for sc in db.list_enabled_schedules():
         _add(sc)
+    for w in db.list_enabled_watches():
+        add_watch(w)
 
 
 def _job_id(schedule_id: int) -> str:
@@ -58,6 +61,42 @@ def remove(schedule_id: int) -> None:
 
 def run_now(schedule_id: int) -> None:
     _run(schedule_id)
+
+
+# ---------- 監看任務 ----------
+
+def _watch_job_id(watch_id: int) -> str:
+    return f"watch-{watch_id}"
+
+
+def add_watch(w: dict) -> None:
+    _sched.add_job(
+        watcher.check_watch, "interval",
+        minutes=max(1, int(w["interval_minutes"])),
+        id=_watch_job_id(w["id"]),
+        args=[w["id"]],
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        next_run_time=datetime.now(timezone.utc),
+    )
+
+
+def sync_watch(w: dict) -> None:
+    remove_watch(w["id"])
+    if w.get("enabled"):
+        add_watch(w)
+
+
+def remove_watch(watch_id: int) -> None:
+    try:
+        _sched.remove_job(_watch_job_id(watch_id))
+    except Exception:
+        pass
+
+
+def check_watch_now(watch_id: int) -> None:
+    watcher.check_watch(watch_id)
 
 
 def _build_message(sc: dict, result: dict, prev: dict | None) -> str:
