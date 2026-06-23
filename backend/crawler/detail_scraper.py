@@ -4,6 +4,7 @@ import re
 from bs4 import BeautifulSoup
 
 from .utils import clean_text, extract_price, classify_item, sleep_random, looks_like_block_page
+from .characters import detect_character
 
 
 def _structured_price(soup: BeautifulSoup) -> str:
@@ -74,6 +75,7 @@ def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: floa
         "image_url": "",
         "key_info": "",
         "category": "",
+        "character": "",
         "status": "ok",
         "error": "",
     }
@@ -125,6 +127,10 @@ def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: floa
             item.get("snippet", ""),
             page_text[:3000],
         )
+        detail["character"] = detect_character(
+            item.get("title", ""), item.get("snippet", ""),
+            detail["page_title"], detail["h1"], page_text[:1000],
+        )
 
         # 關鍵資訊不要塞爆表格,截前 300 字
         if detail["meta_description"]:
@@ -149,6 +155,7 @@ def classify_search_only(item: dict) -> dict:
         "image_url": "",
         "key_info": clean_text(item.get("snippet", ""))[:300],
         "category": classify_item(item.get("title", ""), item.get("snippet", ""), ""),
+        "character": detect_character(item.get("title", ""), item.get("snippet", "")),
         "status": "search_only",
         "error": "",
     }

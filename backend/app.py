@@ -62,6 +62,11 @@ class SummarizeRequest(BaseModel):
     records: list[dict] | None = None
 
 
+class ChatRequest(BaseModel):
+    run_id: str
+    question: str
+
+
 class AuthRequest(BaseModel):
     email: str
     password: str
@@ -290,6 +295,82 @@ def export_md(run_id: str):
         media_type="text/markdown; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="tammon_{run_id}.md"'},
     )
+
+
+# ---------- AI ----------
+
+def _anthropic():
+    """回傳 (client, model) 或 None(沒金鑰/沒裝套件)。"""
+    key = os.environ.get("ANTHROPIC_API_KEY")
+    if not key:
+        return None
+    try:
+        from anthropic import Anthropic
+    except ImportError:
+        return None
+    return Anthropic(api_key=key), os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+
+
+def _user_records(run_id: str, user) -> list[dict]:
+    """取得屬於該使用者的某次結果(進行中的 job 或資料庫歷史)。"""
+    job = manager.get(run_id)
+    if job and job.result and getattr(job, "user_id", None) == user.id:
+        return job.result.get("records", [])
+    run = db.get_run(run_id, user.id)
+    if run:
+        return run.get("records", [])
+    raise HTTPException(404, "找不到資料")
+
+
+def _slim_records(records: list[dict], limit: int = 80) -> list[dict]:
+    keys = ("title", "url", "domain", "category", "character", "price", "snippet")
+    return [{k: r.get(k, "") for k in keys} for r in records[:limit]]
+
+
+@app.post("/api/ai/chat")
+def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
+    records = _user_records(req.run_id, user)
+    cli = _anthropic()
+    if not cli:
+        return {"available": False, "answer": "尚未設定 ANTHROPIC_API_KEY,無法使用 AI 對話。"}
+    client, model = cli
+    prompt = (
+        "你是「多聞」周邊情報助理。根據以下 JSON 搜尋結果,用繁體中文回答使用者問題;"
+        "提到具體商品時附上其連結與價格,答不出來就老實說資料裡沒有。\n\n"
+        f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
+    )
+    msg = client.messages.create(model=model, max_tokens=1500,
+                                 messages=[{"role": "user", "content": prompt}])
+    answer = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    return {"available": True, "answer": answer}
+
+
+@app.post("/api/ai/clean")
+def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
+    if not req.run_id:
+        raise HTTPException(400, "請提供 run_id")
+    records = _user_records(req.run_id, user)
+    cli = _anthropic()
+    if not cli:
+        return {"available": False, "noise_urls": [], "message": "尚未設定 ANTHROPIC_API_KEY"}
+    client, model = cli
+    prompt = (
+        "以下是一批「多聞」周邊的搜尋結果 JSON。請判斷哪些『不是真正的商品/情報頁』"
+        "(例如純搜尋結果頁、空白頁、與多聞無關的雜訊)。\n"
+        "只回傳 JSON,格式:{\"noise_urls\": [\"...\"]},不要其他文字。\n\n"
+        f"資料:\n{json.dumps(_slim_records(records, 100), ensure_ascii=False)}"
+    )
+    msg = client.messages.create(model=model, max_tokens=1500,
+                                 messages=[{"role": "user", "content": prompt}])
+    text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+    noise: list[str] = []
+    try:
+        start, end = text.find("{"), text.rfind("}")
+        if start >= 0 and end > start:
+            noise = json.loads(text[start:end + 1]).get("noise_urls", [])
+    except Exception:
+        noise = []
+    return {"available": True, "noise_urls": noise, "noise_count": len(noise)}
 
 
 # ---------- AI 摘要 ----------

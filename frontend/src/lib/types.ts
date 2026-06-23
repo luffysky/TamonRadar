@@ -1,6 +1,7 @@
 export interface CrawlRecord {
   keyword: string;
   category: string;
+  character?: string;
   title: string;
   url: string;
   domain: string;

@@ -11,9 +11,16 @@ function priceValue(p: string): number {
   return Number.isNaN(n) ? -1 : n;
 }
 
-export default function ResultsTable({ records }: { records: CrawlRecord[] }) {
+export default function ResultsTable({
+  records,
+  hiddenUrls,
+}: {
+  records: CrawlRecord[];
+  hiddenUrls?: Set<string>;
+}) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
+  const [character, setCharacter] = useState("全部");
   const [onlyPrice, setOnlyPrice] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("category");
   const [sortAsc, setSortAsc] = useState(true);
@@ -23,9 +30,16 @@ export default function ResultsTable({ records }: { records: CrawlRecord[] }) {
     return ["全部", ...Array.from(set)];
   }, [records]);
 
+  const characters = useMemo(() => {
+    const set = new Set(records.map((r) => String(r.character ?? "")).filter(Boolean));
+    return ["全部", ...Array.from(set)];
+  }, [records]);
+
   const filtered = useMemo(() => {
     let rows = records;
+    if (hiddenUrls && hiddenUrls.size) rows = rows.filter((r) => !hiddenUrls.has(r.url));
     if (category !== "全部") rows = rows.filter((r) => r.category === category);
+    if (character !== "全部") rows = rows.filter((r) => String(r.character ?? "") === character);
     if (onlyPrice) rows = rows.filter((r) => (r.price || "").trim() !== "");
     if (query.trim()) {
       const q = query.toLowerCase();
@@ -43,7 +57,7 @@ export default function ResultsTable({ records }: { records: CrawlRecord[] }) {
       return sortAsc ? cmp : -cmp;
     });
     return sorted;
-  }, [records, category, onlyPrice, query, sortKey, sortAsc]);
+  }, [records, hiddenUrls, category, character, onlyPrice, query, sortKey, sortAsc]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortAsc(!sortAsc);
@@ -79,10 +93,23 @@ export default function ResultsTable({ records }: { records: CrawlRecord[] }) {
         >
           {categories.map((c) => (
             <option key={c} value={c}>
-              {c}
+              {c === "全部" ? "全部分類" : c}
             </option>
           ))}
         </select>
+        {characters.length > 1 && (
+          <select
+            value={character}
+            onChange={(e) => setCharacter(e.target.value)}
+            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          >
+            {characters.map((c) => (
+              <option key={c} value={c}>
+                {c === "全部" ? "全部角色" : c}
+              </option>
+            ))}
+          </select>
+        )}
         <label className="flex items-center gap-1.5 text-sm text-slate-600">
           <input type="checkbox" checked={onlyPrice} onChange={(e) => setOnlyPrice(e.target.checked)} />
           只看有價格
@@ -112,6 +139,11 @@ export default function ResultsTable({ records }: { records: CrawlRecord[] }) {
                   <a href={r.url} target="_blank" rel="noreferrer" className="font-medium text-brand-700 hover:underline">
                     {r.title}
                   </a>
+                  {r.character ? (
+                    <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-700">
+                      {String(r.character)}
+                    </span>
+                  ) : null}
                   {r.snippet ? <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{r.snippet}</p> : null}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 font-semibold text-rose-600">{r.price || "—"}</td>

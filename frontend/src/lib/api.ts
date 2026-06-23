@@ -155,6 +155,26 @@ export function exportUrl(runId: string, fmt: "csv" | "xlsx" | "md"): string {
   return `${API_BASE}/api/export/${runId}.${fmt}`;
 }
 
+// ---------- AI ----------
+
+export async function aiChat(runId: string, question: string): Promise<{ available: boolean; answer: string }> {
+  const res = await fetch(`${API_BASE}/api/ai/chat`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId, question }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("AI 對話失敗");
+  return res.json();
+}
+
+export async function aiClean(runId: string): Promise<{ available: boolean; noise_urls: string[]; noise_count?: number }> {
+  const res = await fetch(`${API_BASE}/api/ai/clean`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("AI 整理失敗");
+  return res.json();
+}
+
 // ---------- 價格雷達 ----------
 
 export interface RadarItem {
