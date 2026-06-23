@@ -137,6 +137,15 @@ def me(user=Depends(auth.get_current_user)):
 
 # ---------- crawl ----------
 
+@app.get("/")
+def root():
+    return {
+        "service": "TamonRadar API",
+        "status": "ok",
+        "hint": "這是後端 API,請從前端網站使用。健康檢查:/api/health,文件:/docs",
+    }
+
+
 @app.get("/api/health")
 def health():
     from crawler.search_api import available_providers
