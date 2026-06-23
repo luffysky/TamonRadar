@@ -1,0 +1,124 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import {
+  getAdminStats, getAdminUsers, setUserPlan,
+  type AdminStats, type AdminUser,
+} from "@/lib/api";
+import { useRequireAuth } from "@/components/AuthProvider";
+import { useToast } from "@/components/Toast";
+
+function Stat({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
+      <div className="mt-1 text-2xl font-bold text-brand-600 dark:text-brand-300">{value}</div>
+    </div>
+  );
+}
+
+export default function AdminPage() {
+  const { user, ready } = useRequireAuth();
+  const toast = useToast();
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [denied, setDenied] = useState(false);
+
+  async function load() {
+    try {
+      const [s, u] = await Promise.all([getAdminStats(), getAdminUsers()]);
+      setStats(s);
+      setUsers(u.users);
+    } catch (e) {
+      if (e instanceof Error && e.message !== "UNAUTHORIZED") setDenied(true);
+    }
+  }
+
+  useEffect(() => {
+    if (user) load();
+  }, [user]);
+
+  if (!ready || !user) {
+    return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
+  }
+  if (denied || (user && !user.is_admin)) {
+    return <p className="py-20 text-center text-sm text-rose-500">沒有管理員權限。</p>;
+  }
+
+  async function togglePlan(u: AdminUser) {
+    const next = u.plan === "pro" ? "free" : "pro";
+    try {
+      await setUserPlan(u.id, next);
+      toast(`${u.email} → ${next}`, "success");
+      load();
+    } catch {
+      toast("更新失敗", "error");
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">管理員後台</h1>
+
+      {stats && (
+        <>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <Stat label="總使用者" value={stats.total_users} />
+            <Stat label="AI 總呼叫次數" value={stats.total_ai_calls} />
+            <Stat label="搜尋次數" value={stats.total_runs} />
+            <Stat label="監看數" value={stats.total_watches} />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">登入方式分布</p>
+              {Object.entries(stats.by_provider).map(([k, v]) => (
+                <div key={k} className="flex justify-between text-slate-600 dark:text-slate-300"><span>{k}</span><span>{v}</span></div>
+              ))}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">方案分布</p>
+              {Object.entries(stats.by_plan).map(([k, v]) => (
+                <div key={k} className="flex justify-between text-slate-600 dark:text-slate-300"><span>{k}</span><span>{v}</span></div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <div className="scroll-thin overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+              <tr>
+                <th className="px-3 py-2 text-left">Email</th>
+                <th className="px-3 py-2 text-left">登入</th>
+                <th className="px-3 py-2 text-left">方案</th>
+                <th className="px-3 py-2 text-right">AI 用量</th>
+                <th className="px-3 py-2 text-left">註冊時間</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u) => (
+                <tr key={u.id} className="border-t border-slate-100 dark:border-slate-700">
+                  <td className="px-3 py-2 text-slate-700 dark:text-slate-200">{u.email}</td>
+                  <td className="px-3 py-2 text-xs text-slate-500">{u.provider}</td>
+                  <td className="px-3 py-2">
+                    <span className={`rounded-full px-2 py-0.5 text-xs ${u.plan === "pro" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}>{u.plan}</span>
+                  </td>
+                  <td className="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{u.ai_used}</td>
+                  <td className="px-3 py-2 text-xs text-slate-400">{u.created_at ? new Date(u.created_at).toLocaleDateString("zh-TW") : "-"}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => togglePlan(u)} className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
+                      {u.plan === "pro" ? "降為 free" : "升為 pro"}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

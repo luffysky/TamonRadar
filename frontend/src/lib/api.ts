@@ -366,3 +366,46 @@ export async function checkWatch(id: number): Promise<void> {
   check401(res);
   if (!res.ok) throw new Error("檢查失敗");
 }
+
+// ---------- 管理員 ----------
+
+export interface AdminStats {
+  total_users: number;
+  total_ai_calls: number;
+  total_runs: number;
+  total_watches: number;
+  total_schedules: number;
+  by_provider: Record<string, number>;
+  by_plan: Record<string, number>;
+}
+
+export interface AdminUser {
+  id: number;
+  email: string;
+  provider: string;
+  plan: string;
+  ai_used: number;
+  created_at: string | null;
+}
+
+export async function getAdminStats(): Promise<AdminStats> {
+  const res = await fetch(`${API_BASE}/api/admin/stats`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取統計失敗");
+  return res.json();
+}
+
+export async function getAdminUsers(): Promise<{ users: AdminUser[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/users`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取使用者失敗");
+  return res.json();
+}
+
+export async function setUserPlan(userId: number, plan: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/plan`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ plan }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("更新方案失敗");
+}

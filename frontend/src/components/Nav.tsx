@@ -21,6 +21,7 @@ export default function Nav() {
           {user && <Link href="/schedules" className={link}>排程</Link>}
           {user && <Link href="/watches" className={link}>監看</Link>}
           {user && <Link href="/settings" className={link}>設定</Link>}
+          {user?.is_admin && <Link href="/admin" className="rounded-md px-3 py-1.5 font-medium text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950">管理</Link>}
           <Link href="/about" className={link}>說明</Link>
           <ThemeToggle />
           {user ? (

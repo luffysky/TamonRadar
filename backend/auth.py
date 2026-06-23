@@ -96,6 +96,11 @@ def verify_reset_token(token: str) -> int | None:
 
 # ---------- FastAPI 依賴 ----------
 
+def is_admin(email: str) -> bool:
+    admins = {e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()}
+    return bool(email) and email.lower() in admins
+
+
 def get_current_user(
     cred: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> User:
@@ -108,4 +113,10 @@ def get_current_user(
         user = s.get(User, user_id)
     if user is None:
         raise HTTPException(401, "使用者不存在")
+    return user
+
+
+def get_admin(user: User = Depends(get_current_user)) -> User:
+    if not is_admin(user.email):
+        raise HTTPException(403, "需要管理員權限")
     return user

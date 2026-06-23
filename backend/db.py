@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, String, create_engine, inspect, select, text,
+    JSON, DateTime, ForeignKey, String, create_engine, func, inspect, select, text,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker,
@@ -62,6 +62,8 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255), default="")  # OAuth 使用者為空
     provider: Mapped[str] = mapped_column(String(32), default="local")   # local | google
+    plan: Mapped[str] = mapped_column(String(20), default="free")        # free | pro
+    ai_used: Mapped[int] = mapped_column(default=0)                      # AI 累計呼叫次數
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     runs: Mapped[list["Run"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -139,9 +141,14 @@ def _ensure_columns() -> None:
 
     if "tr_users" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_users")}
-        if "provider" not in cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE tr_users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"))
+        for col, ddl in (
+            ("provider", "ALTER TABLE tr_users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"),
+            ("plan", "ALTER TABLE tr_users ADD COLUMN plan VARCHAR(20) DEFAULT 'free'"),
+            ("ai_used", "ALTER TABLE tr_users ADD COLUMN ai_used INTEGER DEFAULT 0"),
+        ):
+            if col not in cols:
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
 
     if "tr_user_settings" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_user_settings")}
@@ -443,3 +450,58 @@ def delete_watch(watch_id: int, user_id: int) -> bool:
         s.delete(w)
         s.commit()
         return True
+
+
+# ---------- 使用量 / 管理員 ----------
+
+def bump_ai_usage(user_id: int) -> None:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if u:
+            u.ai_used = (u.ai_used or 0) + 1
+            s.commit()
+
+
+def set_user_plan(user_id: int, plan: str) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return False
+        u.plan = plan
+        s.commit()
+        return True
+
+
+def admin_stats() -> dict:
+    with SessionLocal() as s:
+        total_users = s.scalar(select(func.count()).select_from(User)) or 0
+        total_ai = s.scalar(select(func.coalesce(func.sum(User.ai_used), 0))) or 0
+        total_runs = s.scalar(select(func.count()).select_from(Run)) or 0
+        total_watches = s.scalar(select(func.count()).select_from(Watch)) or 0
+        total_schedules = s.scalar(select(func.count()).select_from(Schedule)) or 0
+        by_provider = {str(k): int(v) for k, v in s.execute(
+            select(User.provider, func.count()).group_by(User.provider)).all()}
+        by_plan = {str(k): int(v) for k, v in s.execute(
+            select(User.plan, func.count()).group_by(User.plan)).all()}
+    return {
+        "total_users": int(total_users),
+        "total_ai_calls": int(total_ai),
+        "total_runs": int(total_runs),
+        "total_watches": int(total_watches),
+        "total_schedules": int(total_schedules),
+        "by_provider": by_provider,
+        "by_plan": by_plan,
+    }
+
+
+def admin_users(limit: int = 500) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(User).order_by(User.created_at.desc()).limit(limit)).all()
+        return [{
+            "id": u.id,
+            "email": u.email,
+            "provider": u.provider,
+            "plan": u.plan,
+            "ai_used": u.ai_used or 0,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        } for u in rows]

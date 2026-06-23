@@ -1,6 +1,8 @@
 export interface AuthUser {
   id: number;
   email: string;
+  plan?: string;
+  is_admin?: boolean;
 }
 
 const TOKEN_KEY = "tr_token";

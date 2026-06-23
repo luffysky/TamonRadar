@@ -123,7 +123,12 @@ class WatchRequest(BaseModel):
 # ---------- auth ----------
 
 def _public_user(user) -> dict:
-    return {"id": user.id, "email": user.email}
+    return {
+        "id": user.id,
+        "email": user.email,
+        "plan": getattr(user, "plan", "free"),
+        "is_admin": auth.is_admin(user.email),
+    }
 
 
 @app.post("/api/auth/register")
@@ -415,6 +420,7 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
         f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
     )
     answer, model = ai.ai_complete(prompt, max_tokens=1500, **args)
+    db.bump_ai_usage(user.id)
     return {"available": True, "answer": answer, "model": model}
 
 
@@ -433,6 +439,7 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
         f"資料:\n{json.dumps(_slim_records(records, 100), ensure_ascii=False)}"
     )
     text, _ = ai.ai_complete(prompt, max_tokens=1500, **args)
+    db.bump_ai_usage(user.id)
     noise: list[str] = []
     try:
         start, end = (text or "").find("{"), (text or "").rfind("}")
@@ -478,6 +485,7 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
         f"資料:\n{json.dumps(_slim_records(records, 60), ensure_ascii=False)}"
     )
     text, model = ai.ai_complete(prompt, max_tokens=2000, **args)
+    db.bump_ai_usage(user.id)
     return {"available": True, "summary": text, "model": model}
 
 
@@ -593,3 +601,28 @@ def check_watch_now(watch_id: int, user=Depends(auth.get_current_user)):
         raise HTTPException(404, "找不到這個監看")
     threading.Thread(target=scheduler.check_watch_now, args=(watch_id,), daemon=True).start()
     return {"ok": True, "message": "已在背景檢查一次"}
+
+
+# ---------- 管理員後台 ----------
+
+class PlanRequest(BaseModel):
+    plan: str
+
+
+@app.get("/api/admin/stats")
+def admin_stats(admin=Depends(auth.get_admin)):
+    return db.admin_stats()
+
+
+@app.get("/api/admin/users")
+def admin_users(admin=Depends(auth.get_admin)):
+    return {"users": db.admin_users()}
+
+
+@app.post("/api/admin/users/{user_id}/plan")
+def admin_set_plan(user_id: int, req: PlanRequest, admin=Depends(auth.get_admin)):
+    if req.plan not in ("free", "pro"):
+        raise HTTPException(400, "方案只能是 free 或 pro")
+    if not db.set_user_plan(user_id, req.plan):
+        raise HTTPException(404, "找不到使用者")
+    return {"ok": True}
