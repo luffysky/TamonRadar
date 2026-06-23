@@ -45,16 +45,16 @@ export default function SettingsPage() {
     }
   }
 
-  const field = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none";
+  const field = "w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none";
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-xl font-bold text-slate-800">通知設定</h1>
-      <p className="text-sm text-slate-500">設定後,排程爬蟲跑完有新品/降價就會推播給你。</p>
+      <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">通知設定</h1>
+      <p className="text-sm text-slate-500 dark:text-slate-400">設定後,排程爬蟲跑完有新品/降價就會推播給你。</p>
 
-      <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="space-y-5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
         <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Discord Webhook</label>
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Discord Webhook</label>
           <input
             value={form.discord_webhook}
             onChange={(e) => setForm({ ...form, discord_webhook: e.target.value })}
@@ -66,15 +66,15 @@ export default function SettingsPage() {
           </p>
         </div>
 
-        <div className="border-t border-slate-100 pt-4">
-          <label className="mb-1 block text-sm font-medium text-slate-700">Telegram Bot Token</label>
+        <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Telegram Bot Token</label>
           <input
             value={form.telegram_token}
             onChange={(e) => setForm({ ...form, telegram_token: e.target.value })}
             placeholder="123456:ABC-..."
             className={field}
           />
-          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700">Telegram Chat ID</label>
+          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700 dark:text-slate-200">Telegram Chat ID</label>
           <input
             value={form.telegram_chat_id}
             onChange={(e) => setForm({ ...form, telegram_chat_id: e.target.value })}
@@ -90,10 +90,10 @@ export default function SettingsPage() {
           <button onClick={save} disabled={saving} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
             儲存
           </button>
-          <button onClick={test} className="rounded-lg border border-slate-300 px-4 py-2 text-sm hover:bg-slate-50">
+          <button onClick={test} className="rounded-lg border border-slate-300 dark:border-slate-600 px-4 py-2 text-sm hover:bg-slate-50 dark:bg-slate-900">
             儲存並測試發送
           </button>
-          {msg && <span className="text-sm text-slate-500">{msg}</span>}
+          {msg && <span className="text-sm text-slate-500 dark:text-slate-400">{msg}</span>}
         </div>
       </div>
     </div>

@@ -78,18 +78,18 @@ export default function ResultsTable({
   );
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 p-3">
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-sm">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 dark:border-slate-700 p-3">
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="搜尋標題 / 摘要 / 網域…"
-          className="w-56 rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
+          className="w-56 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-sm focus:border-brand-500 focus:outline-none"
         />
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+          className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-sm"
         >
           {categories.map((c) => (
             <option key={c} value={c}>
@@ -101,7 +101,7 @@ export default function ResultsTable({
           <select
             value={character}
             onChange={(e) => setCharacter(e.target.value)}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5 text-sm"
           >
             {characters.map((c) => (
               <option key={c} value={c}>
@@ -110,7 +110,7 @@ export default function ResultsTable({
             ))}
           </select>
         )}
-        <label className="flex items-center gap-1.5 text-sm text-slate-600">
+        <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
           <input type="checkbox" checked={onlyPrice} onChange={(e) => setOnlyPrice(e.target.checked)} />
           只看有價格
         </label>
@@ -119,7 +119,7 @@ export default function ResultsTable({
 
       <div className="scroll-thin max-h-[560px] overflow-auto">
         <table className="w-full border-collapse text-sm">
-          <thead className="sticky top-0 bg-slate-50 text-slate-600">
+          <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
             <tr>
               <Th k="category">分類</Th>
               <Th k="title">標題</Th>
@@ -129,7 +129,7 @@ export default function ResultsTable({
           </thead>
           <tbody>
             {filtered.map((r, i) => (
-              <tr key={`${r.url}-${i}`} className="border-t border-slate-100 align-top hover:bg-slate-50">
+              <tr key={`${r.url}-${i}`} className="border-t border-slate-100 dark:border-slate-700 align-top hover:bg-slate-50 dark:bg-slate-900">
                 <td className="px-3 py-2">
                   <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${categoryClass(r.category)}`}>
                     {r.category || "其他"}
@@ -144,10 +144,10 @@ export default function ResultsTable({
                       {String(r.character)}
                     </span>
                   ) : null}
-                  {r.snippet ? <p className="mt-0.5 line-clamp-2 text-xs text-slate-500">{r.snippet}</p> : null}
+                  {r.snippet ? <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{r.snippet}</p> : null}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 font-semibold text-rose-600">{r.price || "—"}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500">{r.domain}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{r.domain}</td>
               </tr>
             ))}
             {filtered.length === 0 && (

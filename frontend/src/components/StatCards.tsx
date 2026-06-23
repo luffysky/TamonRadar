@@ -2,8 +2,8 @@ import type { Summary } from "@/lib/types";
 
 function Card({ label, value, accent }: { label: string; value: string | number; accent: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="text-xs font-medium text-slate-500">{label}</div>
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+      <div className="text-xs font-medium text-slate-500 dark:text-slate-400">{label}</div>
       <div className={`mt-1 text-2xl font-bold ${accent}`}>{value}</div>
     </div>
   );

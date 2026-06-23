@@ -47,18 +47,18 @@ export default function ResultsView({
       <StatCards summary={summary} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-medium text-slate-600">匯出:</span>
-        <a href={exportUrl(runId, "csv")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50">CSV</a>
-        <a href={exportUrl(runId, "xlsx")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50">Excel</a>
-        <a href={exportUrl(runId, "md")} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50">Markdown 報告</a>
+        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">匯出:</span>
+        <a href={exportUrl(runId, "csv")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">CSV</a>
+        <a href={exportUrl(runId, "xlsx")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">Excel</a>
+        <a href={exportUrl(runId, "md")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">Markdown 報告</a>
         <div className="ml-auto flex items-center gap-2">
           {cleanMsg && <span className="text-xs text-slate-400">{cleanMsg}</span>}
           {hiddenUrls.size > 0 && (
-            <button onClick={() => { setHiddenUrls(new Set()); setCleanMsg(null); }} className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm hover:bg-slate-50">
+            <button onClick={() => { setHiddenUrls(new Set()); setCleanMsg(null); }} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">
               還原全部
             </button>
           )}
-          <button onClick={clean} disabled={cleaning} className="rounded-lg border border-violet-300 bg-white px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50 disabled:opacity-50">
+          <button onClick={clean} disabled={cleaning} className="rounded-lg border border-violet-300 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50 disabled:opacity-50">
             {cleaning ? "整理中…" : "🧹 AI 濾雜訊"}
           </button>
         </div>
@@ -77,12 +77,12 @@ export default function ResultsView({
       )}
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-700">商品候選</h2>
+        <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">商品候選</h2>
         <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url))} />
       </section>
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-700">完整結果</h2>
+        <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">完整結果</h2>
         <ResultsTable records={records} hiddenUrls={hiddenUrls} />
       </section>
     </div>

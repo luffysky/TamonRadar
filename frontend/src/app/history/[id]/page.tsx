@@ -34,7 +34,7 @@ export default function HistoryDetailPage({ params }: { params: { id: string } }
       {!data && !error && <p className="text-sm text-slate-400">載入中…</p>}
       {data && (
         <>
-          <h1 className="text-xl font-bold text-slate-800">
+          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">
             {data.keywords?.join("、") || "歷史紀錄"}
           </h1>
           <RadarPanel runId={params.id} />

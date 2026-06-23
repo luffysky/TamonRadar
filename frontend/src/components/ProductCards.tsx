@@ -1,8 +1,12 @@
+"use client";
+
+import { useState } from "react";
 import type { CrawlRecord } from "@/lib/types";
 import { categoryClass } from "@/lib/format";
 
 export default function ProductCards({ records }: { records: CrawlRecord[] }) {
-  // 優先顯示有價格的周邊/商品
+  const [lightbox, setLightbox] = useState<CrawlRecord | null>(null);
+
   const items = [...records]
     .filter((r) => (r.price || "").trim() !== "")
     .sort((a, b) => (a.category === "周邊/商品" ? -1 : 0) - (b.category === "周邊/商品" ? -1 : 0))
@@ -13,40 +17,71 @@ export default function ProductCards({ records }: { records: CrawlRecord[] }) {
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-      {items.map((r, i) => (
-        <a
-          key={`${r.url}-${i}`}
-          href={r.url}
-          target="_blank"
-          rel="noreferrer"
-          className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-md"
-        >
-          <div className="aspect-square w-full overflow-hidden bg-slate-100">
-            {r.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={r.image_url}
-                alt={r.title}
-                className="h-full w-full object-cover transition group-hover:scale-105"
-                loading="lazy"
-              />
-            ) : (
-              <div className="grid h-full place-items-center text-slate-300">無圖片</div>
-            )}
-          </div>
-          <div className="flex flex-1 flex-col p-3">
-            <span className={`mb-1 w-fit rounded-full border px-2 py-0.5 text-[10px] ${categoryClass(r.category)}`}>
-              {r.category || "其他"}
-            </span>
-            <p className="line-clamp-2 text-sm font-medium text-slate-700">{r.title}</p>
-            <div className="mt-auto flex items-center justify-between pt-2">
-              <span className="font-bold text-rose-600">{r.price}</span>
-              <span className="text-[10px] text-slate-400">{r.domain}</span>
+    <>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+        {items.map((r, i) => (
+          <div
+            key={`${r.url}-${i}`}
+            className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
+          >
+            <button
+              onClick={() => r.image_url && setLightbox(r)}
+              className="aspect-square w-full overflow-hidden bg-slate-100 dark:bg-slate-700"
+              aria-label="放大圖片"
+            >
+              {r.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={r.image_url}
+                  alt={r.title}
+                  className="h-full w-full object-cover transition group-hover:scale-105"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="grid h-full place-items-center text-slate-300">無圖片</div>
+              )}
+            </button>
+            <div className="flex flex-1 flex-col p-3">
+              <span className={`mb-1 w-fit rounded-full border px-2 py-0.5 text-[10px] ${categoryClass(r.category)}`}>
+                {r.category || "其他"}
+              </span>
+              <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{r.title}</p>
+              <div className="mt-auto flex items-center justify-between pt-2">
+                <span className="font-bold text-rose-600">{r.price}</span>
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] text-brand-600 hover:underline dark:text-brand-300"
+                >
+                  前往 →
+                </a>
+              </div>
             </div>
           </div>
-        </a>
-      ))}
-    </div>
+        ))}
+      </div>
+
+      {lightbox && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 animate-fade-in"
+          onClick={() => setLightbox(null)}
+        >
+          <div className="max-h-[90vh] max-w-2xl overflow-hidden rounded-2xl bg-white dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={lightbox.image_url} alt={lightbox.title} className="max-h-[70vh] w-full object-contain bg-slate-100 dark:bg-slate-900" />
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{lightbox.title}</p>
+                <p className="text-sm font-bold text-rose-600">{lightbox.price}</p>
+              </div>
+              <a href={lightbox.url} target="_blank" rel="noreferrer" className="shrink-0 rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">
+                前往商品
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

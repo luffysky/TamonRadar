@@ -27,7 +27,7 @@ export default function AiChat({ runId }: { runId: string }) {
   }
 
   return (
-    <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4 shadow-sm">
+    <div className="rounded-2xl border border-violet-200 bg-violet-50/60 p-4 shadow-sm dark:border-violet-900 dark:bg-violet-950/30">
       <h3 className="mb-2 text-sm font-semibold text-violet-700">💬 問 AI(對這批資料提問)</h3>
       <div className="flex gap-2">
         <input
@@ -35,7 +35,7 @@ export default function AiChat({ runId }: { runId: string }) {
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && ask()}
           placeholder="例如:最便宜的櫻利夏立牌是哪個?"
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
+          className="flex-1 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-violet-500 focus:outline-none"
         />
         <button
           onClick={() => ask()}
@@ -50,14 +50,14 @@ export default function AiChat({ runId }: { runId: string }) {
           <button
             key={s}
             onClick={() => ask(s)}
-            className="rounded-full border border-violet-200 bg-white px-2.5 py-1 text-xs text-violet-600 hover:bg-violet-100"
+            className="rounded-full border border-violet-200 bg-white dark:bg-slate-800 px-2.5 py-1 text-xs text-violet-600 hover:bg-violet-100"
           >
             {s}
           </button>
         ))}
       </div>
       {answer && (
-        <div className="mt-3 whitespace-pre-wrap rounded-lg bg-white p-3 text-sm leading-relaxed text-slate-700">
+        <div className="mt-3 whitespace-pre-wrap rounded-lg bg-white dark:bg-slate-800 p-3 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
           {answer}
         </div>
       )}

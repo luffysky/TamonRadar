@@ -97,23 +97,23 @@ export default function HomePage() {
       </section>
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
-        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          <label className="text-sm font-medium text-slate-700">搜尋關鍵字(一行一個)</label>
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">搜尋關鍵字(一行一個)</label>
           <textarea
             value={keywords}
             onChange={(e) => setKeywords(e.target.value)}
             rows={5}
             disabled={running}
-            className="mt-2 w-full rounded-lg border border-slate-300 p-3 text-sm focus:border-brand-500 focus:outline-none disabled:bg-slate-50"
+            className="mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-600 p-3 text-sm focus:border-brand-500 focus:outline-none disabled:bg-slate-50 dark:bg-slate-900"
           />
 
           <label className="mt-3 flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">搜尋來源</span>
+            <span className="text-slate-600 dark:text-slate-300">搜尋來源</span>
             <select
               value={provider}
               disabled={running}
               onChange={(e) => setProvider(e.target.value)}
-              className="rounded-lg border border-slate-300 px-2 py-1.5"
+              className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5"
             >
               {["brave", "serpapi", "selenium"].map((p) => {
                 const ok = health?.search_providers?.[p];
@@ -132,24 +132,24 @@ export default function HomePage() {
 
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <label className="flex flex-col gap-1">
-              <span className="text-slate-600">每個關鍵字頁數</span>
+              <span className="text-slate-600 dark:text-slate-300">每個關鍵字頁數</span>
               <input
                 type="number" min={1} max={5} value={pages} disabled={running}
                 onChange={(e) => setPages(Number(e.target.value))}
-                className="rounded-lg border border-slate-300 px-2 py-1.5"
+                className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5"
               />
             </label>
             <label className="flex flex-col gap-1">
-              <span className="text-slate-600">最多抓詳細頁</span>
+              <span className="text-slate-600 dark:text-slate-300">最多抓詳細頁</span>
               <input
                 type="number" min={0} max={100} value={maxDetail} disabled={running}
                 onChange={(e) => setMaxDetail(Number(e.target.value))}
-                className="rounded-lg border border-slate-300 px-2 py-1.5"
+                className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5"
               />
             </label>
           </div>
 
-          <label className="mt-3 flex items-center gap-2 text-sm text-slate-600">
+          <label className="mt-3 flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
             <input
               type="checkbox" checked={scrapeDetails} disabled={running}
               onChange={(e) => setScrapeDetails(e.target.checked)}
@@ -190,7 +190,7 @@ export default function HomePage() {
 
       {result && jobId && (
         <section>
-          <h2 className="mb-4 text-xl font-bold text-slate-800">搜尋結果</h2>
+          <h2 className="mb-4 text-xl font-bold text-slate-800 dark:text-slate-100">搜尋結果</h2>
           <ResultsView runId={jobId} result={result} />
         </section>
       )}

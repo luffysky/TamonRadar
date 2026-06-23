@@ -22,7 +22,7 @@ export default function AiSummary({ runId }: { runId: string }) {
   }
 
   return (
-    <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 shadow-sm">
+    <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 shadow-sm dark:border-violet-900 dark:bg-violet-950/30">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-violet-700">✨ AI 情報摘要</h3>
         <button
@@ -35,7 +35,7 @@ export default function AiSummary({ runId }: { runId: string }) {
       </div>
       {error && <p className="mt-3 text-sm text-rose-600">{error}</p>}
       {text && (
-        <div className="prose-sm mt-3 whitespace-pre-wrap rounded-lg bg-white p-3 text-sm leading-relaxed text-slate-700">
+        <div className="prose-sm mt-3 whitespace-pre-wrap rounded-lg bg-white dark:bg-slate-800 p-3 text-sm leading-relaxed text-slate-700 dark:text-slate-200">
           {text}
         </div>
       )}

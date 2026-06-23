@@ -11,18 +11,18 @@ export default function BarChart({
   const max = Math.max(1, ...entries.map(([, v]) => v));
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-      <h3 className="mb-3 text-sm font-semibold text-slate-700">{title}</h3>
+    <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+      <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
       {entries.length === 0 ? (
         <p className="text-sm text-slate-400">沒有資料</p>
       ) : (
         <div className="space-y-2">
           {entries.map(([label, value], i) => (
             <div key={label} className="flex items-center gap-2">
-              <div className="w-28 shrink-0 truncate text-right text-xs text-slate-600" title={label}>
+              <div className="w-28 shrink-0 truncate text-right text-xs text-slate-600 dark:text-slate-300" title={label}>
                 {label}
               </div>
-              <div className="h-5 flex-1 rounded bg-slate-100">
+              <div className="h-5 flex-1 rounded bg-slate-100 dark:bg-slate-700">
                 <div
                   className="flex h-5 items-center justify-end rounded px-2 text-[10px] font-medium text-white"
                   style={{

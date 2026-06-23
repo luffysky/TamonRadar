@@ -36,20 +36,20 @@ export default function LoginPage() {
 
   return (
     <div className="mx-auto mt-10 max-w-sm">
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-6 shadow-sm">
         <div className="mb-5 text-center">
           <div className="mx-auto mb-2 grid h-12 w-12 place-items-center rounded-xl bg-brand-600 text-2xl text-white">📡</div>
-          <h1 className="text-xl font-bold text-slate-800">TamonRadar</h1>
+          <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">TamonRadar</h1>
           <p className="text-sm text-slate-400">多聞情報雷達</p>
         </div>
 
-        <div className="mb-4 grid grid-cols-2 rounded-lg bg-slate-100 p-1 text-sm">
+        <div className="mb-4 grid grid-cols-2 rounded-lg bg-slate-100 dark:bg-slate-700 p-1 text-sm">
           {(["login", "register"] as const).map((m) => (
             <button
               key={m}
               onClick={() => { setMode(m); setError(null); }}
               className={`rounded-md py-1.5 font-medium transition ${
-                mode === m ? "bg-white text-brand-600 shadow-sm" : "text-slate-500"
+                mode === m ? "bg-white dark:bg-slate-800 text-brand-600 shadow-sm" : "text-slate-500 dark:text-slate-400"
               }`}
             >
               {m === "login" ? "登入" : "註冊"}
@@ -61,12 +61,12 @@ export default function LoginPage() {
           <input
             type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
             placeholder="email" autoComplete="email"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           />
           <input
             type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
             placeholder="密碼(至少 6 字)" autoComplete={mode === "login" ? "current-password" : "new-password"}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
+            className="w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           />
           {error && <p className="text-sm text-rose-600">{error}</p>}
           <button
@@ -85,7 +85,7 @@ export default function LoginPage() {
 
         <a
           href={googleLoginUrl()}
-          className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 py-2 text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:bg-slate-900"
         >
           <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z" />

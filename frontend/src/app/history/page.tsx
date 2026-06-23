@@ -29,7 +29,7 @@ export default function HistoryPage() {
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-slate-800">歷史紀錄</h1>
+      <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">歷史紀錄</h1>
       {loading && <p className="text-sm text-slate-400">載入中…</p>}
       {error && <p className="text-sm text-rose-600">{error}</p>}
       {!loading && !error && runs.length === 0 && (
@@ -41,7 +41,7 @@ export default function HistoryPage() {
           <Link
             key={run.id}
             href={`/history/${run.id}`}
-            className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:shadow-md"
+            className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm transition hover:shadow-md"
           >
             <div className="flex items-center justify-between">
               <span className="text-xs text-slate-400">
@@ -51,16 +51,16 @@ export default function HistoryPage() {
                 className={`rounded-full px-2 py-0.5 text-[10px] ${
                   run.status === "done"
                     ? "bg-emerald-100 text-emerald-700"
-                    : "bg-slate-100 text-slate-500"
+                    : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"
                 }`}
               >
                 {run.status}
               </span>
             </div>
-            <p className="mt-2 line-clamp-1 text-sm font-medium text-slate-700">
+            <p className="mt-2 line-clamp-1 text-sm font-medium text-slate-700 dark:text-slate-200">
               {run.keywords.join("、") || "(無關鍵字)"}
             </p>
-            <div className="mt-2 flex gap-4 text-xs text-slate-500">
+            <div className="mt-2 flex gap-4 text-xs text-slate-500 dark:text-slate-400">
               <span>共 {run.summary?.total ?? 0} 筆</span>
               <span>有價格 {run.summary?.with_price ?? 0} 筆</span>
             </div>

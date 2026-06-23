@@ -9,16 +9,16 @@ function ItemRow({ item, kind }: { item: RadarItem; kind: "new" | "drop" | "rest
       href={item.url}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-2 hover:border-brand-300 hover:shadow-sm"
+      className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 hover:border-brand-300 hover:shadow-sm"
     >
-      <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-slate-100">
+      <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-slate-100 dark:bg-slate-700">
         {item.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={item.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : null}
       </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-slate-700">{item.title}</p>
+        <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{item.title}</p>
         <p className="text-xs text-slate-400">{item.domain}</p>
       </div>
       <div className="shrink-0 text-right">
@@ -66,7 +66,7 @@ export default function RadarPanel({ runId }: { runId: string }) {
 
   if (loading) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-400 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 text-sm text-slate-400 shadow-sm">
         📡 價格雷達分析中…
       </div>
     );
@@ -74,7 +74,7 @@ export default function RadarPanel({ runId }: { runId: string }) {
 
   if (!data?.has_previous || !data.diff) {
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-400 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 text-sm text-slate-400 shadow-sm">
         📡 價格雷達：這是第一筆紀錄，還沒有可比較的上一次。再搜尋一次同樣的關鍵字就能看到變化。
       </div>
     );
@@ -84,7 +84,7 @@ export default function RadarPanel({ runId }: { runId: string }) {
   const noChange = counts.new + counts.price_drops + counts.restock === 0;
 
   return (
-    <div className="space-y-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-5 shadow-sm">
+    <div className="space-y-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-5 shadow-sm dark:border-brand-700 dark:from-slate-800 dark:to-slate-800">
       <div className="flex flex-wrap items-center gap-3">
         <h3 className="text-base font-bold text-brand-700">📡 價格雷達</h3>
         <span className="text-xs text-slate-400">
@@ -98,7 +98,7 @@ export default function RadarPanel({ runId }: { runId: string }) {
       </div>
 
       {noChange ? (
-        <p className="text-sm text-slate-500">跟上一次相比沒有明顯變化。</p>
+        <p className="text-sm text-slate-500 dark:text-slate-400">跟上一次相比沒有明顯變化。</p>
       ) : (
         <div className="space-y-4">
           <Section title="💰 降價" color="text-rose-600" items={data.diff.price_drops} kind="drop" />
