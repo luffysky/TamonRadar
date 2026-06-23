@@ -17,7 +17,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from .config import CrawlConfig, SKIP_EXTENSIONS
 from .google_search import search_google, BlockedError
-from .search_api import search_api, SearchApiError
+from .search_api import search_api, SearchApiError, resolve_order
 from .detail_scraper import scrape_detail_page, classify_search_only
 from .reporter import to_dataframe, build_summary
 from .utils import is_valid_url
@@ -104,6 +104,10 @@ def run_crawl(
 
         all_search_results: list[dict] = []
 
+        # 搜尋 API 的嘗試順序(例:serpapi→brave),額度用完的會被標記跳過
+        api_order = resolve_order(config.search_provider) if use_api else []
+        api_dead: set[str] = set()
+
         total_kw = len(config.keywords)
         for idx, keyword in enumerate(config.keywords, start=1):
             if should_stop():
@@ -115,11 +119,20 @@ def run_crawl(
                 "current": idx, "total": total_kw, "keyword": keyword,
             })
             if use_api:
-                try:
-                    results = search_api(config.search_provider, keyword, config.google_pages_per_keyword)
-                except SearchApiError as e:
-                    # API 出錯(沒金鑰/額度用完)通常每個關鍵字都會失敗,直接停止整批
-                    on_event({"type": "error", "message": f"搜尋 API 失敗:{e}"})
+                results = None
+                for prov in api_order:
+                    if prov in api_dead:
+                        continue
+                    try:
+                        results = search_api(prov, keyword, config.google_pages_per_keyword)
+                        break
+                    except SearchApiError as e:
+                        # 這個 provider 不可用(沒金鑰/額度用完)→ 標記跳過,改用下一個
+                        on_event({"type": "warning", "message": f"{prov} 不可用,改用備援:{e}"})
+                        api_dead.add(prov)
+                        continue
+                if results is None:
+                    on_event({"type": "error", "message": "所有搜尋 API 都不可用(沒金鑰或額度用完)"})
                     break
             else:
                 try:

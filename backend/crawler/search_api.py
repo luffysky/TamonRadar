@@ -104,6 +104,22 @@ def _search_serpapi(keyword: str, pages: int, api_key: str) -> list[dict]:
     return results
 
 
+def resolve_order(primary: str) -> list[str]:
+    """依偏好回傳實際可用(有金鑰)的 API 嘗試順序。
+
+    例:primary=serpapi → ['serpapi','brave'](只保留有金鑰的)。
+    讓「先用 serp、額度用完自動 brave」成立。
+    """
+    avail = available_providers()
+    order: list[str] = []
+    if primary in ("serpapi", "brave"):
+        order.append(primary)
+    for p in ("serpapi", "brave"):
+        if p not in order:
+            order.append(p)
+    return [p for p in order if avail.get(p)]
+
+
 def search_api(provider: str, keyword: str, pages: int = 1) -> list[dict]:
     """用指定的搜尋 API 搜一個關鍵字。回傳與 search_google 相同的結構。"""
     if provider == "brave":

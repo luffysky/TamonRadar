@@ -29,10 +29,11 @@ def _default_provider() -> str:
     env = os.environ.get("SEARCH_PROVIDER")
     if env:
         return env
-    if os.environ.get("BRAVE_API_KEY"):
-        return "brave"
+    # 預設先用 SerpAPI,沒有才用 Brave(實際執行時 serp 額度用完會自動 fallback 到 brave)
     if os.environ.get("SERPAPI_KEY"):
         return "serpapi"
+    if os.environ.get("BRAVE_API_KEY"):
+        return "brave"
     return "selenium"
 
 

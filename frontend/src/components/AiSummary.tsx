@@ -41,7 +41,7 @@ export default function AiSummary({ runId }: { runId: string }) {
       )}
       {!text && !error && (
         <p className="mt-2 text-xs text-violet-500/80">
-          會用 Claude 判斷哪些是真商品、哪些重複、整理重點(需後端設定 ANTHROPIC_API_KEY)。
+          會用 AI(預設 GPT,可切 Claude)判斷哪些是真商品、哪些重複、整理重點。
         </p>
       )}
     </div>
