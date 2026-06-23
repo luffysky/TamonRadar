@@ -55,6 +55,24 @@ def _decode(token: str) -> int | None:
         return None
 
 
+# ---------- OAuth state(防 CSRF 的短效簽章值)----------
+
+def create_state() -> str:
+    payload = {
+        "typ": "oauth_state",
+        "exp": datetime.now(timezone.utc) + timedelta(minutes=10),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def verify_state(state: str) -> bool:
+    try:
+        payload = jwt.decode(state, JWT_SECRET, algorithms=[JWT_ALGO])
+        return payload.get("typ") == "oauth_state"
+    except Exception:
+        return False
+
+
 # ---------- FastAPI 依賴 ----------
 
 def get_current_user(

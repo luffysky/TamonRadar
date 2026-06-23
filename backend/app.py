@@ -19,9 +19,11 @@ from crawler.config import CrawlConfig, DEFAULT_KEYWORDS
 from crawler.reporter import to_dataframe, save_excel, save_markdown_report
 import db
 import auth
+from oauth_google import router as google_router
 from jobs import manager
 
 app = FastAPI(title="TamonRadar API", version="2.0")
+app.include_router(google_router)
 
 
 @app.on_event("startup")

@@ -28,6 +28,17 @@ export async function register(email: string, password: string): Promise<{ token
   return res.json();
 }
 
+export async function getMe(token?: string): Promise<{ user: AuthUser }> {
+  const headers = token ? { Authorization: `Bearer ${token}` } : authHeaders();
+  const res = await fetch(`${API_BASE}/api/auth/me`, { headers });
+  if (!res.ok) throw new Error("讀取使用者失敗");
+  return res.json();
+}
+
+export function googleLoginUrl(): string {
+  return `${API_BASE}/api/auth/google/login`;
+}
+
 export async function login(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
   const res = await fetch(`${API_BASE}/api/auth/login`, {
     method: "POST",

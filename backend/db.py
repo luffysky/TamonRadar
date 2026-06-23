@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, String, Text, create_engine, select,
+    JSON, DateTime, ForeignKey, String, create_engine, inspect, select, text,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker,
@@ -49,7 +49,8 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
+    password_hash: Mapped[str] = mapped_column(String(255), default="")  # OAuth 使用者為空
+    provider: Mapped[str] = mapped_column(String(32), default="local")   # local | google
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     runs: Mapped[list["Run"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -72,6 +73,18 @@ class Run(Base):
 
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _ensure_columns()
+
+
+def _ensure_columns() -> None:
+    """相容既有資料庫:補上後來新增的欄位(create_all 不會改既有表)。"""
+    insp = inspect(engine)
+    if "users" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "provider" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"))
 
 
 # ---------- Run 持久化 ----------
