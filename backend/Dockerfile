@@ -1,0 +1,27 @@
+# TamonRadar 後端 — 含 Chromium,讓 Selenium 在 Zeabur / 任何容器都能跑
+FROM python:3.12-slim
+
+# 安裝 chromium 與對應的 driver(同一套件庫版本相符),以及中文字型(圖表用)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    chromium \
+    chromium-driver \
+    fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
+# 告訴 runner.py 用系統的 chromium / chromedriver,不再走 webdriver-manager 下載
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROMEDRIVER=/usr/bin/chromedriver
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+# Zeabur 會以 $PORT 注入對外埠;本機預設 8000
+ENV PORT=8000
+EXPOSE 8000
+
+CMD ["sh", "-c", "uvicorn app:app --host 0.0.0.0 --port ${PORT:-8000}"]

@@ -5,6 +5,7 @@
 - 每個階段透過 on_event callback 即時回報進度(給 SSE 串流用)。
 - 回傳結構化結果(records + summary),而不是只寫檔。
 """
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -34,10 +35,24 @@ def build_driver(headless: bool) -> webdriver.Chrome:
     options.add_argument("--disable-blink-features=AutomationControlled")
     options.add_argument("--lang=zh-TW")
     options.add_argument("--disable-notifications")
+    # 容器/雲端環境必備,否則 Chrome 會因權限或共享記憶體不足而崩潰
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("useAutomationExtension", False)
 
-    service = Service(ChromeDriverManager().install())
+    # 部署時用容器內的 chromium / chromedriver(由 Dockerfile 設定環境變數);
+    # 本機沒設這些變數時,退回 webdriver-manager 自動下載對應 driver。
+    chrome_bin = os.environ.get("CHROME_BIN")
+    if chrome_bin:
+        options.binary_location = chrome_bin
+
+    driver_path = os.environ.get("CHROMEDRIVER")
+    if driver_path:
+        service = Service(driver_path)
+    else:
+        service = Service(ChromeDriverManager().install())
+
     return webdriver.Chrome(service=service, options=options)
 
 
