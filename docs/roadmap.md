@@ -103,20 +103,24 @@ GOOGLE_CLIENT_ID/SECRET、OAUTH_REDIRECT_BASE、FRONTEND_URL、RESEND_API_KEY/RE
 - ~~/admin 藏到祕密路徑(NEXT_PUBLIC_ADMIN_SLUG)+ 後端 API 權限把關~~
 - ~~about 頁完整功能一覽(隨時更新)~~
 
-### Batch 9 — 監看/通知增強
-- [ ] 價格門檻通知(低於 X 元)
-- [ ] JS 網站監看(Selenium 備援)
-- [ ] 每日彙整 digest
-- [ ] 通知附縮圖 / Discord embed
+### Batch 9 — 監看/通知增強 ✅(JS 監看除外)
+- ~~價格門檻通知(低於 X 元)~~
+- [ ] JS 網站監看(需 Selenium 映像,雲端輕量版不支援)
+- ~~每日彙整 digest~~
+- ~~Discord embed~~
 
-### Batch 10 — AI 增強
-- ~~AI 幫想關鍵字~~
-- [ ] 多商品比較、對話記憶
+### Batch 10 — AI 增強 ✅
+- ~~AI 幫想關鍵字、多商品比較、對話記憶~~
 
 ### Batch 11 — 帳號/體驗
-- ~~修改密碼、刪除帳號~~
-- [ ] Email 驗證、GitHub 登入、分享公開連結、瀏覽器擴充
+- ~~修改密碼、刪除帳號、Email 驗證、分享公開連結、瀏覽器擴充~~
+- [ ] GitHub 登入(下次做)
 
-### Batch 12 — 收費(金流最後接)
-- [ ] 方案/配額系統(監看數/頻率/AI 次數依方案放行)
-- [ ] 金流(Stripe 或綠界 ECPay)
+### Batch 12 — 收費
+- ~~方案/配額系統(每日免費額度,特權/付費無限)~~
+- [ ] 金流(Stripe 或綠界 ECPay)(下次做)
+
+### 雜項 ✅
+- ~~後台 SEO 管理、論壇讚/檢舉、CRM 公告/Email 群發、稽核日誌、停權、匯出 CSV~~
+- ~~動態圖表、公告跑馬燈、個人下拉選單、使用者部落格、圖片改上傳、圓形 favicon、價格區間~~
+- [ ] 大型升級:部落格全面參考 insight-engine、後台參考 ai_island(待專門進行)
