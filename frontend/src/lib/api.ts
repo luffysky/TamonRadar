@@ -802,6 +802,17 @@ export async function deletePost(id: number): Promise<void> {
   if (!res.ok) throw new Error("刪除文章失敗");
 }
 
+// ---- 站內通知 ----
+export interface Notif { id: number; title: string; body: string; url: string; read: boolean; created_at: string | null; }
+export async function getNotifications(): Promise<{ items: Notif[]; unread: number }> {
+  const res = await fetch(`${API_BASE}/api/notifications`, { headers: authHeaders() });
+  if (!res.ok) return { items: [], unread: 0 };
+  return res.json();
+}
+export async function markNotificationsRead(): Promise<void> {
+  await fetch(`${API_BASE}/api/notifications/read`, { method: "POST", headers: authHeaders() }).catch(() => {});
+}
+
 // ---- Email 驗證 ----
 export async function verifyEmail(token: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/auth/verify-email`, {

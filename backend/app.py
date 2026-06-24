@@ -684,6 +684,17 @@ def _enforce_quota(user, kind: str) -> None:
         raise HTTPException(429, f"今日免費{'AI' if kind == 'ai' else '搜尋'}額度已用完(每日 {limit} 次)。升級方案或明天再來。")
 
 
+@app.get("/api/notifications")
+def get_notifications(user=Depends(auth.get_current_user)):
+    return db.list_notifications(user.id)
+
+
+@app.post("/api/notifications/read")
+def read_notifications(user=Depends(auth.get_current_user)):
+    db.mark_notifications_read(user.id)
+    return {"ok": True}
+
+
 @app.get("/api/quota")
 def get_quota(user=Depends(auth.get_current_user)):
     unlimited = bool(getattr(user, "privileged", False)) or getattr(user, "plan", "free") != "free" or auth.is_admin(user.email)

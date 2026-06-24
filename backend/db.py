@@ -253,6 +253,17 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Notification(Base):
+    __tablename__ = "tr_notifications"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(String(1000), default="")
+    read: Mapped[bool] = mapped_column(default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class AiCost(Base):
     __tablename__ = "tr_ai_cost"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -776,6 +787,33 @@ def admin_stats() -> dict:
         "by_plan": by_plan,
         "top_ai_users": top_ai,
     }
+
+
+def add_notification(user_id: int, title: str, body: str = "", url: str = "") -> None:
+    try:
+        with SessionLocal() as s:
+            s.add(Notification(user_id=user_id, title=title[:200], body=body[:2000], url=url[:1000]))
+            s.commit()
+    except Exception:
+        pass
+
+
+def list_notifications(user_id: int, limit: int = 50) -> dict:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Notification).where(Notification.user_id == user_id)
+                         .order_by(Notification.created_at.desc()).limit(limit)).all()
+        unread = s.scalar(select(func.count()).select_from(Notification)
+                          .where(Notification.user_id == user_id, Notification.read == False)) or 0  # noqa: E712
+        items = [{"id": n.id, "title": n.title, "body": n.body, "url": n.url, "read": n.read,
+                  "created_at": n.created_at.isoformat() if n.created_at else None} for n in rows]
+        return {"items": items, "unread": int(unread)}
+
+
+def mark_notifications_read(user_id: int) -> None:
+    with SessionLocal() as s:
+        for n in s.scalars(select(Notification).where(Notification.user_id == user_id, Notification.read == False)).all():  # noqa: E712
+            n.read = True
+        s.commit()
 
 
 def record_ai_cost(user_id: int, provider: str, model: str, in_tok: int, out_tok: int, cost_usd: float) -> None:

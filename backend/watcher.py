@@ -81,7 +81,9 @@ def check_watch(watch_id: int) -> dict:
             if lines:
                 settings = db.get_settings(w["user_id"])
                 embed = notify.make_embed("🔔 頁面內容變動", f"{name}", w["url"])
-                notify.notify_all(settings, f"🔔 TamonRadar 監看:{name}\n" + "\n".join(lines) + f"\n{w['url']}", embed=embed)
+                body = "\n".join(lines)
+                notify.notify_all(settings, f"🔔 TamonRadar 監看:{name}\n{body}\n{w['url']}", embed=embed)
+                db.add_notification(w["user_id"], f"🔔 內容變動:{name}", body, w["url"])
                 notified = True
         db.set_watch_snapshot(watch_id, [[t, p] for t, p in cur.items()])
         return {"ok": True, "mode": "content", "items": len(cur), "notified": notified}
@@ -112,11 +114,13 @@ def check_watch(watch_id: int) -> dict:
     if status == "available" and prev != "available":
         embed = notify.make_embed("🎫 可以買了!", f"「{name}」偵測到可購買。", w["url"], 0x10B981, w.get("image_url", ""))
         notify.notify_all(settings, f"🎫 TamonRadar 監看:「{name}」可能可以買了!\n{w['url']}", embed=embed)
+        db.add_notification(w["user_id"], f"🎫 可以買了:{name}", "偵測到可購買", w["url"])
         notified = True
 
     if target and cur_twd and cur_twd <= target and (prev_twd is None or prev_twd > target):
         embed = notify.make_embed("💰 降到目標價!", f"「{name}」現價 NT${cur_twd}(目標 {target})", w["url"], 0xEF4444)
         notify.notify_all(settings, f"💰 TamonRadar 監看:「{name}」降到 NT${cur_twd}(目標 {target})\n{w['url']}", embed=embed)
+        db.add_notification(w["user_id"], f"💰 降到目標價:{name}", f"現價 NT${cur_twd}(目標 {target})", w["url"])
         notified = True
 
     return {"ok": True, "status": status, "price_twd": cur_twd, "previous": prev, "notified": notified}

@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import ThemeToggle from "./ThemeToggle";
 import UserMenu from "./UserMenu";
+import NotificationBell from "./NotificationBell";
 import { ADMIN_BASE } from "@/lib/admin";
 import { useDragScroll } from "@/lib/useDragScroll";
 
@@ -65,6 +66,7 @@ export default function Nav() {
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
             <ThemeToggle />
+            {user && <NotificationBell />}
             {user ? (
               <UserMenu />
             ) : (
@@ -75,6 +77,7 @@ export default function Nav() {
 
         {/* 手機:主題鈕 + 漢堡 */}
         <div className="flex items-center gap-1 md:hidden">
+          {user && <NotificationBell />}
           <ThemeToggle />
           <button
             onClick={() => setOpen(true)}

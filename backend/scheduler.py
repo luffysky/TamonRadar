@@ -36,20 +36,21 @@ def _daily_digest() -> None:
         has_channel = settings.get("discord_webhook") or (
             settings.get("telegram_token") and settings.get("telegram_chat_id")
         )
-        if not has_channel:
-            continue
         favs = db.list_favorites(uid)
         watches = db.list_watches(uid)
         avail = [w for w in watches if w.get("last_status") == "available"]
-        lines = ["📬 TamonRadar 每日彙整", f"收藏 {len(favs)} 項、監看 {len(watches)} 項。"]
+        lines = [f"收藏 {len(favs)} 項、監看 {len(watches)} 項。"]
         if avail:
             lines.append("✅ 目前可購買的監看:")
             for w in avail[:10]:
                 lines.append(f"・{w['name'] or w['url']}")
-        try:
-            notify.notify_all(settings, "\n".join(lines))
-        except Exception:
-            pass
+        body = "\n".join(lines)
+        db.add_notification(uid, "📬 每日彙整", body)  # 站內一定存
+        if has_channel:
+            try:
+                notify.notify_all(settings, "📬 TamonRadar 每日彙整\n" + body)
+            except Exception:
+                pass
 
 
 def _job_id(schedule_id: int) -> str:
@@ -175,8 +176,10 @@ def _run(schedule_id: int) -> None:
     has_channel = settings.get("discord_webhook") or (
         settings.get("telegram_token") and settings.get("telegram_chat_id")
     )
+    _msg = _build_message(sc, result, prev)
+    db.add_notification(sc["user_id"], f"📡 排程更新:{'、'.join(sc['keywords'])[:40]}", _msg)
     if has_channel:
-        notify.notify_all(settings, _build_message(sc, result, prev))
+        notify.notify_all(settings, _msg)
         # 收藏的目標價通知:這次結果中有收藏商品降到目標價就提醒
         try:
             import money
