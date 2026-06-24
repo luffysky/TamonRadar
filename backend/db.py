@@ -239,6 +239,14 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(Text, default="")
 
 
+class Usage(Base):
+    __tablename__ = "tr_usage"
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), primary_key=True)
+    day: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    ai: Mapped[int] = mapped_column(default=0)
+    search: Mapped[int] = mapped_column(default=0)
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     _ensure_columns()
@@ -930,6 +938,29 @@ def set_username(user_id: int, username: str) -> bool:
         u.username = (username or "")[:60]
         s.commit()
         return True
+
+
+def quota_use(user_id: int, kind: str, limit: int) -> tuple[bool, int]:
+    """嘗試用掉一次每日額度。回傳 (是否允許, 用後次數)。"""
+    day = _now().strftime("%Y-%m-%d")
+    with SessionLocal() as s:
+        row = s.get(Usage, (user_id, day))
+        if row is None:
+            row = Usage(user_id=user_id, day=day, ai=0, search=0)
+            s.add(row)
+        cur = getattr(row, kind, 0) or 0
+        if cur >= limit:
+            return False, cur
+        setattr(row, kind, cur + 1)
+        s.commit()
+        return True, cur + 1
+
+
+def quota_today(user_id: int) -> dict:
+    day = _now().strftime("%Y-%m-%d")
+    with SessionLocal() as s:
+        row = s.get(Usage, (user_id, day))
+        return {"ai": (row.ai if row else 0), "search": (row.search if row else 0)}
 
 
 def is_privileged(user_id: int) -> bool:

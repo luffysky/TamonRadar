@@ -706,6 +706,15 @@ export async function deletePost(id: number): Promise<void> {
   if (!res.ok) throw new Error("刪除文章失敗");
 }
 
+// ---- 額度 ----
+export interface Quota { unlimited: boolean; ai_used: number; search_used: number; ai_limit: number; search_limit: number; }
+export async function getQuota(): Promise<Quota> {
+  const res = await fetch(`${API_BASE}/api/quota`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取額度失敗");
+  return res.json();
+}
+
 // ---- 分享連結 ----
 export async function setRunShared(runId: string, shared: boolean): Promise<{ shared: boolean }> {
   const res = await fetch(`${API_BASE}/api/history/${runId}/share`, {

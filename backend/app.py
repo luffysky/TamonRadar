@@ -377,6 +377,7 @@ def health():
 
 @app.post("/api/crawl")
 def start_crawl(req: CrawlRequest, user=Depends(auth.get_current_user)):
+    _enforce_quota(user, "search")
     config = CrawlConfig(
         keywords=req.keywords,
         google_pages_per_keyword=req.google_pages_per_keyword,
@@ -578,8 +579,33 @@ def _ai_args(user) -> dict:
     }
 
 
+def _enforce_quota(user, kind: str) -> None:
+    """免費使用者的每日額度;特權或付費方案不受限。"""
+    if user is None or getattr(user, "privileged", False) or getattr(user, "plan", "free") != "free":
+        return
+    if auth.is_admin(user.email):
+        return
+    limit = int(os.environ.get("FREE_AI_DAILY", "30") if kind == "ai" else os.environ.get("FREE_SEARCH_DAILY", "15"))
+    ok, _used = db.quota_use(user.id, kind, limit)
+    if not ok:
+        raise HTTPException(429, f"今日免費{'AI' if kind == 'ai' else '搜尋'}額度已用完(每日 {limit} 次)。升級方案或明天再來。")
+
+
+@app.get("/api/quota")
+def get_quota(user=Depends(auth.get_current_user)):
+    unlimited = bool(getattr(user, "privileged", False)) or getattr(user, "plan", "free") != "free" or auth.is_admin(user.email)
+    used = db.quota_today(user.id)
+    return {
+        "unlimited": unlimited,
+        "ai_used": used["ai"], "search_used": used["search"],
+        "ai_limit": int(os.environ.get("FREE_AI_DAILY", "30")),
+        "search_limit": int(os.environ.get("FREE_SEARCH_DAILY", "15")),
+    }
+
+
 @app.post("/api/ai/chat")
 def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
+    _enforce_quota(user, "ai")
     records = _user_records(req.run_id, user)
     args = _ai_args(user)
     if not ai.ai_available(**args):
@@ -602,6 +628,7 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
 
 @app.post("/api/ai/compare")
 def ai_compare(req: CompareRequest, user=Depends(auth.get_current_user)):
+    _enforce_quota(user, "ai")
     records = _user_records(req.run_id, user)
     args = _ai_args(user)
     if not ai.ai_available(**args):
@@ -630,6 +657,7 @@ def ai_keywords(req: KeywordsRequest, user=Depends(auth.get_current_user)):
     args = _ai_args(user)
     if not ai.ai_available(**args):
         return {"available": False, "keywords": []}
+    _enforce_quota(user, "ai")
     prompt = (
         "把以下需求展開成 5-8 個適合在購物/搜尋引擎使用的繁體中文關鍵字。"
         "只回 JSON 字串陣列,不要其他文字。\n需求:" + req.query
@@ -654,6 +682,7 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
     args = _ai_args(user)
     if not ai.ai_available(**args):
         return {"available": False, "noise_urls": [], "message": "尚未設定 AI 金鑰"}
+    _enforce_quota(user, "ai")
     prompt = (
         "以下是一批網路搜尋結果 JSON。請判斷哪些是『沒有實質內容的雜訊』"
         "(例如純搜尋結果頁、空白/錯誤頁、與搜尋主題明顯無關的內容)。\n"
@@ -689,6 +718,7 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
             "available": False,
             "summary": "尚未設定 AI 金鑰(可在「設定」填自己的,或由後端提供),無法產生 AI 摘要。",
         }
+    _enforce_quota(user, "ai")
 
     # 自動讀出這次搜尋的主題,讓 AI 針對主題抓重點(支援搜尋任何東西)
     topics = ", ".join(sorted({r.get("keyword", "") for r in records if r.get("keyword")}))[:200] or "(未指定)"

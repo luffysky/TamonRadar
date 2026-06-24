@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Heart, Radar, CalendarClock, History, Settings, Search } from "lucide-react";
-import { getFavorites, getWatches, getSchedules, getHistory } from "@/lib/api";
+import { getFavorites, getWatches, getSchedules, getHistory, getQuota, type Quota } from "@/lib/api";
 import type { HistoryRun } from "@/lib/types";
 import { useRequireAuth } from "@/components/AuthProvider";
 
@@ -13,6 +13,7 @@ export default function DashboardPage() {
   const [watch, setWatch] = useState(0);
   const [sched, setSched] = useState(0);
   const [runs, setRuns] = useState<HistoryRun[]>([]);
+  const [quota, setQuota] = useState<Quota | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -20,6 +21,7 @@ export default function DashboardPage() {
     getWatches().then((d) => setWatch(d.watches.length)).catch(() => {});
     getSchedules().then((d) => setSched(d.schedules.length)).catch(() => {});
     getHistory().then((d) => setRuns(d.runs.slice(0, 5))).catch(() => {});
+    getQuota().then(setQuota).catch(() => {});
   }, [user]);
 
   if (!ready || !user) return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
@@ -35,7 +37,14 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <section className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-6 text-white shadow">
         <h1 className="text-2xl font-bold">我的儀表板</h1>
-        <p className="mt-1 text-sm text-brand-50">{user.email} · 一眼掌握你的追蹤與動態</p>
+        <p className="mt-1 text-sm text-brand-50">{user.username || user.email} · 一眼掌握你的追蹤與動態</p>
+        {quota && (
+          <p className="mt-2 inline-block rounded-full bg-white/20 px-3 py-1 text-xs">
+            {quota.unlimited
+              ? "✨ 無限額度(特權 / 付費)"
+              : `今日額度:搜尋 ${quota.search_used}/${quota.search_limit} · AI ${quota.ai_used}/${quota.ai_limit}`}
+          </p>
+        )}
       </section>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
