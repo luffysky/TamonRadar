@@ -7,11 +7,15 @@ import type { CrawlResult, ProgressEvent } from "@/lib/types";
 
 const PROVIDER_LABELS: Record<string, string> = {
   serpapi: "SerpAPI",
+  serper: "Serper.dev",
+  googlecse: "Google 自訂搜尋(CSE)",
+  tavily: "Tavily(AI 搜尋)",
   brave: "Brave Search API",
   searxng: "SearXNG(自架,開源)",
   duckduckgo: "DuckDuckGo(免金鑰)",
   selenium: "Selenium(本機開 Chrome)",
 };
+const PROVIDER_ORDER = ["serpapi", "serper", "googlecse", "tavily", "brave", "searxng", "duckduckgo", "selenium"];
 import ProgressPanel from "@/components/ProgressPanel";
 import ResultsView from "@/components/ResultsView";
 import { useRequireAuth } from "@/components/AuthProvider";
@@ -119,7 +123,7 @@ export default function HomePage() {
               onChange={(e) => setProvider(e.target.value)}
               className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5"
             >
-              {["serpapi", "brave", "searxng", "duckduckgo", "selenium"].map((p) => {
+              {PROVIDER_ORDER.map((p) => {
                 const ok = health?.search_providers?.[p];
                 return (
                   <option key={p} value={p} disabled={ok === false}>

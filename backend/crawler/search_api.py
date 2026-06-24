@@ -20,7 +20,7 @@ class SearchApiError(Exception):
 
 
 # 所有「API 型」搜尋來源(非 selenium),fallback 嘗試順序
-API_ORDER = ["serpapi", "brave", "searxng", "duckduckgo"]
+API_ORDER = ["serpapi", "serper", "googlecse", "tavily", "brave", "searxng", "duckduckgo"]
 API_PROVIDERS = set(API_ORDER)
 
 
@@ -28,6 +28,9 @@ def available_providers() -> dict[str, bool]:
     """回報每個 provider 是否可用,給前端顯示哪些可選。"""
     return {
         "serpapi": bool(os.environ.get("SERPAPI_KEY")),
+        "serper": bool(os.environ.get("SERPER_API_KEY")),
+        "googlecse": bool(os.environ.get("GOOGLE_CSE_KEY") and os.environ.get("GOOGLE_CSE_ID")),
+        "tavily": bool(os.environ.get("TAVILY_API_KEY")),
         "brave": bool(os.environ.get("BRAVE_API_KEY")),
         "searxng": bool(os.environ.get("SEARXNG_URL")),
         "duckduckgo": True,   # 開源、免金鑰(雲端 IP 可能被限流)
@@ -126,6 +129,88 @@ def _search_serpapi(keyword: str, pages: int, api_key: str) -> list[dict]:
     return results
 
 
+def _search_serper(keyword: str, pages: int) -> list[dict]:
+    key = os.environ.get("SERPER_API_KEY")
+    if not key:
+        raise SearchApiError("未設定 SERPER_API_KEY")
+    out: list[dict] = []
+    for page in range(pages):
+        try:
+            r = requests.post(
+                "https://google.serper.dev/search",
+                headers={"X-API-KEY": key, "Content-Type": "application/json"},
+                json={"q": keyword, "gl": "tw", "hl": "zh-tw", "page": page + 1},
+                timeout=25,
+            )
+            if r.status_code in (401, 403):
+                raise SearchApiError("Serper 金鑰無效")
+            r.raise_for_status()
+            data = r.json()
+        except SearchApiError:
+            raise
+        except Exception as e:
+            raise SearchApiError(f"Serper:{e}")
+        for it in data.get("organic", []):
+            row = _normalize(keyword, it.get("title", ""), it.get("link", ""), it.get("snippet", ""), page + 1)
+            if row:
+                out.append(row)
+    return out
+
+
+def _search_googlecse(keyword: str, pages: int) -> list[dict]:
+    key = os.environ.get("GOOGLE_CSE_KEY")
+    cx = os.environ.get("GOOGLE_CSE_ID")
+    if not key or not cx:
+        raise SearchApiError("未設定 GOOGLE_CSE_KEY / GOOGLE_CSE_ID")
+    out: list[dict] = []
+    for page in range(pages):
+        try:
+            r = requests.get(
+                "https://www.googleapis.com/customsearch/v1",
+                params={"key": key, "cx": cx, "q": keyword, "start": page * 10 + 1, "hl": "zh-TW", "gl": "tw"},
+                timeout=25,
+            )
+            if r.status_code == 429:
+                raise SearchApiError("Google CSE 今日額度用完(免費每日 100)")
+            r.raise_for_status()
+            data = r.json()
+        except SearchApiError:
+            raise
+        except Exception as e:
+            raise SearchApiError(f"Google CSE:{e}")
+        for it in data.get("items", []):
+            row = _normalize(keyword, it.get("title", ""), it.get("link", ""), it.get("snippet", ""), page + 1)
+            if row:
+                out.append(row)
+    return out
+
+
+def _search_tavily(keyword: str, pages: int) -> list[dict]:
+    key = os.environ.get("TAVILY_API_KEY")
+    if not key:
+        raise SearchApiError("未設定 TAVILY_API_KEY")
+    try:
+        r = requests.post(
+            "https://api.tavily.com/search",
+            json={"api_key": key, "query": keyword, "max_results": min(pages * 10, 20)},
+            timeout=30,
+        )
+        if r.status_code in (401, 403):
+            raise SearchApiError("Tavily 金鑰無效")
+        r.raise_for_status()
+        data = r.json()
+    except SearchApiError:
+        raise
+    except Exception as e:
+        raise SearchApiError(f"Tavily:{e}")
+    out: list[dict] = []
+    for it in data.get("results", []):
+        row = _normalize(keyword, it.get("title", ""), it.get("url", ""), it.get("content", ""), 1)
+        if row:
+            out.append(row)
+    return out
+
+
 def _search_searxng(keyword: str, pages: int) -> list[dict]:
     base = os.environ.get("SEARXNG_URL")
     if not base:
@@ -190,6 +275,12 @@ def search_api(provider: str, keyword: str, pages: int = 1) -> list[dict]:
         if not key:
             raise SearchApiError("未設定 SERPAPI_KEY")
         return _search_serpapi(keyword, pages, key)
+    if provider == "serper":
+        return _search_serper(keyword, pages)
+    if provider == "googlecse":
+        return _search_googlecse(keyword, pages)
+    if provider == "tavily":
+        return _search_tavily(keyword, pages)
     if provider == "searxng":
         return _search_searxng(keyword, pages)
     if provider == "duckduckgo":

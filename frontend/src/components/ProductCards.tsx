@@ -7,13 +7,14 @@ import { categoryClass } from "@/lib/format";
 export default function ProductCards({ records }: { records: CrawlRecord[] }) {
   const [lightbox, setLightbox] = useState<CrawlRecord | null>(null);
 
+  const score = (r: CrawlRecord) => ((r.price || "").trim() ? 2 : 0) + (r.image_url ? 1 : 0);
   const items = [...records]
-    .filter((r) => (r.price || "").trim() !== "")
-    .sort((a, b) => (a.category === "周邊/商品" ? -1 : 0) - (b.category === "周邊/商品" ? -1 : 0))
-    .slice(0, 12);
+    .filter((r) => !r.is_listing) // 排除搜尋/列表頁,只放真正的商品/內容頁
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 24);
 
   if (items.length === 0) {
-    return <p className="text-sm text-slate-400">這次沒有偵測到帶價格的商品。</p>;
+    return <p className="text-sm text-slate-400">這次沒有商品頁(多為搜尋/列表頁,請看下方完整結果)。</p>;
   }
 
   return (
