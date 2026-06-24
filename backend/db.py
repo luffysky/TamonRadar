@@ -289,6 +289,20 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
+class ScheduledBroadcast(Base):
+    __tablename__ = "tr_scheduled_broadcasts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    url: Mapped[str] = mapped_column(String(1000), default="")
+    channels: Mapped[list] = mapped_column(JSON, default=list)
+    segment: Mapped[str] = mapped_column(String(20), default="all")
+    run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    sent: Mapped[bool] = mapped_column(default=False)
+    result: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class AppSetting(Base):
     __tablename__ = "tr_app_settings"
     key: Mapped[str] = mapped_column(String(80), primary_key=True)
@@ -1375,11 +1389,29 @@ def all_user_ids() -> list[int]:
         return [r for r in s.scalars(select(User.id)).all()]
 
 
-def broadcast(title: str, body: str, url: str, channels: list[str]) -> dict:
-    """推播給全體使用者。channels 可含 inapp(含 web push)/ tg / discord。回傳各管道計數。"""
+def user_ids_by_segment(segment: str) -> list[int]:
+    """分群:all / privileged / verified / telegram / discord。"""
+    with SessionLocal() as s:
+        if segment == "privileged":
+            return [r for r in s.scalars(select(User.id).where(User.privileged == True)).all()]  # noqa: E712
+        if segment == "verified":
+            return [r for r in s.scalars(select(User.id).where(User.email_verified == True)).all()]  # noqa: E712
+        if segment in ("telegram", "discord"):
+            ids = []
+            for st in s.scalars(select(Settings)).all():
+                if segment == "telegram" and st.telegram_chat_id:
+                    ids.append(st.user_id)
+                if segment == "discord" and (st.discord_webhook or st.discord_user_id):
+                    ids.append(st.user_id)
+            return ids
+        return [r for r in s.scalars(select(User.id)).all()]
+
+
+def broadcast(title: str, body: str, url: str, channels: list[str], segment: str = "all") -> dict:
+    """推播給指定分群。channels 可含 inapp(含 web push)/ tg / discord。回傳各管道計數。"""
     import notify as _notify
     counts = {"inapp": 0, "tg": 0, "discord": 0}
-    ids = all_user_ids()
+    ids = user_ids_by_segment(segment)
     text = f"📣 {title}\n{body}" + (f"\n{url}" if url else "")
     want_inapp = "inapp" in channels
     want_tg = "tg" in channels
@@ -1403,6 +1435,79 @@ def broadcast(title: str, body: str, url: str, channels: list[str]) -> dict:
             if res.get("discord", {}).get("ok"):
                 counts["discord"] += 1
     return {"recipients": len(ids), **counts}
+
+
+def schedule_broadcast(title: str, body: str, url: str, channels: list, segment: str, run_at) -> int:
+    from datetime import datetime as _dt
+    if isinstance(run_at, str):
+        run_at = _dt.fromisoformat(run_at)
+    with SessionLocal() as s:
+        b = ScheduledBroadcast(title=title[:200], body=body, url=url[:1000], channels=channels, segment=segment, run_at=run_at)
+        s.add(b)
+        s.commit()
+        s.refresh(b)
+        return b.id
+
+
+def list_scheduled_broadcasts() -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(ScheduledBroadcast).order_by(ScheduledBroadcast.run_at.desc()).limit(50)).all()
+        return [{"id": b.id, "title": b.title, "segment": b.segment, "channels": b.channels or [],
+                 "run_at": b.run_at.isoformat() if b.run_at else None, "sent": b.sent, "result": b.result or {}}
+                for b in rows]
+
+
+def delete_scheduled_broadcast(bid: int) -> None:
+    with SessionLocal() as s:
+        b = s.get(ScheduledBroadcast, bid)
+        if b and not b.sent:
+            s.delete(b)
+            s.commit()
+
+
+def run_due_broadcasts() -> int:
+    """排程器每分鐘呼叫:送出到期的排程推播。"""
+    from datetime import timezone
+    now = _now()
+    sent = 0
+    with SessionLocal() as s:
+        due = s.scalars(select(ScheduledBroadcast).where(ScheduledBroadcast.sent == False)).all()  # noqa: E712
+        targets = []
+        for b in due:
+            ra = b.run_at
+            if ra is not None and ra.tzinfo is None:
+                ra = ra.replace(tzinfo=timezone.utc)
+            if ra and ra <= now:
+                targets.append(b.id)
+    for bid in targets:
+        with SessionLocal() as s:
+            b = s.get(ScheduledBroadcast, bid)
+            if not b or b.sent:
+                continue
+            title, body, url, channels, segment = b.title, b.body, b.url, b.channels or [], b.segment
+        res = broadcast(title, body, url, channels, segment)
+        if "email" in channels:
+            try:
+                import mailer
+                if mailer.mail_available():
+                    html = f"<h3>{title}</h3>" + body.replace("\n", "<br>")
+                    n = 0
+                    for e in all_user_emails():
+                        try:
+                            ok, _ = mailer.send_email(e, title, html); n += 1 if ok else 0
+                        except Exception:
+                            pass
+                    res["email"] = n
+            except Exception:
+                pass
+        with SessionLocal() as s:
+            b = s.get(ScheduledBroadcast, bid)
+            if b:
+                b.sent = True
+                b.result = res
+                s.commit()
+        sent += 1
+    return sent
 
 
 def all_user_emails() -> list[str]:

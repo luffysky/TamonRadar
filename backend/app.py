@@ -481,7 +481,18 @@ def insights_ai(req: InsightsRequest, user=Depends(auth.get_optional_user)):
     text, model = ai.ai_complete(prompt, max_tokens=900, user_keys=keys, user_id=(user.id if user else None))
     if not text:
         raise HTTPException(400, "AI 暫時無法使用,請於後台設定 AI 金鑰")
-    return {"insight": text, "model": model}
+    # 可點實體:把洞察提到的關鍵商品附上連結
+    entities, seen = [], set()
+    def _add(it, note):
+        if it and it.get("url") and it["url"] not in seen:
+            seen.add(it["url"])
+            entities.append({"title": it.get("title", ""), "url": it["url"],
+                             "price_twd": it.get("price_twd"), "domain": it.get("domain", ""), "note": note})
+    _add(ins.get("best_value"), "最佳CP值")
+    _add(ins.get("cheapest"), "最低價")
+    for d in ins.get("good_deals", [])[:3]:
+        _add(d, f"好價 ↓{d.get('discount_pct', '')}%")
+    return {"insight": text, "model": model, "entities": entities}
 
 
 @app.get("/api/health")
@@ -1405,13 +1416,20 @@ class BroadcastRequest(BaseModel):
     body: str = ""
     url: str = ""
     channels: list[str] = Field(default_factory=lambda: ["inapp"])  # inapp / email / tg / discord
+    segment: str = "all"   # all / privileged / verified / telegram / discord
+    run_at: str | None = None   # ISO 時間;有值=排程,留空=立即
 
 
 @app.post("/api/admin/broadcast")
 def admin_broadcast(req: BroadcastRequest, request: Request, admin=Depends(auth.get_admin)):
     if not req.title.strip():
         raise HTTPException(400, "標題不能空白")
-    result = db.broadcast(req.title.strip(), req.body, req.url, req.channels)
+    if req.run_at:
+        bid = db.schedule_broadcast(req.title.strip(), req.body, req.url, req.channels, req.segment, req.run_at)
+        db.log_audit(admin.email, "broadcast_scheduled", req.title, f"{req.segment}/{req.run_at}",
+                     target_type="broadcast", ip=_ip(request))
+        return {"ok": True, "scheduled": True, "id": bid}
+    result = db.broadcast(req.title.strip(), req.body, req.url, req.channels, req.segment)
     if "email" in req.channels:
         import mailer
         if mailer.mail_available():
@@ -1426,9 +1444,20 @@ def admin_broadcast(req: BroadcastRequest, request: Request, admin=Depends(auth.
                 except Exception:
                     pass
             result["email"] = sent
-    db.log_audit(admin.email, "broadcast", req.title, "、".join(req.channels),
-                 target_type="broadcast", changes={"channels": req.channels}, ip=_ip(request))
+    db.log_audit(admin.email, "broadcast", req.title, f"{req.segment}・" + "、".join(req.channels),
+                 target_type="broadcast", changes={"channels": req.channels, "segment": req.segment}, ip=_ip(request))
     return {"ok": True, **result}
+
+
+@app.get("/api/admin/broadcasts/scheduled")
+def admin_scheduled_broadcasts(admin=Depends(auth.get_admin)):
+    return {"items": db.list_scheduled_broadcasts()}
+
+
+@app.delete("/api/admin/broadcasts/scheduled/{bid}")
+def admin_delete_scheduled(bid: int, admin=Depends(auth.get_admin)):
+    db.delete_scheduled_broadcast(bid)
+    return {"ok": True}
 
 
 # ---- 檢舉 ----

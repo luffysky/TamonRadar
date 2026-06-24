@@ -625,11 +625,20 @@ export function exportUsersUrl(): string {
   return `${API_BASE}/api/admin/users/export`;
 }
 
-export async function sendBroadcast(data: { title: string; body: string; url: string; channels: string[] }): Promise<{ ok: boolean; recipients: number; inapp: number; tg: number; discord: number; email?: number }> {
+export async function sendBroadcast(data: { title: string; body: string; url: string; channels: string[]; segment?: string; run_at?: string | null }): Promise<{ ok: boolean; scheduled?: boolean; recipients?: number; inapp?: number; tg?: number; discord?: number; email?: number }> {
   const res = await fetch(`${API_BASE}/api/admin/broadcast`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data) });
   check401(res);
   if (!res.ok) throw new Error("發送失敗");
   return res.json();
+}
+export interface ScheduledBroadcast { id: number; title: string; segment: string; channels: string[]; run_at: string | null; sent: boolean; result: Record<string, number>; }
+export async function getScheduledBroadcasts(): Promise<{ items: ScheduledBroadcast[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/broadcasts/scheduled`, { headers: authHeaders() });
+  check401(res); if (!res.ok) throw new Error("讀取失敗"); return res.json();
+}
+export async function deleteScheduledBroadcast(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/broadcasts/scheduled/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res); if (!res.ok) throw new Error("刪除失敗");
 }
 
 export interface KpiReport {
@@ -775,7 +784,8 @@ export async function getRunCompare(runId: string): Promise<RunCompare> {
   if (!res.ok) return { has_previous: false };
   return res.json();
 }
-export async function getAiInsight(runId: string, vertical = ""): Promise<{ insight: string; model: string }> {
+export interface InsightEntity { title: string; url: string; price_twd: number | null; domain: string; note: string; }
+export async function getAiInsight(runId: string, vertical = ""): Promise<{ insight: string; model: string; entities: InsightEntity[] }> {
   const res = await fetch(`${API_BASE}/api/insights/ai`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId, vertical }) });
   if (!res.ok) throw new Error("AI 洞察失敗"); return res.json();
 }

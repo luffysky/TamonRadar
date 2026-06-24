@@ -28,6 +28,15 @@ def start() -> None:
         add_watch(w)
     # 每日彙整(01:00 UTC ≈ 台灣 09:00)
     _sched.add_job(_daily_digest, "cron", hour=1, minute=0, id="daily-digest", replace_existing=True)
+    # 每分鐘檢查到期的排程推播
+    _sched.add_job(_run_due_broadcasts, "interval", minutes=1, id="due-broadcasts", replace_existing=True)
+
+
+def _run_due_broadcasts() -> None:
+    try:
+        db.run_due_broadcasts()
+    except Exception as e:
+        print(f"[scheduler] 排程推播失敗:{e}")
 
 
 def _daily_digest() -> None:

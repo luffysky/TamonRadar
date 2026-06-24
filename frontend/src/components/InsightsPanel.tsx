@@ -12,6 +12,7 @@ export default function InsightsPanel({ runId, records, vertical = "" }: { runId
   const [open, setOpen] = useState(true);
   const [cmp, setCmp] = useState<RunCompare | null>(null);
   const [aiText, setAiText] = useState("");
+  const [aiEntities, setAiEntities] = useState<{ title: string; url: string; price_twd: number | null; domain: string; note: string }[]>([]);
   const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
@@ -28,7 +29,7 @@ export default function InsightsPanel({ runId, records, vertical = "" }: { runId
   async function runAiInsight() {
     if (!runId) return;
     setAiBusy(true); setAiText("");
-    try { const r = await getAiInsight(runId, vertical); setAiText(r.insight); }
+    try { const r = await getAiInsight(runId, vertical); setAiText(r.insight); setAiEntities(r.entities || []); }
     catch (e) { setAiText(e instanceof Error ? e.message : "AI 洞察失敗"); }
     finally { setAiBusy(false); }
   }
@@ -51,6 +52,17 @@ export default function InsightsPanel({ runId, records, vertical = "" }: { runId
       {aiText && (
         <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 text-sm dark:border-violet-900 dark:bg-violet-950/30">
           <Markdown>{aiText}</Markdown>
+          {aiEntities.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2 border-t border-violet-200 pt-3 dark:border-violet-900">
+              {aiEntities.map((e, i) => (
+                <a key={i} href={e.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs shadow-sm hover:bg-violet-100 dark:bg-slate-900 dark:hover:bg-slate-700">
+                  <span className="rounded bg-violet-100 px-1 text-[10px] text-violet-700 dark:bg-violet-900 dark:text-violet-300">{e.note}</span>
+                  <span className="max-w-[160px] truncate text-slate-700 dark:text-slate-200">{e.title}</span>
+                  {e.price_twd ? <span className="font-semibold text-brand-600">NT${e.price_twd.toLocaleString()}</span> : null}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
