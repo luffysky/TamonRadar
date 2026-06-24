@@ -44,6 +44,8 @@ VERTICAL_LABELS = {
     "food": "美食", "pet": "寵物", "animal": "動物/生態", "travel": "旅遊",
     "stock": "股市/投資", "startup": "創業", "realestate": "房地產", "job": "工作職缺",
     "course": "學習/課程", "health": "健康/醫療", "tech": "3C/科技", "car": "汽車", "secondhand": "二手",
+    "ticket": "票券/活動", "rent": "租屋", "game": "遊戲/虛寶", "crypto": "加密貨幣",
+    "flight": "機票/住宿", "clinic": "醫美/補教",
 }
 
 

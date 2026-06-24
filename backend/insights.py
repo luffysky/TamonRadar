@@ -211,6 +211,45 @@ def _facets(items: list[dict], vertical: str) -> list[dict]:
         downs = sum(1 for it in items if any(k in blob(it) for k in ["跌", "下跌", "-"]))
         facets.append({"type": "dist", "label": "情緒傾向", "items": [{"name": "偏多/漲", "count": ups}, {"name": "偏空/跌", "count": downs}]})
 
+    elif vertical in ("ticket", "票券"):
+        facets.append({"type": "dist", "label": "活動類型", "items": _dist(items, lambda it: next(
+            (k for k in ["演唱會", "音樂祭", "展覽", "舞台劇", "球賽", "見面會", "粉絲"] if k in blob(it)), ""))})
+        facets.append({"type": "dist", "label": "票況", "items": _dist(items, lambda it: next(
+            (k for k in ["開賣", "預售", "早鳥", "售完", "完售", "轉售", "釋出"] if k in blob(it)), ""))})
+        facets.append({"type": "dist", "label": "地區", "items": _dist(items, _region_of)})
+
+    elif vertical in ("rent", "租屋"):
+        rents, pings = [], []
+        for it in items:
+            b = blob(it)
+            mr = re.search(r"(?:租金|月租)?\s*([\d.]+)\s*萬", b) or re.search(r"([\d,]{4,6})\s*(?:元|/月)", b)
+            if mr:
+                v = float(mr.group(1).replace(",", ""))
+                rents.append(v * 10000 if "萬" in mr.group(0) else v)
+            mp = re.search(r"([\d.]+)\s*坪", b)
+            if mp:
+                pings.append(float(mp.group(1)))
+        for f in (_range_facet("租金", rents, "元/月"), _range_facet("坪數", pings, "坪")):
+            if f:
+                facets.append(f)
+        facets.append({"type": "dist", "label": "格局", "items": _dist(items, lambda it: next(
+            (k for k in ["套房", "雅房", "一房", "兩房", "三房", "獨立套房", "分租"] if k in blob(it)), ""))})
+        facets.append({"type": "dist", "label": "地區", "items": _dist(items, _region_of)})
+
+    elif vertical in ("game", "遊戲"):
+        facets.append({"type": "dist", "label": "交易類型", "items": _dist(items, lambda it: next(
+            (k for k in ["帳號", "代儲", "點數", "點卡", "虛寶", "代練", "金幣", "楓幣"] if k in blob(it)), ""))})
+
+    elif vertical in ("flight", "機票", "住宿"):
+        facets.append({"type": "dist", "label": "類型", "items": _dist(items, lambda it: next(
+            (k for k in ["機票", "來回", "單程", "廉航", "飯店", "民宿", "訂房", "自由行"] if k in blob(it)), ""))})
+        facets.append({"type": "dist", "label": "目的地", "items": _dist(items, _region_of)})
+
+    elif vertical in ("clinic", "醫美", "補教"):
+        facets.append({"type": "dist", "label": "類型", "items": _dist(items, lambda it: next(
+            (k for k in ["雷射", "除斑", "微整", "肉毒", "玻尿酸", "牙齒矯正", "植牙", "家教", "補習", "課程"] if k in blob(it)), ""))})
+        facets.append({"type": "dist", "label": "地區", "items": _dist(items, _region_of)})
+
     # 共通:來源分佈(所有垂直都有用)
     facets.append({"type": "dist", "label": "來源網站", "items": _dist(items, lambda it: it.get("domain", ""))})
     return [f for f in facets if f and (f.get("items") or f.get("median") is not None)]

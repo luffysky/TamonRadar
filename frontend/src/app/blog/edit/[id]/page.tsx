@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/components/AuthProvider";
 import PostEditor from "@/components/PostEditor";
-import { getMyPost, myUpdatePost, type BlogPost } from "@/lib/api";
+import { getMyPost, myUpdatePost, getPreviewToken, type BlogPost } from "@/lib/api";
 
 export default function EditPostPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
@@ -24,7 +24,13 @@ export default function EditPostPage({ params }: { params: { id: string } }) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">編輯文章</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">編輯文章</h1>
+        <button
+          onClick={async () => { try { const { token } = await getPreviewToken(id); window.open(`/blog/preview/${token}`, "_blank"); } catch { /* */ } }}
+          className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"
+        >👁 預覽草稿</button>
+      </div>
       <PostEditor initial={post} onSubmit={async (d) => { await myUpdatePost(id, d); router.push("/blog/mine"); }} />
     </div>
   );

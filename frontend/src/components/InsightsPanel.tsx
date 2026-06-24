@@ -1,14 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { TrendingDown, Award, Layers, AlertTriangle, BarChart3 } from "lucide-react";
-import { getInsights, type DeepInsights } from "@/lib/api";
+import { TrendingDown, Award, Layers, AlertTriangle, BarChart3, Sparkles, ArrowDownUp } from "lucide-react";
+import { getInsights, getRunCompare, getAiInsight, type DeepInsights, type RunCompare } from "@/lib/api";
 import type { CrawlResult } from "@/lib/types";
+import Markdown from "./Markdown";
 
 export default function InsightsPanel({ runId, records, vertical = "" }: { runId?: string; records?: CrawlResult["records"]; vertical?: string }) {
   const [data, setData] = useState<DeepInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(true);
+  const [cmp, setCmp] = useState<RunCompare | null>(null);
+  const [aiText, setAiText] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
 
   useEffect(() => {
     let on = true;
@@ -17,8 +21,17 @@ export default function InsightsPanel({ runId, records, vertical = "" }: { runId
       .then((d) => on && setData(d))
       .catch(() => on && setData(null))
       .finally(() => on && setLoading(false));
+    if (runId) getRunCompare(runId).then((c) => on && setCmp(c)).catch(() => {});
     return () => { on = false; };
   }, [runId, records, vertical]);
+
+  async function runAiInsight() {
+    if (!runId) return;
+    setAiBusy(true); setAiText("");
+    try { const r = await getAiInsight(runId, vertical); setAiText(r.insight); }
+    catch (e) { setAiText(e instanceof Error ? e.message : "AI 洞察失敗"); }
+    finally { setAiBusy(false); }
+  }
 
   if (loading) return <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800">深度情報分析中…</div>;
   if (!data || data.total === 0) return null;
@@ -29,8 +42,38 @@ export default function InsightsPanel({ runId, records, vertical = "" }: { runId
     <div className="space-y-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50/60 to-white p-5 shadow-sm dark:border-brand-900 dark:from-brand-950/30 dark:to-slate-800">
       <div className="flex items-center justify-between">
         <h3 className="flex items-center gap-2 font-semibold text-slate-800 dark:text-slate-100"><BarChart3 className="h-5 w-5 text-brand-600" /> 深度情報分析</h3>
-        <button onClick={() => setOpen(!open)} className="text-xs text-slate-400 hover:text-slate-600">{open ? "收起" : "展開"}</button>
+        <div className="flex items-center gap-2">
+          {runId && <button onClick={runAiInsight} disabled={aiBusy} className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1 text-xs text-white hover:bg-violet-700 disabled:opacity-50"><Sparkles className="h-3.5 w-3.5" /> {aiBusy ? "分析中…" : "AI 洞察"}</button>}
+          <button onClick={() => setOpen(!open)} className="text-xs text-slate-400 hover:text-slate-600">{open ? "收起" : "展開"}</button>
+        </div>
       </div>
+
+      {aiText && (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4 text-sm dark:border-violet-900 dark:bg-violet-950/30">
+          <Markdown>{aiText}</Markdown>
+        </div>
+      )}
+
+      {open && cmp && cmp.has_previous && ((cmp.cheaper?.length || 0) > 0 || (cmp.pricier?.length || 0) > 0) && (
+        <div className="rounded-xl bg-white p-3 text-sm shadow-sm dark:bg-slate-900">
+          <p className="mb-1.5 flex items-center gap-1.5 font-semibold text-slate-700 dark:text-slate-200"><ArrowDownUp className="h-4 w-4" /> 跟上次比較{cmp.prev_date ? `(${new Date(cmp.prev_date).toLocaleDateString("zh-TW")})` : ""}</p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-medium text-emerald-600">↓ 變便宜 {cmp.cheaper?.length || 0}</p>
+              {(cmp.cheaper || []).slice(0, 4).map((c, i) => (
+                <p key={i} className="truncate text-xs text-slate-500 dark:text-slate-400">{c.title} <span className="text-emerald-600">NT${c.was}→{c.now}</span></p>
+              ))}
+            </div>
+            <div>
+              <p className="text-xs font-medium text-rose-500">↑ 變貴 {cmp.pricier?.length || 0}</p>
+              {(cmp.pricier || []).slice(0, 4).map((c, i) => (
+                <p key={i} className="truncate text-xs text-slate-500 dark:text-slate-400">{c.title} <span className="text-rose-500">NT${c.was}→{c.now}</span></p>
+              ))}
+            </div>
+          </div>
+          {(cmp.new_items?.length || 0) > 0 && <p className="mt-1.5 text-xs text-slate-400">🆕 新出現:{cmp.new_items!.slice(0, 5).join("、")}</p>}
+        </div>
+      )}
 
       {open && (
         <>

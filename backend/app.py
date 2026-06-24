@@ -456,6 +456,34 @@ def insights_endpoint(req: InsightsRequest):
     return insights_mod.deep_insights(records or [], req.vertical)
 
 
+@app.get("/api/insights/compare/{run_id}")
+def insights_compare(run_id: str):
+    return db.compare_runs(run_id)
+
+
+@app.post("/api/insights/ai")
+def insights_ai(req: InsightsRequest, user=Depends(auth.get_optional_user)):
+    records = req.records
+    if records is None and req.run_id:
+        run = db.get_run(req.run_id)
+        records = (run or {}).get("records", []) if run else []
+    ins = insights_mod.deep_insights(records or [], req.vertical)
+    st = ins.get("price_stats") or {}
+    deals = "、".join(f"{d['title']}(NT${d['price_twd']})" for d in ins.get("good_deals", [])[:5])
+    clusters = "、".join(f"{c['title']}×{c['count']}站最低NT${c.get('min_twd')}" for c in ins.get("clusters", [])[:5])
+    prompt = (
+        "你是購物/情報分析顧問,根據以下抓取分析,用繁體中文給出結構化洞察。"
+        "用 Markdown,分三段:## 💡 購買建議(最值得買哪個、為何)、## ⚠️ 風險提醒(假貨/價格異常/缺貨等)、## 📊 行情解讀(整體價位與趨勢)。精簡具體。\n\n"
+        f"領域:{req.vertical}\n行情:{st}\n好價:{deals}\n跨站聚合:{clusters}\n"
+        f"狀態分佈:{ins.get('status_dist')}\n來源分佈:{ins.get('trust_dist')}\n異常:{[o.get('title') for o in ins.get('outliers', [])]}"
+    )
+    keys = db.get_settings(user.id) if user else {}
+    text, model = ai.ai_complete(prompt, max_tokens=900, user_keys=keys, user_id=(user.id if user else None))
+    if not text:
+        raise HTTPException(400, "AI 暫時無法使用,請於後台設定 AI 金鑰")
+    return {"insight": text, "model": model}
+
+
 @app.get("/api/health")
 def health():
     from crawler.search_api import available_providers
@@ -1632,6 +1660,25 @@ def blog_view(post_id: int):
     return {"views": db.increment_post_views(post_id)}
 
 
+@app.post("/api/blog/manage/{post_id}/preview-token")
+def blog_preview_token(post_id: int, user=Depends(auth.get_current_user)):
+    owner = db.post_owner(post_id)
+    if owner is None:
+        raise HTTPException(404, "找不到文章")
+    if owner != user.id and not auth.is_admin(user.email):
+        raise HTTPException(403, "不是你的文章")
+    return {"token": db.ensure_preview_token(post_id)}
+
+
+@app.get("/api/blog/preview/{token}")
+def blog_preview(token: str):
+    p = db.get_post_by_preview_token(token)
+    if not p:
+        raise HTTPException(404, "預覽連結無效")
+    p["preview"] = True
+    return p
+
+
 class AiWriteRequest(BaseModel):
     mode: str = "full"   # full | outline | refine
     topic: str = ""
@@ -1653,6 +1700,50 @@ def blog_ai_write(req: AiWriteRequest, user=Depends(auth.get_current_user)):
         raise HTTPException(400, "AI 暫時無法使用,請於後台設定 AI 金鑰")
     db.add_ai_chat_log(user.id, "blog_ai", f"[{req.mode}] {req.topic}", text)
     return {"content": text, "model": model}
+
+
+class AiMetaRequest(BaseModel):
+    title: str = ""
+    content: str = ""
+
+
+@app.post("/api/blog/ai-meta")
+def blog_ai_meta(req: AiMetaRequest, user=Depends(auth.get_current_user)):
+    keys = db.get_settings(user.id)
+    prompt = ("根據以下文章,用繁體中文產生 SEO,只輸出 JSON(不要其他字):"
+              '{"seo_title":"<60字內吸睛標題>","excerpt":"<120字內摘要>","tags":["標籤1","標籤2","標籤3"]}'
+              f"\n\n標題:{req.title}\n內容:{req.content[:3000]}")
+    text, _ = ai.ai_complete(prompt, max_tokens=400, user_keys=keys, user_id=user.id)
+    if not text:
+        raise HTTPException(400, "AI 暫時無法使用")
+    import json as _json
+    import re as _re
+    try:
+        m = _re.search(r"\{.*\}", text, _re.S)
+        data = _json.loads(m.group(0)) if m else {}
+    except Exception:
+        data = {}
+    return {"seo_title": data.get("seo_title", ""), "excerpt": data.get("excerpt", ""), "tags": data.get("tags", [])}
+
+
+class AiCoverRequest(BaseModel):
+    title: str
+    style: str = "插畫"
+
+
+@app.post("/api/blog/ai-cover")
+def blog_ai_cover(req: AiCoverRequest, user=Depends(auth.get_current_user)):
+    import uploader
+    if not uploader.r2_available():
+        raise HTTPException(400, "尚未設定 R2 圖片儲存,無法保存生成的封面")
+    keys = db.get_settings(user.id)
+    prompt = f"部落格封面圖,主題:{req.title}。風格:{req.style}、乾淨、無文字、適合做標題圖。"
+    data = ai.generate_image(prompt, user_keys=keys)
+    if not data:
+        raise HTTPException(400, "封面生成失敗(需 OpenAI 金鑰且帳號支援圖片生成)")
+    url = uploader.upload(f"blog-cover-{user.id}.png", data, "image/png")
+    db.add_ai_chat_log(user.id, "blog_cover", req.title, url)
+    return {"url": url}
 
 
 class CommentRequest(BaseModel):

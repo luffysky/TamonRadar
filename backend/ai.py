@@ -146,6 +146,31 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
     return (r.choices[0].message.content or ""), f"{provider}:{model}"
 
 
+def generate_image(prompt: str, user_keys: dict | None = None) -> bytes | None:
+    """用 OpenAI 產生封面圖,回傳 PNG bytes;沒 key 或失敗回 None。"""
+    key = (user_keys or {}).get("openai_key", "") or _db("openai", "key") or os.environ.get("OPENAI_API_KEY", "")
+    if not key:
+        return None
+    try:
+        from openai import OpenAI
+        client = OpenAI(api_key=key)
+        try:
+            r = client.images.generate(model="gpt-image-1", prompt=prompt[:900], size="1024x1024", n=1)
+        except Exception:
+            r = client.images.generate(model="dall-e-3", prompt=prompt[:900], size="1024x1024", n=1)
+        d = r.data[0]
+        import base64
+        if getattr(d, "b64_json", None):
+            return base64.b64decode(d.b64_json)
+        if getattr(d, "url", None):
+            import requests as _rq
+            resp = _rq.get(d.url, timeout=30)
+            return resp.content if resp.status_code == 200 else None
+    except Exception:
+        return None
+    return None
+
+
 def test_provider(provider: str, key: str = "") -> dict:
     """測試某 provider 的金鑰是否可用。key 留空則用現有設定(DB/env)。"""
     if provider not in ORDER:

@@ -42,6 +42,28 @@ export default function PostEditor({
     finally { setAiBusy(false); }
   }
 
+  async function runAiMeta() {
+    setAiBusy(true); setMsg(null);
+    try {
+      const { aiMetaPost } = await import("@/lib/api");
+      const r = await aiMetaPost(title, content);
+      if (r.excerpt) setExcerpt(r.excerpt);
+      if (r.tags?.length) setTags(r.tags.join(", "));
+      setMsg("✅ AI 已產生摘要與標籤" + (r.seo_title ? `;建議標題:${r.seo_title}` : ""));
+    } catch (e) { setMsg(e instanceof Error ? e.message : "AI SEO 失敗"); }
+    finally { setAiBusy(false); }
+  }
+  async function runAiCover() {
+    setAiBusy(true); setMsg(null);
+    try {
+      const { aiCoverPost } = await import("@/lib/api");
+      const r = await aiCoverPost(title || aiTopic);
+      setCover(r.url);
+      setMsg("✅ AI 已生成封面");
+    } catch (e) { setMsg(e instanceof Error ? e.message : "封面生成失敗"); }
+    finally { setAiBusy(false); }
+  }
+
   async function onCoverFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -114,8 +136,10 @@ export default function PostEditor({
           <button onClick={() => runAi("full")} disabled={aiBusy} className="rounded-lg bg-violet-600 px-3 py-2 text-sm text-white hover:bg-violet-700 disabled:opacity-50">寫整篇</button>
           <button onClick={() => runAi("outline")} disabled={aiBusy} className="rounded-lg border border-violet-300 px-3 py-2 text-sm text-violet-700 hover:bg-violet-50 disabled:opacity-50">大綱</button>
           <button onClick={() => runAi("refine")} disabled={aiBusy || !content} className="rounded-lg border border-violet-300 px-3 py-2 text-sm text-violet-700 hover:bg-violet-50 disabled:opacity-50">潤飾現有</button>
+          <button onClick={runAiMeta} disabled={aiBusy || !content} className="rounded-lg border border-violet-300 px-3 py-2 text-sm text-violet-700 hover:bg-violet-50 disabled:opacity-50">產 SEO/摘要</button>
+          <button onClick={runAiCover} disabled={aiBusy || !(title || aiTopic)} className="rounded-lg border border-violet-300 px-3 py-2 text-sm text-violet-700 hover:bg-violet-50 disabled:opacity-50">生成封面</button>
         </div>
-        {aiBusy && <p className="mt-1 text-xs text-violet-500">AI 撰寫中…</p>}
+        {aiBusy && <p className="mt-1 text-xs text-violet-500">AI 處理中…</p>}
       </div>
 
       <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="🔒 文章密碼(選填,設了讀者要輸入密碼才能看內文)" className={field} />

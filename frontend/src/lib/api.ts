@@ -764,6 +764,34 @@ export interface InsightFacet {
   unit?: string; min?: number; max?: number; median?: number; count?: number;
   value?: string | number;
 }
+export interface RunCompare {
+  has_previous: boolean; prev_date?: string | null;
+  cheaper?: { title: string; now: number; was: number; diff: number }[];
+  pricier?: { title: string; now: number; was: number; diff: number }[];
+  new_items?: string[]; gone?: string[];
+}
+export async function getRunCompare(runId: string): Promise<RunCompare> {
+  const res = await fetch(`${API_BASE}/api/insights/compare/${runId}`);
+  if (!res.ok) return { has_previous: false };
+  return res.json();
+}
+export async function getAiInsight(runId: string, vertical = ""): Promise<{ insight: string; model: string }> {
+  const res = await fetch(`${API_BASE}/api/insights/ai`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId, vertical }) });
+  if (!res.ok) throw new Error("AI 洞察失敗"); return res.json();
+}
+export async function aiMetaPost(title: string, content: string): Promise<{ seo_title: string; excerpt: string; tags: string[] }> {
+  const res = await fetch(`${API_BASE}/api/blog/ai-meta`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ title, content }) });
+  check401(res); if (!res.ok) throw new Error("AI 產生 SEO 失敗"); return res.json();
+}
+export async function aiCoverPost(title: string, style = "插畫"): Promise<{ url: string }> {
+  const res = await fetch(`${API_BASE}/api/blog/ai-cover`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ title, style }) });
+  check401(res); if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "封面生成失敗"); return res.json();
+}
+export async function getPreviewToken(postId: number): Promise<{ token: string }> {
+  const res = await fetch(`${API_BASE}/api/blog/manage/${postId}/preview-token`, { method: "POST", headers: authHeaders() });
+  check401(res); if (!res.ok) throw new Error("取得預覽連結失敗"); return res.json();
+}
+
 export async function getInsights(runId?: string, records?: unknown[], vertical = ""): Promise<DeepInsights> {
   const res = await fetch(`${API_BASE}/api/insights`, {
     method: "POST", headers: { "Content-Type": "application/json" },

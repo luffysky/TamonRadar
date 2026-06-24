@@ -169,6 +169,7 @@ class Post(Base):
     likes: Mapped[int] = mapped_column(default=0)
     views: Mapped[int] = mapped_column(default=0)
     password: Mapped[str] = mapped_column(String(100), default="")  # 密碼保護(明碼比對,簡易)
+    preview_token: Mapped[str] = mapped_column(String(40), default="")  # 草稿預覽連結用
     author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -441,6 +442,7 @@ def _ensure_columns() -> None:
             ("likes", "ALTER TABLE tr_posts ADD COLUMN likes INTEGER DEFAULT 0"),
             ("views", "ALTER TABLE tr_posts ADD COLUMN views INTEGER DEFAULT 0"),
             ("password", "ALTER TABLE tr_posts ADD COLUMN password VARCHAR(100) DEFAULT ''"),
+            ("preview_token", "ALTER TABLE tr_posts ADD COLUMN preview_token VARCHAR(40) DEFAULT ''"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -509,6 +511,49 @@ def save_run(job, user_id: int) -> None:
         run.summary = result.get("summary", {})
         run.records = result.get("records", [])
         s.commit()
+
+
+def compare_runs(run_id: str) -> dict:
+    """把這次搜尋跟同使用者、關鍵字有重疊的上一次搜尋比對價格(變便宜/變貴/新增/消失)。"""
+    import money as _money
+    with SessionLocal() as s:
+        cur = s.get(Run, run_id)
+        if not cur:
+            return {"has_previous": False}
+        kw = set(cur.keywords or [])
+        q = select(Run).where(Run.user_id == cur.user_id, Run.created_at < cur.created_at).order_by(Run.created_at.desc())
+        prev = None
+        for r in s.scalars(q.limit(20)).all():
+            if not kw or (set(r.keywords or []) & kw):
+                prev = r
+                break
+        if prev is None:
+            return {"has_previous": False}
+
+        def price_map(recs):
+            m = {}
+            for it in recs or []:
+                t = (it.get("title") or "").strip()
+                tw = _money.to_twd(it.get("price"))
+                if t and tw:
+                    m[t] = tw if t not in m else min(m[t], tw)
+            return m
+        cm, pm = price_map(cur.records), price_map(prev.records)
+        cheaper, pricier = [], []
+        for t, cp in cm.items():
+            if t in pm and cp != pm[t]:
+                row = {"title": t, "now": cp, "was": pm[t], "diff": cp - pm[t]}
+                (cheaper if cp < pm[t] else pricier).append(row)
+        cheaper.sort(key=lambda x: x["diff"])
+        pricier.sort(key=lambda x: -x["diff"])
+        new_items = [t for t in cm if t not in pm][:10]
+        gone = [t for t in pm if t not in cm][:10]
+        return {
+            "has_previous": True,
+            "prev_date": prev.created_at.isoformat() if prev.created_at else None,
+            "cheaper": cheaper[:10], "pricier": pricier[:10],
+            "new_items": new_items, "gone": gone,
+        }
 
 
 def list_runs(user_id: int) -> list[dict]:
@@ -1994,6 +2039,29 @@ def get_post_by_slug(slug: str, only_published: bool = True) -> dict | None:
                        for n, o in scored if n > 0][:3]
         d["related"] = related
         return d
+
+
+def ensure_preview_token(post_id: int) -> str:
+    import secrets
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        if not p:
+            return ""
+        if not p.preview_token:
+            p.preview_token = secrets.token_urlsafe(16)
+            s.commit()
+        return p.preview_token
+
+
+def get_post_by_preview_token(token: str) -> dict | None:
+    if not token:
+        return None
+    with SessionLocal() as s:
+        p = s.scalar(select(Post).where(Post.preview_token == token))
+        if not p:
+            return None
+        names = _author_map(s, [p])
+        return _post_dict(p, full=True, author_name=names.get(p.author_id, ""))
 
 
 def increment_post_views(post_id: int) -> int:
