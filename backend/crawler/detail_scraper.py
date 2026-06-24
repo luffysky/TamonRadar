@@ -73,6 +73,67 @@ def _balanced_json(text: str, start: int) -> str | None:
     return None
 
 
+def _json_price_rows(o, rows: list, depth: int = 0) -> None:
+    """遞迴找「有名稱+價格」的物件(供內嵌 JSON / API 回應共用)。"""
+    if depth > 12 or len(rows) > 400:
+        return
+    if isinstance(o, dict):
+        low = {k.lower(): k for k in o.keys()}
+        nk = next((low[k] for k in _JSON_NAME_KEYS if k in low), None)
+        pk = next((low[k] for k in _JSON_PRICE_KEYS if k in low), None)
+        if nk and pk:
+            name, price = o.get(nk), o.get(pk)
+            if isinstance(name, str) and name.strip() and isinstance(price, (int, float, str)) and any(ch.isdigit() for ch in str(price)):
+                rows.append((name.strip(), str(price)))
+        for v in o.values():
+            _json_price_rows(v, rows, depth + 1)
+    elif isinstance(o, list):
+        for v in o:
+            _json_price_rows(v, rows, depth + 1)
+
+
+def _rows_to_records(rows: list, url: str) -> list[dict]:
+    seen: set = set()
+    out: list[dict] = []
+    for name, price in rows:
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append({
+            "keyword": "", "title": name, "url": url, "domain": get_domain(url),
+            "snippet": "", "price": price if len(price) <= 20 else "",
+            "category": classify_item(name, "", ""), "character": "", "is_listing": False, "image_url": "",
+        })
+    return out[:200]
+
+
+def _items_from_api(soup: BeautifulSoup, html: str, base_url: str) -> list[dict]:
+    """探測頁面引用的 JSON API(.json / /api/),直接抓來解析(對付 XHR 動態站)。"""
+    cands: list[str] = []
+    for m in re.findall(r"""["'](https?:)?(//[^"'\s]+?\.json[^"'\s]*)["']""", html):
+        cands.append(("https:" if not m[0] else m[0]) + m[1])
+    for m in re.findall(r"""["'](/(?:api|data)/[^"'\s]{3,120})["']""", html):
+        cands.append(urljoin(base_url, m))
+    seen: set = set()
+    uniq: list[str] = []
+    for u in cands:
+        if u not in seen and u.startswith("http"):
+            seen.add(u)
+            uniq.append(u)
+    rows: list = []
+    for api in uniq[:3]:  # 最多探 3 個,避免太慢
+        try:
+            r = requests.get(api, headers={**_LIGHT_HEADERS, "Accept": "application/json"}, timeout=10)
+            if r.status_code >= 400 or "json" not in (r.headers.get("content-type", "")):
+                continue
+            _json_price_rows(r.json(), rows)
+        except Exception:
+            continue
+        if len(rows) >= 20:
+            break
+    return _rows_to_records(rows, base_url)
+
+
 def _items_from_embedded_json(soup: BeautifulSoup, url: str) -> list[dict]:
     """從頁面內嵌 JSON(__NEXT_DATA__ / application/json)抽出「有名稱+價格」的資料列。
 
@@ -164,12 +225,55 @@ def items_from_soup(soup: BeautifulSoup, url: str) -> list[dict]:
     return out
 
 
+def _feed_items(soup: BeautifulSoup, base_url: str) -> list[dict]:
+    """從頁面找 RSS/Atom feed 連結並解析每篇(新聞/部落格最穩)。"""
+    feed_url = ""
+    for link in soup.find_all("link"):
+        rel = " ".join(link.get("rel") or []).lower()
+        typ = (link.get("type") or "").lower()
+        if "alternate" in rel and ("rss" in typ or "atom" in typ or "xml" in typ) and link.get("href"):
+            feed_url = urljoin(base_url, link["href"])
+            break
+    if not feed_url:
+        return []
+    try:
+        fr = requests.get(feed_url, headers=_LIGHT_HEADERS, timeout=12)
+        if fr.status_code >= 400:
+            return []
+        fsoup = BeautifulSoup(fr.text, "xml")
+    except Exception:
+        return []
+    out: list[dict] = []
+    for it in fsoup.find_all(["item", "entry"])[:100]:
+        title_el = it.find("title")
+        title = clean_text(title_el.get_text()) if title_el else ""
+        link_el = it.find("link")
+        href = ""
+        if link_el:
+            href = link_el.get("href") or clean_text(link_el.get_text())
+        desc_el = it.find("description") or it.find("summary") or it.find("content")
+        snippet = clean_text(desc_el.get_text())[:200] if desc_el else ""
+        if not title:
+            continue
+        link = urljoin(base_url, href) if href else feed_url
+        out.append({
+            "keyword": "", "title": title, "url": link, "domain": get_domain(link),
+            "snippet": snippet, "price": "", "category": classify_item(title, snippet, ""),
+            "character": "", "is_listing": False, "image_url": "",
+        })
+    return out
+
+
 def scrape_full_page(url: str) -> list[dict]:
     """整頁抓取:給一個網址,抓出該頁所有表格列 + 內嵌商品(適合股票/排行/列表頁)。"""
     r = requests.get(url, headers=_LIGHT_HEADERS, timeout=15)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "lxml")
     out = items_from_soup(soup, url)
+    if not out:
+        out = _feed_items(soup, url)  # 靜態/JSON 都沒有 → 試 RSS/Atom feed
+    if not out:
+        out = _items_from_api(soup, r.text, url)  # 再試探測頁面引用的 JSON API(XHR 動態站)
     seen: set = set()
     uniq: list[dict] = []
     for x in out:
