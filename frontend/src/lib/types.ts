@@ -2,6 +2,7 @@ export interface CrawlRecord {
   keyword: string;
   category: string;
   character?: string;
+  is_listing?: boolean;
   title: string;
   url: string;
   domain: string;

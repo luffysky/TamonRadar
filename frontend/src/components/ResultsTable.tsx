@@ -22,6 +22,7 @@ export default function ResultsTable({
   const [category, setCategory] = useState("全部");
   const [character, setCharacter] = useState("全部");
   const [onlyPrice, setOnlyPrice] = useState(false);
+  const [onlyProducts, setOnlyProducts] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("category");
   const [sortAsc, setSortAsc] = useState(true);
 
@@ -41,6 +42,7 @@ export default function ResultsTable({
     if (category !== "全部") rows = rows.filter((r) => r.category === category);
     if (character !== "全部") rows = rows.filter((r) => String(r.character ?? "") === character);
     if (onlyPrice) rows = rows.filter((r) => (r.price || "").trim() !== "");
+    if (onlyProducts) rows = rows.filter((r) => !r.is_listing);
     if (query.trim()) {
       const q = query.toLowerCase();
       rows = rows.filter(
@@ -57,7 +59,7 @@ export default function ResultsTable({
       return sortAsc ? cmp : -cmp;
     });
     return sorted;
-  }, [records, hiddenUrls, category, character, onlyPrice, query, sortKey, sortAsc]);
+  }, [records, hiddenUrls, category, character, onlyPrice, onlyProducts, query, sortKey, sortAsc]);
 
   function toggleSort(key: SortKey) {
     if (key === sortKey) setSortAsc(!sortAsc);
@@ -114,6 +116,10 @@ export default function ResultsTable({
           <input type="checkbox" checked={onlyPrice} onChange={(e) => setOnlyPrice(e.target.checked)} />
           只看有價格
         </label>
+        <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+          <input type="checkbox" checked={onlyProducts} onChange={(e) => setOnlyProducts(e.target.checked)} />
+          只看商品頁
+        </label>
         <span className="ml-auto text-xs text-slate-400">顯示 {filtered.length} / {records.length} 筆</span>
       </div>
 
@@ -143,6 +149,9 @@ export default function ResultsTable({
                     <span className="ml-1.5 rounded bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-700">
                       {String(r.character)}
                     </span>
+                  ) : null}
+                  {r.is_listing ? (
+                    <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-700">列表頁</span>
                   ) : null}
                   {r.snippet ? <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{r.snippet}</p> : null}
                 </td>

@@ -3,7 +3,7 @@ import re
 
 from bs4 import BeautifulSoup
 
-from .utils import clean_text, extract_price, classify_item, sleep_random, looks_like_block_page
+from .utils import clean_text, extract_price, classify_item, sleep_random, looks_like_block_page, is_listing_url
 from .characters import detect_character
 
 
@@ -76,6 +76,7 @@ def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: floa
         "key_info": "",
         "category": "",
         "character": "",
+        "is_listing": is_listing_url(url),
         "status": "ok",
         "error": "",
     }
@@ -119,7 +120,8 @@ def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: floa
         if not price:
             page_text_head = clean_text(soup.get_text(" ", strip=True))[:2000]
             price = extract_price(page_text_head)
-        detail["price"] = price
+        # 搜尋/列表頁的價格是混雜的(常亂價),不顯示單一價格避免誤導
+        detail["price"] = "" if is_listing_url(url) else price
 
         page_text = clean_text(soup.get_text(" ", strip=True))
         detail["category"] = classify_item(
@@ -147,15 +149,17 @@ def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: floa
 
 def classify_search_only(item: dict) -> dict:
     """不進詳細頁時,只用搜尋結果的標題/摘要做分類與價格,讓「不抓詳細」模式也有資料。"""
+    _is_listing = is_listing_url(item.get("url", ""))
     enriched = {
         "page_title": "",
         "meta_description": "",
         "h1": "",
-        "price": extract_price(" ".join([item.get("title", ""), item.get("snippet", "")])),
+        "price": "" if _is_listing else extract_price(" ".join([item.get("title", ""), item.get("snippet", "")])),
         "image_url": "",
         "key_info": clean_text(item.get("snippet", ""))[:300],
         "category": classify_item(item.get("title", ""), item.get("snippet", ""), ""),
         "character": detect_character(item.get("title", ""), item.get("snippet", "")),
+        "is_listing": _is_listing,
         "status": "search_only",
         "error": "",
     }

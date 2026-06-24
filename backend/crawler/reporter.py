@@ -20,7 +20,7 @@ for _font in ["Microsoft JhengHei", "Microsoft YaHei", "SimHei", "PingFang TC", 
 
 COLUMN_ORDER = [
     "keyword", "category", "character", "title", "url", "domain", "snippet", "price",
-    "image_url", "key_info", "page_title", "meta_description", "h1",
+    "is_listing", "image_url", "key_info", "page_title", "meta_description", "h1",
     "google_page", "status", "error",
 ]
 

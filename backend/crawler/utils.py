@@ -173,6 +173,23 @@ def classify_item(title: str, snippet: str, page_text: str) -> str:
     return best_category
 
 
+def is_listing_url(url: str) -> bool:
+    """判斷是否為「搜尋/列表頁」而非單一商品頁。
+
+    這類頁面點進去是一整列商品,抓出的價格是混雜的(常出現亂價),
+    所以不該顯示單一價格、也不該當成商品卡。
+    """
+    if not url:
+        return False
+    u = url.lower()
+    markers = [
+        "/search", "keyword=", "/find", "q=", "/category", "/categories",
+        "/cat/", "/collections/", "list.php", "/mall/", "/shop/", "/store/",
+        "/tag/", "/s?", "/sch/",
+    ]
+    return any(m in u for m in markers)
+
+
 def is_valid_url(url: str, skip_extensions: tuple[str, ...]) -> bool:
     """修正:用網址 path 判斷副檔名,去掉 query string,避免 ...png?x=1 漏擋。"""
     if not url:
