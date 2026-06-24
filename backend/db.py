@@ -155,6 +155,7 @@ class Post(Base):
     content: Mapped[str] = mapped_column(Text, default="")          # Markdown
     cover_image: Mapped[str] = mapped_column(String(1000), default="")
     category: Mapped[str] = mapped_column(String(50), default="")
+    series: Mapped[str] = mapped_column(String(100), default="")  # 系列名稱(同作者下歸類)
     tags: Mapped[list] = mapped_column(JSON, default=list)
     published: Mapped[bool] = mapped_column(default=False)
     author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
@@ -240,6 +241,15 @@ class AppSetting(Base):
     value: Mapped[str] = mapped_column(Text, default="")
 
 
+class Subscription(Base):
+    __tablename__ = "tr_subscriptions"
+    __table_args__ = (UniqueConstraint("subscriber_id", "author_id", name="uq_sub"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subscriber_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Usage(Base):
     __tablename__ = "tr_usage"
     user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), primary_key=True)
@@ -280,6 +290,12 @@ def _ensure_columns() -> None:
         if "likes" not in cols:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE tr_threads ADD COLUMN likes INTEGER DEFAULT 0"))
+
+    if "tr_posts" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_posts")}
+        if "series" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE tr_posts ADD COLUMN series VARCHAR(100) DEFAULT ''"))
 
     if "tr_runs" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_runs")}
@@ -1117,6 +1133,7 @@ def _post_dict(p: "Post", full: bool = False, author_name: str = "") -> dict:
         "excerpt": p.excerpt or "",
         "cover_image": p.cover_image or "",
         "category": p.category or "",
+        "series": p.series or "",
         "tags": p.tags or [],
         "published": p.published,
         "author_id": p.author_id,
@@ -1200,11 +1217,51 @@ def get_author_blog(author_id: int) -> dict | None:
             .order_by(Post.created_at.desc())
         ).all()
         name = u.username or (u.email.split("@")[0] if u.email else "使用者")
+        series = sorted({p.series for p in rows if p.series})
         return {
             "author_id": u.id, "author": name,
             "post_count": len(rows),
+            "series": series,
             "posts": [_post_dict(p, author_name=name) for p in rows],
         }
+
+
+def subscribe(subscriber_id: int, author_id: int) -> bool:
+    if subscriber_id == author_id:
+        return False
+    with SessionLocal() as s:
+        exists = s.scalar(select(Subscription).where(
+            Subscription.subscriber_id == subscriber_id, Subscription.author_id == author_id))
+        if not exists:
+            s.add(Subscription(subscriber_id=subscriber_id, author_id=author_id))
+            s.commit()
+        return True
+
+
+def unsubscribe(subscriber_id: int, author_id: int) -> bool:
+    with SessionLocal() as s:
+        row = s.scalar(select(Subscription).where(
+            Subscription.subscriber_id == subscriber_id, Subscription.author_id == author_id))
+        if row:
+            s.delete(row)
+            s.commit()
+        return True
+
+
+def is_subscribed(subscriber_id: int, author_id: int) -> bool:
+    with SessionLocal() as s:
+        return s.scalar(select(Subscription).where(
+            Subscription.subscriber_id == subscriber_id, Subscription.author_id == author_id)) is not None
+
+
+def subscriber_emails(author_id: int) -> list[str]:
+    with SessionLocal() as s:
+        ids = [r for (r,) in s.execute(
+            select(Subscription.subscriber_id).where(Subscription.author_id == author_id)).all()]
+        if not ids:
+            return []
+        return [e for (e,) in s.execute(
+            select(User.email).where(User.id.in_(ids), User.email != "")).all()]
 
 
 def post_owner(post_id: int) -> int | None:
@@ -1223,6 +1280,7 @@ def create_post(author_id: int, data: dict) -> dict:
             content=data.get("content", ""),
             cover_image=data.get("cover_image", ""),
             category=data.get("category", ""),
+            series=data.get("series", ""),
             tags=data.get("tags", []),
             published=data.get("published", False),
             author_id=author_id,
@@ -1238,7 +1296,7 @@ def update_post(post_id: int, data: dict) -> dict | None:
         p = s.get(Post, post_id)
         if p is None:
             return None
-        for key in ("title", "excerpt", "content", "cover_image", "category", "tags", "published"):
+        for key in ("title", "excerpt", "content", "cover_image", "category", "series", "tags", "published"):
             if key in data and data[key] is not None:
                 setattr(p, key, data[key])
         if data.get("slug") and data["slug"].strip() != p.slug:

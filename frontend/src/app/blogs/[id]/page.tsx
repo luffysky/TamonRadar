@@ -2,10 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Radar, User } from "lucide-react";
 import type { BlogPost } from "@/lib/api";
+import SubscribeButton from "@/components/SubscribeButton";
 
 const API = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 
-interface AuthorBlog { author_id: number; author: string; post_count: number; posts: BlogPost[]; }
+interface AuthorBlog { author_id: number; author: string; post_count: number; series: string[]; posts: BlogPost[]; }
 
 async function fetchAuthor(id: string): Promise<AuthorBlog | null> {
   try {
@@ -40,13 +41,21 @@ export default async function AuthorBlogPage({ params }: { params: { id: string 
   return (
     <div className="space-y-6">
       <section className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-6 text-white shadow">
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-4">
           <span className="grid h-16 w-16 place-items-center rounded-full bg-white/20"><User className="h-8 w-8" /></span>
-          <div>
+          <div className="flex-1">
             <h1 className="text-2xl font-bold">{d.author} 的部落格</h1>
-            <p className="text-sm text-brand-50">共 {d.post_count} 篇文章</p>
+            <p className="text-sm text-brand-50">共 {d.post_count} 篇文章{d.series?.length ? ` · ${d.series.length} 個系列` : ""}</p>
           </div>
+          <SubscribeButton authorId={d.author_id} />
         </div>
+        {d.series?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {d.series.map((s) => (
+              <span key={s} className="rounded-full bg-white/20 px-2.5 py-1 text-xs">📚 {s}</span>
+            ))}
+          </div>
+        )}
       </section>
 
       {d.posts.length === 0 ? (

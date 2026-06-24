@@ -19,6 +19,7 @@ export default function PostEditor({
   const [excerpt, setExcerpt] = useState(initial?.excerpt ?? "");
   const [cover, setCover] = useState(initial?.cover_image ?? "");
   const [category, setCategory] = useState(initial?.category ?? "");
+  const [series, setSeries] = useState(initial?.series ?? "");
   const [tags, setTags] = useState((initial?.tags ?? []).join(", "));
   const [content, setContent] = useState(initial?.content ?? "");
   const [published, setPublished] = useState(initial?.published ?? false);
@@ -49,7 +50,8 @@ export default function PostEditor({
     try {
       await onSubmit({
         title: title.trim(), slug: slug.trim(), excerpt: excerpt.trim(), content,
-        cover_image: cover.trim(), category, tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        cover_image: cover.trim(), category, series: series.trim(),
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         published: pub,
       });
     } catch (e) {
@@ -85,6 +87,7 @@ export default function PostEditor({
           </label>
         )}
       </div>
+      <input value={series} onChange={(e) => setSeries(e.target.value)} placeholder="系列名稱(選填,同系列文章會歸在一起)" className={field} />
       <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="標籤(逗號分隔)" className={field} />
       <textarea value={excerpt} onChange={(e) => setExcerpt(e.target.value)} placeholder="摘要(選填)" rows={2} className={field} />
       <RichTextEditor content={content} onChange={setContent} />

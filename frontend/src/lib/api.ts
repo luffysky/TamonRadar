@@ -691,14 +691,31 @@ export interface BlogPost {
   content?: string;
   author?: string;
   author_id?: number;
+  series?: string;
   created_at: string | null;
   updated_at: string | null;
 }
 
 export type PostInput = {
   title: string; slug: string; excerpt: string; content: string;
-  cover_image: string; category: string; tags: string[]; published: boolean;
+  cover_image: string; category: string; series: string; tags: string[]; published: boolean;
 };
+
+export async function subscribeAuthor(authorId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/blog/author/${authorId}/subscribe`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("訂閱失敗");
+}
+export async function unsubscribeAuthor(authorId: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/blog/author/${authorId}/subscribe`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("取消訂閱失敗");
+}
+export async function isSubscribed(authorId: number): Promise<boolean> {
+  const res = await fetch(`${API_BASE}/api/blog/author/${authorId}/subscribed`, { headers: authHeaders() });
+  if (!res.ok) return false;
+  return (await res.json()).subscribed;
+}
 
 export async function adminListPosts(): Promise<{ posts: BlogPost[] }> {
   const res = await fetch(`${API_BASE}/api/admin/blog`, { headers: authHeaders() });

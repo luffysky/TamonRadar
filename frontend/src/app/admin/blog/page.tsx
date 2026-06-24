@@ -12,7 +12,7 @@ import RichTextEditor from "@/components/social/RichTextEditor";
 import { ADMIN_BASE } from "@/lib/admin";
 
 const EMPTY: PostInput = {
-  title: "", slug: "", excerpt: "", content: "", cover_image: "", category: "", tags: [], published: false,
+  title: "", slug: "", excerpt: "", content: "", cover_image: "", category: "", series: "", tags: [], published: false,
 };
 
 export default function AdminBlogPage() {
@@ -42,7 +42,7 @@ export default function AdminBlogPage() {
     setEditingId(id);
     setForm({
       title: p.title, slug: p.slug, excerpt: p.excerpt, content: p.content ?? "",
-      cover_image: p.cover_image, category: p.category, tags: p.tags, published: p.published,
+      cover_image: p.cover_image, category: p.category, series: p.series ?? "", tags: p.tags, published: p.published,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }

@@ -1222,6 +1222,7 @@ class PostRequest(BaseModel):
     content: str = ""
     cover_image: str = ""
     category: str = ""
+    series: str = ""
     tags: list[str] = Field(default_factory=list)
     published: bool = False
 
@@ -1247,9 +1248,35 @@ def blog_manage_get(post_id: int, user=Depends(auth.get_current_user)):
     return db.get_post(post_id)
 
 
+def _notify_subscribers(author, post: dict) -> None:
+    """文章發佈時通知作者的訂閱者(email)。"""
+    import mailer
+    if not mailer.mail_available():
+        return
+    emails = db.subscriber_emails(author.id)
+    if not emails:
+        return
+    try:
+        from oauth_google import _frontend as _fe
+        name = getattr(author, "username", "") or author.email.split("@")[0]
+        link = f"{_fe()}/blog/{post.get('slug', '')}"
+        html = (f"<p>你訂閱的 {name} 發表了新文章:</p>"
+                f"<p><a href=\"{link}\">{post.get('title', '')}</a></p>")
+        for e in emails[:500]:
+            try:
+                mailer.send_email(e, f"{name} 發表新文章:{post.get('title', '')}", html)
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 @app.post("/api/blog")
 def blog_create(req: PostRequest, user=Depends(auth.get_current_user)):
-    return db.create_post(user.id, req.model_dump())
+    post = db.create_post(user.id, req.model_dump())
+    if req.published:
+        _notify_subscribers(user, post)
+    return post
 
 
 @app.put("/api/blog/{post_id}")
@@ -1259,7 +1286,11 @@ def blog_update(post_id: int, req: PostRequest, user=Depends(auth.get_current_us
         raise HTTPException(404, "找不到文章")
     if owner != user.id and not auth.is_admin(user.email):
         raise HTTPException(403, "不是你的文章")
-    return db.update_post(post_id, req.model_dump())
+    was_published = (db.get_post(post_id) or {}).get("published", False)
+    post = db.update_post(post_id, req.model_dump())
+    if req.published and not was_published:
+        _notify_subscribers(user, post)
+    return post
 
 
 @app.delete("/api/blog/{post_id}")
@@ -1279,6 +1310,23 @@ def blog_author(author_id: int):
     if not d:
         raise HTTPException(404, "找不到這個作者")
     return d
+
+
+@app.post("/api/blog/author/{author_id}/subscribe")
+def blog_subscribe(author_id: int, user=Depends(auth.get_current_user)):
+    db.subscribe(user.id, author_id)
+    return {"subscribed": True}
+
+
+@app.delete("/api/blog/author/{author_id}/subscribe")
+def blog_unsubscribe(author_id: int, user=Depends(auth.get_current_user)):
+    db.unsubscribe(user.id, author_id)
+    return {"subscribed": False}
+
+
+@app.get("/api/blog/author/{author_id}/subscribed")
+def blog_subscribed(author_id: int, user=Depends(auth.get_current_user)):
+    return {"subscribed": db.is_subscribed(user.id, author_id)}
 
 
 @app.get("/api/blog/{slug}")
