@@ -764,6 +764,7 @@ export interface DeepInsights {
   cheapest: { title: string; price_twd: number; url: string; domain: string } | null;
   best_value: { title: string; price_twd: number; deal_score: number; url: string; domain: string } | null;
   vertical?: string;
+  headline?: string;
   facets?: InsightFacet[];
 }
 export interface InsightFacet {

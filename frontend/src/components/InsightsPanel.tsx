@@ -87,6 +87,8 @@ export default function InsightsPanel({ runId, records, vertical = "" }: { runId
         </div>
       )}
 
+      {data.headline && <p className="text-sm font-medium text-slate-600 dark:text-slate-300">{data.headline}</p>}
+
       {open && (
         <>
           {hasPrice ? (
