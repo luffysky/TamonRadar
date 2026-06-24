@@ -260,6 +260,9 @@ export interface NotifySettings {
   telegram_chat_id: string;
   openai_key: string;
   anthropic_key: string;
+  gemini_key: string;
+  groq_key: string;
+  openrouter_key: string;
   ai_provider: string;
 }
 

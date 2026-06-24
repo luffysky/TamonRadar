@@ -104,6 +104,9 @@ class SettingsRequest(BaseModel):
     telegram_chat_id: str = ""
     openai_key: str = ""
     anthropic_key: str = ""
+    gemini_key: str = ""
+    groq_key: str = ""
+    openrouter_key: str = ""
     ai_provider: str = ""
 
 
@@ -446,8 +449,8 @@ def _ai_args(user) -> dict:
     """讀使用者自備的 AI 金鑰(沒填則 ai 模組會自動退回後端共用金鑰)。"""
     st = db.get_settings(user.id)
     return {
-        "openai_key": st.get("openai_key", ""),
-        "anthropic_key": st.get("anthropic_key", ""),
+        "user_keys": {k: st.get(k, "") for k in
+                      ("openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key")},
         "prefer": st.get("ai_provider", ""),
     }
 
@@ -549,6 +552,9 @@ def put_settings(req: SettingsRequest, user=Depends(auth.get_current_user)):
         "telegram_chat_id": req.telegram_chat_id.strip(),
         "openai_key": req.openai_key.strip(),
         "anthropic_key": req.anthropic_key.strip(),
+        "gemini_key": req.gemini_key.strip(),
+        "groq_key": req.groq_key.strip(),
+        "openrouter_key": req.openrouter_key.strip(),
         "ai_provider": req.ai_provider.strip(),
     })
     return {"ok": True}

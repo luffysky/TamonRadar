@@ -96,7 +96,10 @@ class Settings(Base):
     # 使用者自備的 AI 金鑰(BYO);留空則用後端共用金鑰
     openai_key: Mapped[str] = mapped_column(String(255), default="")
     anthropic_key: Mapped[str] = mapped_column(String(255), default="")
-    ai_provider: Mapped[str] = mapped_column(String(20), default="")  # ""=自動, openai, anthropic
+    gemini_key: Mapped[str] = mapped_column(String(255), default="")
+    groq_key: Mapped[str] = mapped_column(String(255), default="")
+    openrouter_key: Mapped[str] = mapped_column(String(255), default="")
+    ai_provider: Mapped[str] = mapped_column(String(20), default="")  # ""=自動 / openai / gemini / groq / openrouter / anthropic
 
 
 class Schedule(Base):
@@ -201,6 +204,9 @@ def _ensure_columns() -> None:
         for col, ddl in (
             ("openai_key", "ALTER TABLE tr_user_settings ADD COLUMN openai_key VARCHAR(255) DEFAULT ''"),
             ("anthropic_key", "ALTER TABLE tr_user_settings ADD COLUMN anthropic_key VARCHAR(255) DEFAULT ''"),
+            ("gemini_key", "ALTER TABLE tr_user_settings ADD COLUMN gemini_key VARCHAR(255) DEFAULT ''"),
+            ("groq_key", "ALTER TABLE tr_user_settings ADD COLUMN groq_key VARCHAR(255) DEFAULT ''"),
+            ("openrouter_key", "ALTER TABLE tr_user_settings ADD COLUMN openrouter_key VARCHAR(255) DEFAULT ''"),
             ("ai_provider", "ALTER TABLE tr_user_settings ADD COLUMN ai_provider VARCHAR(20) DEFAULT ''"),
         ):
             if col not in cols:
@@ -295,32 +301,24 @@ def create_run_record(user_id: int, run_id: str, keywords: list, result: dict) -
 # ---------- 通知設定 ----------
 
 def get_settings(user_id: int) -> dict:
-    empty = {
-        "discord_webhook": "", "telegram_token": "", "telegram_chat_id": "",
-        "openai_key": "", "anthropic_key": "", "ai_provider": "",
-    }
+    fields = ("discord_webhook", "telegram_token", "telegram_chat_id",
+              "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key", "ai_provider")
     with SessionLocal() as s:
         st = s.get(Settings, user_id)
         if st is None:
-            return empty
-        return {
-            "discord_webhook": st.discord_webhook or "",
-            "telegram_token": st.telegram_token or "",
-            "telegram_chat_id": st.telegram_chat_id or "",
-            "openai_key": st.openai_key or "",
-            "anthropic_key": st.anthropic_key or "",
-            "ai_provider": st.ai_provider or "",
-        }
+            return {k: "" for k in fields}
+        return {k: (getattr(st, k) or "") for k in fields}
 
 
 def save_settings(user_id: int, data: dict) -> None:
+    fields = ("discord_webhook", "telegram_token", "telegram_chat_id",
+              "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key", "ai_provider")
     with SessionLocal() as s:
         st = s.get(Settings, user_id)
         if st is None:
             st = Settings(user_id=user_id)
             s.add(st)
-        for key in ("discord_webhook", "telegram_token", "telegram_chat_id",
-                    "openai_key", "anthropic_key", "ai_provider"):
+        for key in fields:
             if key in data and data[key] is not None:
                 setattr(st, key, data[key])
         s.commit()

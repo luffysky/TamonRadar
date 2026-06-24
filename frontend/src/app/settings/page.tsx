@@ -8,7 +8,7 @@ export default function SettingsPage() {
   const { user, ready } = useRequireAuth();
   const [form, setForm] = useState<NotifySettings>({
     discord_webhook: "", telegram_token: "", telegram_chat_id: "",
-    openai_key: "", anthropic_key: "", ai_provider: "",
+    openai_key: "", anthropic_key: "", gemini_key: "", groq_key: "", openrouter_key: "", ai_provider: "",
   });
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -102,14 +102,32 @@ export default function SettingsPage() {
             onChange={(e) => setForm({ ...form, anthropic_key: e.target.value })}
             placeholder="Anthropic API Key(sk-ant-...)" className={`${field} mt-2`}
           />
+          <input
+            type="password" value={form.gemini_key}
+            onChange={(e) => setForm({ ...form, gemini_key: e.target.value })}
+            placeholder="Google Gemini API Key" className={`${field} mt-2`}
+          />
+          <input
+            type="password" value={form.groq_key}
+            onChange={(e) => setForm({ ...form, groq_key: e.target.value })}
+            placeholder="Groq API Key(gsk_...)" className={`${field} mt-2`}
+          />
+          <input
+            type="password" value={form.openrouter_key}
+            onChange={(e) => setForm({ ...form, openrouter_key: e.target.value })}
+            placeholder="OpenRouter API Key(sk-or-...)" className={`${field} mt-2`}
+          />
           <select
             value={form.ai_provider}
             onChange={(e) => setForm({ ...form, ai_provider: e.target.value })}
             className={`${field} mt-2`}
           >
-            <option value="">自動(優先 GPT)</option>
-            <option value="openai">優先用 GPT</option>
-            <option value="anthropic">優先用 Claude</option>
+            <option value="">自動(依有填的金鑰)</option>
+            <option value="openai">優先 OpenAI(GPT)</option>
+            <option value="gemini">優先 Gemini</option>
+            <option value="groq">優先 Groq</option>
+            <option value="openrouter">優先 OpenRouter</option>
+            <option value="anthropic">優先 Claude</option>
           </select>
         </div>
 
