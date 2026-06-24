@@ -458,6 +458,20 @@ export async function setUserPlan(userId: number, plan: string): Promise<void> {
   if (!res.ok) throw new Error("更新方案失敗");
 }
 
+export async function setupTelegramBot(): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/telegram/setup`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("設定失敗");
+  return res.json();
+}
+
+export async function setupDiscordBot(): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/discord/setup`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("設定失敗");
+  return res.json();
+}
+
 // ---------- 部落格 ----------
 
 export interface BlogPost {

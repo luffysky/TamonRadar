@@ -8,7 +8,7 @@ import io
 import json
 import os
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -24,6 +24,7 @@ import mailer
 import notify
 import scheduler
 import uploader
+import bots
 from oauth_google import router as google_router
 from oauth_google import _frontend as _frontend_url
 from jobs import manager
@@ -236,6 +237,44 @@ async def upload_file(file: UploadFile = File(...), user=Depends(auth.get_curren
     except Exception as e:
         raise HTTPException(500, f"上傳失敗:{e}")
     return {"url": url, "name": file.filename, "type": file.content_type}
+
+
+@app.post("/api/telegram/webhook/{secret}")
+async def telegram_webhook(secret: str, request: Request):
+    if secret != os.environ.get("TELEGRAM_WEBHOOK_SECRET", "tamon"):
+        raise HTTPException(403, "invalid secret")
+    update = await request.json()
+    bots.handle_telegram_async(update)
+    return {"ok": True}
+
+
+@app.post("/api/admin/telegram/setup")
+def telegram_setup(request: Request, admin=Depends(auth.get_admin)):
+    base = os.environ.get("OAUTH_REDIRECT_BASE") or str(request.base_url).rstrip("/")
+    return bots.telegram_set_webhook(base)
+
+
+@app.post("/api/discord/interactions")
+async def discord_interactions(request: Request):
+    sig = request.headers.get("X-Signature-Ed25519")
+    ts = request.headers.get("X-Signature-Timestamp")
+    body = await request.body()
+    if not bots.verify_discord(sig, ts, body):
+        raise HTTPException(401, "bad request signature")
+    data = json.loads(body)
+    if data.get("type") == 1:
+        return {"type": 1}  # PING
+    if data.get("type") == 2:  # 斜線指令
+        opts = data.get("data", {}).get("options", [])
+        q = next((o.get("value", "") for o in opts if o.get("name") == "question"), "")
+        bots.handle_discord_command_async(data.get("application_id"), data.get("token"), q)
+        return {"type": 5}  # 先 defer,背景算完再 followup 編輯回覆
+    return {"type": 4, "data": {"content": "?"}}
+
+
+@app.post("/api/admin/discord/setup")
+def discord_setup(admin=Depends(auth.get_admin)):
+    return bots.discord_register_command()
 
 
 @app.post("/api/assistant")

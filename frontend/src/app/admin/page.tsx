@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  getAdminStats, getAdminUsers, setUserPlan,
+  getAdminStats, getAdminUsers, setUserPlan, setupTelegramBot, setupDiscordBot,
   type AdminStats, type AdminUser,
 } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
@@ -62,7 +62,21 @@ export default function AdminPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">管理員後台</h1>
-        <Link href="/admin/blog" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">部落格管理</Link>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={async () => { try { const r = await setupTelegramBot(); toast(r.ok ? "Telegram webhook 已設定" : `失敗:${r.error ?? ""}`, r.ok ? "success" : "error"); } catch { toast("設定失敗", "error"); } }}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"
+          >
+            設定 Telegram 機器人
+          </button>
+          <button
+            onClick={async () => { try { const r = await setupDiscordBot(); toast(r.ok ? "Discord 指令已註冊" : `失敗:${r.error ?? ""}`, r.ok ? "success" : "error"); } catch { toast("設定失敗", "error"); } }}
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"
+          >
+            註冊 Discord 指令
+          </button>
+          <Link href="/admin/blog" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">部落格管理</Link>
+        </div>
       </div>
 
       {stats && (
