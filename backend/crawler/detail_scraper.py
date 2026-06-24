@@ -39,6 +39,41 @@ def _light_fetch_one(url: str) -> dict:
         return {}
 
 
+def scrape_full_page(url: str) -> list[dict]:
+    """整頁抓取:給一個網址,抓出該頁所有表格列 + 內嵌商品(適合股票/排行/列表頁)。"""
+    r = requests.get(url, headers=_LIGHT_HEADERS, timeout=15)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "lxml")
+    out: list[dict] = []
+    # 1) 所有表格的每一列
+    for table in soup.find_all("table"):
+        for tr in table.find_all("tr"):
+            cells = [clean_text(td.get_text(" ", strip=True)) for td in tr.find_all(["td", "th"])]
+            cells = [c for c in cells if c]
+            if len(cells) < 2:
+                continue
+            title = " | ".join(cells[:6])
+            a = tr.find("a", href=True)
+            link = urljoin(url, a["href"]) if a else url
+            out.append({
+                "keyword": "", "title": title, "url": link, "domain": get_domain(link),
+                "snippet": "", "price": extract_price(" ".join(cells)),
+                "category": classify_item(title, "", ""), "character": "",
+                "is_listing": False, "image_url": "",
+            })
+    # 2) 內嵌結構化商品
+    out.extend(_extract_listing_products(soup, url, ""))
+    # 去重
+    seen: set = set()
+    uniq: list[dict] = []
+    for x in out:
+        k = (x.get("title", ""), x.get("url", ""))
+        if x.get("title") and k not in seen:
+            seen.add(k)
+            uniq.append(x)
+    return uniq[:500]
+
+
 def light_enrich(records: list[dict], max_items: int = 24) -> int:
     """為沒有圖片的商品頁(非列表頁)並行補上 og:image(免瀏覽器,雲端可用)。回傳補到幾張。"""
     targets = [r for r in records if not r.get("is_listing") and not r.get("image_url") and r.get("url", "").startswith("http")][:max_items]

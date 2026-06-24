@@ -92,6 +92,15 @@ export interface CrawlParams {
   vertical?: string;
 }
 
+export async function scrapePage(url: string): Promise<{ run_id: string; records: CrawlResult["records"]; summary: CrawlResult["summary"] }> {
+  const res = await fetch(`${API_BASE}/api/scrape-page`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ url }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "整頁抓取失敗");
+  return res.json();
+}
+
 export interface HealthInfo {
   ok: boolean;
   default_keywords: string[];

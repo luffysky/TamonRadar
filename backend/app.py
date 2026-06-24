@@ -417,6 +417,31 @@ def health():
     }
 
 
+class ScrapePageRequest(BaseModel):
+    url: str
+
+
+@app.post("/api/scrape-page")
+def scrape_page(req: ScrapePageRequest, user=Depends(auth.get_current_user)):
+    """整頁抓取:給一個網址,抓出該頁所有表格列/商品(股票排行、列表頁適用)。"""
+    _enforce_quota(user, "search")
+    if not req.url.strip().startswith("http"):
+        raise HTTPException(400, "請貼有效的網址(http/https)")
+    import uuid
+    from crawler.detail_scraper import scrape_full_page
+    from crawler.reporter import to_dataframe, build_summary
+    try:
+        recs = scrape_full_page(req.url.strip())
+    except Exception as e:
+        raise HTTPException(400, f"抓取失敗:{e}")
+    df = to_dataframe(recs)
+    summary = build_summary(df)
+    records = df.to_dict(orient="records")
+    rid = uuid.uuid4().hex[:12]
+    db.create_run_record(user.id, rid, [req.url.strip()], {"records": records, "summary": summary})
+    return {"run_id": rid, "records": records, "summary": summary}
+
+
 @app.post("/api/crawl")
 def start_crawl(req: CrawlRequest, user=Depends(auth.get_current_user)):
     _enforce_quota(user, "search")

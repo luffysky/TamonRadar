@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords } from "@/lib/api";
+import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords, scrapePage } from "@/lib/api";
 import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
 
@@ -34,6 +34,7 @@ export default function HomePage() {
   const [health, setHealth] = useState<HealthInfo | null>(null);
 
   const [jobId, setJobId] = useState<string | null>(null);
+  const [pageUrl, setPageUrl] = useState("");
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
   const [result, setResult] = useState<CrawlResult | null>(null);
@@ -96,6 +97,21 @@ export default function HomePage() {
     if (jobId) stopCrawl(jobId);
   }
 
+  async function handleScrapePage() {
+    const url = pageUrl.trim();
+    if (!url.startsWith("http") || running) return;
+    setRunning(true); setError(null); setResult(null); setEvents([]);
+    try {
+      const r = await scrapePage(url);
+      setJobId(r.run_id);
+      setResult({ records: r.records, summary: r.summary });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "整頁抓取失敗");
+    } finally {
+      setRunning(false);
+    }
+  }
+
   function pickVertical(key: string) {
     setVertical(key);
     const v = getVertical(key);
@@ -130,7 +146,7 @@ export default function HomePage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
-          <div className="scroll-thin -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
+          <div className="scroll-thin mb-3 flex w-full gap-1.5 overflow-x-auto pb-1">
             {VERTICALS.map((v) => (
               <button
                 key={v.key}
@@ -232,6 +248,24 @@ export default function HomePage() {
           <p className="mt-2 text-xs text-slate-400">
             提醒:Google 可能跳出驗證而擋下自動搜尋,系統會標記並跳過該關鍵字。請勿大量爬取。
           </p>
+
+          <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700">
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">或:整頁抓取(貼一個網址,抓出整頁所有列/商品)</label>
+            <p className="mb-2 text-xs text-slate-400">適合股票排行、商品列表、排行榜這種「一頁很多項」的頁面。</p>
+            <div className="flex gap-2">
+              <input
+                value={pageUrl}
+                onChange={(e) => setPageUrl(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleScrapePage()}
+                placeholder="https://… 整頁網址"
+                disabled={running}
+                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900"
+              />
+              <button onClick={handleScrapePage} disabled={running || !pageUrl.trim().startsWith("http")} className="shrink-0 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
+                抓整頁
+              </button>
+            </div>
+          </div>
         </div>
 
         <ProgressPanel events={events} running={running} />
