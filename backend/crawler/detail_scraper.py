@@ -39,6 +39,62 @@ def _light_fetch_one(url: str) -> dict:
         return {}
 
 
+_JSON_NAME_KEYS = {"name", "title", "symbolname", "longname", "shortname", "label", "productname"}
+_JSON_PRICE_KEYS = {"price", "last", "lastprice", "regularmarketprice", "close", "value", "amount"}
+
+
+def _items_from_embedded_json(soup: BeautifulSoup, url: str) -> list[dict]:
+    """從頁面內嵌 JSON(__NEXT_DATA__ / application/json)抽出「有名稱+價格」的資料列。
+
+    用於 JS 動態渲染(SPA)站:資料常藏在頁面 JSON 裡,靜態 HTML 沒有表格。
+    """
+    rows: list[tuple[str, str]] = []
+
+    def walk(o, depth=0):
+        if depth > 12 or len(rows) > 400:
+            return
+        if isinstance(o, dict):
+            low = {k.lower(): k for k in o.keys()}
+            nk = next((low[k] for k in _JSON_NAME_KEYS if k in low), None)
+            pk = next((low[k] for k in _JSON_PRICE_KEYS if k in low), None)
+            if nk and pk:
+                name = o.get(nk)
+                price = o.get(pk)
+                if isinstance(name, str) and name.strip() and isinstance(price, (int, float, str)) and str(price).strip():
+                    pv = str(price)
+                    if any(ch.isdigit() for ch in pv):  # 價格要含數字才算
+                        rows.append((name.strip(), pv))
+            for v in o.values():
+                walk(v, depth + 1)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v, depth + 1)
+
+    for tag in soup.find_all("script"):
+        t = (tag.get("type") or "").lower()
+        if tag.get("id") == "__NEXT_DATA__" or t == "application/json":
+            raw = tag.string or tag.get_text() or ""
+            if not raw.strip():
+                continue
+            try:
+                walk(json.loads(raw))
+            except Exception:
+                continue
+
+    seen: set = set()
+    out: list[dict] = []
+    for name, price in rows:
+        if name in seen:
+            continue
+        seen.add(name)
+        out.append({
+            "keyword": "", "title": name, "url": url, "domain": get_domain(url),
+            "snippet": "", "price": price if any(c in price for c in "0123456789") and len(price) <= 20 else "",
+            "category": classify_item(name, "", ""), "character": "", "is_listing": False, "image_url": "",
+        })
+    return out[:200]
+
+
 def items_from_soup(soup: BeautifulSoup, url: str) -> list[dict]:
     """從已解析的頁面抽出所有表格列 + 內嵌商品(整頁/整站共用)。"""
     out: list[dict] = []
@@ -58,6 +114,9 @@ def items_from_soup(soup: BeautifulSoup, url: str) -> list[dict]:
                 "is_listing": False, "image_url": "",
             })
     out.extend(_extract_listing_products(soup, url, ""))
+    # 靜態 HTML 沒抓到東西時,再試內嵌 JSON(SPA 站)
+    if not out:
+        out.extend(_items_from_embedded_json(soup, url))
     return out
 
 
