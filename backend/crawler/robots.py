@@ -8,12 +8,9 @@ import requests
 UA = "TamonRadarBot"
 _cache: dict[str, urllib.robotparser.RobotFileParser] = {}
 
-# 預設封鎖:登入牆/服務條款明文禁止自動抓取的站(可用 BLOCKED_DOMAINS 增補)
-_DEFAULT_BLOCK = {
-    "facebook.com", "instagram.com", "linkedin.com", "x.com", "twitter.com",
-    "threads.net", "tiktok.com", "pinterest.com",
-}
-_BLOCK = _DEFAULT_BLOCK | {d.strip().lower() for d in os.environ.get("BLOCKED_DOMAINS", "").split(",") if d.strip()}
+# 預設不硬封鎖任何網域(包含需登入的站):一律以各站 robots.txt 為準。
+# 若要手動封鎖特定網域,設 BLOCKED_DOMAINS(逗號分隔)。
+_BLOCK = {d.strip().lower() for d in os.environ.get("BLOCKED_DOMAINS", "").split(",") if d.strip()}
 
 
 def blocked(url: str) -> bool:

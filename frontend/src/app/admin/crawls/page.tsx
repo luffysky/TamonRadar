@@ -24,7 +24,7 @@ export default function AdminCrawlsPage() {
         <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0" />
         <div>
           <p className="font-semibold">所有人的每一輪爬取都自動套用同一套規則:</p>
-          <p className="mt-0.5 text-xs">✓ 遵守 robots.txt ✓ 封鎖登入牆/禁爬站 ✓ 自動節流 ✓ 僅抓公開資料 ✓ 每日配額。這些是程式層強制,不分使用者、無法繞過。</p>
+          <p className="mt-0.5 text-xs">✓ 一律遵守各站 robots.txt ✓ 自動節流 ✓ 僅抓公開資料 ✓ 每日配額。這些是程式層強制,不分使用者、無法繞過(需登入的站也只抓公開部分)。</p>
         </div>
       </div>
 
