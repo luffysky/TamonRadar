@@ -8,6 +8,7 @@ import { getVertical } from "@/lib/verticals";
 import { Sparkles, GitCompare } from "lucide-react";
 import Markdown from "./Markdown";
 import StatCards from "./StatCards";
+import InsightsPanel from "./InsightsPanel";
 import BarChart from "./BarChart";
 import ProductCards from "./ProductCards";
 import ListingCards from "./ListingCards";
@@ -105,6 +106,9 @@ export default function ResultsView({
   return (
     <div className="space-y-5">
       <StatCards summary={summary} />
+
+      {v.kind === "product" && <InsightsPanel runId={runId} />}
+
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-slate-600 dark:text-slate-300">匯出:</span>

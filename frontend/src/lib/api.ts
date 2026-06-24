@@ -706,6 +706,27 @@ export async function getAiCosts(): Promise<AiCosts> {
   return res.json();
 }
 
+export interface DeepInsights {
+  total: number;
+  price_stats: { count: number; min: number; max: number; median: number; avg: number; p25: number; p75: number } | Record<string, never>;
+  histogram: { range: string; count: number }[];
+  good_deals: { title: string; price_twd: number; discount_pct: number; url: string; domain: string; status: string }[];
+  outliers: { title: string; reason: string; price_twd: number; url: string; domain: string }[];
+  clusters: { title: string; count: number; domains: string[]; min_twd: number | null; cheapest_url: string; cheapest_domain: string }[];
+  status_dist: Record<string, number>;
+  trust_dist: Record<string, number>;
+  cheapest: { title: string; price_twd: number; url: string; domain: string } | null;
+  best_value: { title: string; price_twd: number; deal_score: number; url: string; domain: string } | null;
+}
+export async function getInsights(runId?: string, records?: unknown[]): Promise<DeepInsights> {
+  const res = await fetch(`${API_BASE}/api/insights`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(runId ? { run_id: runId } : { records }),
+  });
+  if (!res.ok) throw new Error("分析失敗");
+  return res.json();
+}
+
 export interface AiProviderConfig { model: string; enabled: boolean; has_key: boolean; key_hint?: string; }
 export interface AiConfig { default_provider: string; providers: Record<string, AiProviderConfig>; }
 export async function getAiConfig(): Promise<AiConfig> {

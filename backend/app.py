@@ -25,6 +25,7 @@ import notify
 import scheduler
 import uploader
 import bots
+import insights as insights_mod
 from oauth_google import router as google_router
 from oauth_google import _frontend as _frontend_url
 from jobs import manager
@@ -429,6 +430,21 @@ def go_redirect(target: str):
     if not url:
         raise HTTPException(404, "未知的連結")
     return RedirectResponse(url, status_code=302)
+
+
+class InsightsRequest(BaseModel):
+    run_id: str | None = None
+    records: list[dict] | None = None
+    vertical: str = ""
+
+
+@app.post("/api/insights")
+def insights_endpoint(req: InsightsRequest):
+    records = req.records
+    if records is None and req.run_id:
+        run = db.get_run(req.run_id)
+        records = (run or {}).get("records", []) if run else []
+    return insights_mod.deep_insights(records or [], req.vertical)
 
 
 @app.get("/api/health")
