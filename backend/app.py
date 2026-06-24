@@ -1202,6 +1202,12 @@ def forum_thread(thread_id: int):
     return t
 
 
+@app.post("/api/forum/threads/{thread_id}/like")
+def forum_like(thread_id: int):
+    likes = db.like_thread(thread_id)
+    return {"likes": likes}
+
+
 @app.post("/api/forum/threads")
 def forum_create_thread(req: ThreadRequest, user=Depends(auth.get_current_user)):
     if req.category not in _FORUM_SLUGS:

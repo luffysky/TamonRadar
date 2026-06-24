@@ -59,9 +59,15 @@ export default function UserMenu() {
             </Link>
           ))}
           {user.is_admin && (
-            <Link href={ADMIN_BASE} onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-slate-700">
-              <Shield className="h-4 w-4" /> 管理後台
-            </Link>
+            <>
+              <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
+              <Link href={ADMIN_BASE} onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-slate-700">
+                <Shield className="h-4 w-4" /> 管理後台(CRM / ERP)
+              </Link>
+              <Link href={`${ADMIN_BASE}/ops`} onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-slate-700">
+                <Shield className="h-4 w-4" /> 營運管理
+              </Link>
+            </>
           )}
           <button onClick={() => { setOpen(false); signOut(); }} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-slate-700">
             <LogOut className="h-4 w-4" /> 登出

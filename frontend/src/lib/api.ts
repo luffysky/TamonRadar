@@ -787,8 +787,14 @@ export async function getPriceHistory(url: string): Promise<{ history: { date: s
 export interface ForumCategory { slug: string; label: string; emoji: string; }
 export interface ForumThread {
   id: number; category: string; title: string; author: string; author_id: number;
-  reply_count: number; created_at: string | null; last_reply_at: string | null;
+  reply_count: number; likes?: number; created_at: string | null; last_reply_at: string | null;
   content?: string; replies?: ForumReply[];
+}
+
+export async function likeThread(id: number): Promise<{ likes: number }> {
+  const res = await fetch(`${API_BASE}/api/forum/threads/${id}/like`, { method: "POST" });
+  if (!res.ok) throw new Error("按讚失敗");
+  return res.json();
 }
 export interface ForumReply { id: number; content: string; author: string; author_id: number; created_at: string | null; }
 

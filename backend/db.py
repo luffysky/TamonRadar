@@ -170,6 +170,7 @@ class Thread(Base):
     author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
     author_email: Mapped[str] = mapped_column(String(255), default="")
     reply_count: Mapped[int] = mapped_column(default=0)
+    likes: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_reply_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
@@ -262,6 +263,12 @@ def _ensure_columns() -> None:
             if col not in cols:
                 with engine.begin() as conn:
                     conn.execute(text(ddl))
+
+    if "tr_threads" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_threads")}
+        if "likes" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE tr_threads ADD COLUMN likes INTEGER DEFAULT 0"))
 
     if "tr_watches" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_watches")}
@@ -1137,6 +1144,7 @@ def _thread_dict(t: "Thread", full: bool = False) -> dict:
         "author": _display_name(t.author_email),
         "author_id": t.author_id,
         "reply_count": t.reply_count,
+        "likes": t.likes or 0,
         "created_at": t.created_at.isoformat() if t.created_at else None,
         "last_reply_at": t.last_reply_at.isoformat() if t.last_reply_at else None,
     }
@@ -1153,6 +1161,16 @@ def _reply_dict(r: "Reply") -> dict:
         "author_id": r.author_id,
         "created_at": r.created_at.isoformat() if r.created_at else None,
     }
+
+
+def like_thread(thread_id: int) -> int:
+    with SessionLocal() as s:
+        t = s.get(Thread, thread_id)
+        if not t:
+            return 0
+        t.likes = (t.likes or 0) + 1
+        s.commit()
+        return t.likes
 
 
 def list_threads(category: str | None = None, limit: int = 100) -> list[dict]:
