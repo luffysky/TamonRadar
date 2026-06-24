@@ -107,7 +107,7 @@ export default function ResultsView({
     <div className="space-y-5">
       <StatCards summary={summary} />
 
-      {v.kind === "product" && <InsightsPanel runId={runId} />}
+      <InsightsPanel runId={runId} vertical={vertical} />
 
 
       <div className="flex flex-wrap items-center gap-2">

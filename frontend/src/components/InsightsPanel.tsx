@@ -5,7 +5,7 @@ import { TrendingDown, Award, Layers, AlertTriangle, BarChart3 } from "lucide-re
 import { getInsights, type DeepInsights } from "@/lib/api";
 import type { CrawlResult } from "@/lib/types";
 
-export default function InsightsPanel({ runId, records }: { runId?: string; records?: CrawlResult["records"] }) {
+export default function InsightsPanel({ runId, records, vertical = "" }: { runId?: string; records?: CrawlResult["records"]; vertical?: string }) {
   const [data, setData] = useState<DeepInsights | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(true);
@@ -13,12 +13,12 @@ export default function InsightsPanel({ runId, records }: { runId?: string; reco
   useEffect(() => {
     let on = true;
     setLoading(true);
-    getInsights(runId, records as unknown[])
+    getInsights(runId, records as unknown[], vertical)
       .then((d) => on && setData(d))
       .catch(() => on && setData(null))
       .finally(() => on && setLoading(false));
     return () => { on = false; };
-  }, [runId, records]);
+  }, [runId, records, vertical]);
 
   if (loading) return <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-400 dark:border-slate-700 dark:bg-slate-800">深度情報分析中…</div>;
   if (!data || data.total === 0) return null;
@@ -99,6 +99,27 @@ export default function InsightsPanel({ runId, records }: { runId?: string; reco
               <p className="mb-1 flex items-center gap-1.5 font-semibold text-rose-600"><AlertTriangle className="h-4 w-4" /> 價格異常提醒</p>
               {data.outliers.slice(0, 4).map((o, i) => (
                 <p key={i} className="truncate text-slate-600 dark:text-slate-300">{o.title} — NT${o.price_twd.toLocaleString()}（{o.reason}）</p>
+              ))}
+            </div>
+          )}
+
+          {data.facets && data.facets.length > 0 && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {data.facets.map((f, i) => (
+                <div key={i} className="rounded-xl bg-white p-3 shadow-sm dark:bg-slate-900">
+                  <p className="mb-1.5 text-xs font-semibold text-slate-600 dark:text-slate-300">{f.label}</p>
+                  {f.type === "range" ? (
+                    <p className="text-sm text-slate-700 dark:text-slate-200">
+                      {f.min}{f.unit} ~ {f.max}{f.unit} <span className="text-xs text-slate-400">(中位 {f.median}{f.unit}・{f.count} 筆)</span>
+                    </p>
+                  ) : (
+                    <div className="flex flex-wrap gap-1">
+                      {(f.items || []).length === 0 ? <span className="text-xs text-slate-400">—</span> : (f.items || []).map((it) => (
+                        <span key={it.name} className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600 dark:bg-slate-700 dark:text-slate-300">{it.name} {it.count}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}

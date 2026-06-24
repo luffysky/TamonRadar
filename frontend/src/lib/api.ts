@@ -754,11 +754,20 @@ export interface DeepInsights {
   trust_dist: Record<string, number>;
   cheapest: { title: string; price_twd: number; url: string; domain: string } | null;
   best_value: { title: string; price_twd: number; deal_score: number; url: string; domain: string } | null;
+  vertical?: string;
+  facets?: InsightFacet[];
 }
-export async function getInsights(runId?: string, records?: unknown[]): Promise<DeepInsights> {
+export interface InsightFacet {
+  type: "dist" | "range" | "stat";
+  label: string;
+  items?: { name: string; count: number }[];
+  unit?: string; min?: number; max?: number; median?: number; count?: number;
+  value?: string | number;
+}
+export async function getInsights(runId?: string, records?: unknown[], vertical = ""): Promise<DeepInsights> {
   const res = await fetch(`${API_BASE}/api/insights`, {
     method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(runId ? { run_id: runId } : { records }),
+    body: JSON.stringify(runId ? { run_id: runId, vertical } : { records, vertical }),
   });
   if (!res.ok) throw new Error("分析失敗");
   return res.json();

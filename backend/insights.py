@@ -82,6 +82,140 @@ def _cluster(items: list[dict]) -> list[dict]:
     return clusters
 
 
+def _num(s: str) -> float | None:
+    m = re.search(r"[\d,]+(?:\.\d+)?", s or "")
+    return float(m.group(0).replace(",", "")) if m else None
+
+
+def _dist(items: list[dict], extract) -> list[dict]:
+    d: dict = {}
+    for it in items:
+        v = extract(it)
+        if v:
+            d[v] = d.get(v, 0) + 1
+    return [{"name": k, "count": v} for k, v in sorted(d.items(), key=lambda x: -x[1])][:10]
+
+
+def _range_facet(label: str, values: list[float], unit: str) -> dict | None:
+    vals = sorted(v for v in values if v is not None)
+    if not vals:
+        return None
+    n = len(vals)
+    return {"type": "range", "label": label, "unit": unit,
+            "min": round(vals[0], 1), "max": round(vals[-1], 1),
+            "median": round(vals[n // 2], 1), "count": n}
+
+
+# 各垂直的地區關鍵字(取最常見台灣縣市)
+_REGIONS = ["台北", "臺北", "新北", "桃園", "台中", "臺中", "台南", "臺南", "高雄", "新竹", "基隆",
+            "嘉義", "宜蘭", "花蓮", "台東", "臺東", "屏東", "雲林", "彰化", "南投", "苗栗", "澎湖", "金門"]
+
+
+def _region_of(it: dict) -> str:
+    blob = f"{it['title']} {it.get('snippet','')}"
+    for r in _REGIONS:
+        if r in blob:
+            return r.replace("臺", "台")
+    return ""
+
+
+def _facets(items: list[dict], vertical: str) -> list[dict]:
+    """依垂直產生專屬分析面向(facets)。"""
+    facets: list[dict] = []
+    blob = lambda it: f"{it['title']} {it.get('snippet','')}"  # noqa: E731
+
+    if vertical == "food":
+        ratings = []
+        for it in items:
+            m = re.search(r"([0-5](?:\.\d)?)\s*(?:顆星|星|★|分|/5)", blob(it))
+            if m:
+                ratings.append(float(m.group(1)))
+        r = _range_facet("評分", ratings, "★")
+        if r:
+            facets.append(r)
+        facets.append({"type": "dist", "label": "地區分佈", "items": _dist(items, _region_of)})
+        facets.append({"type": "dist", "label": "類型", "items": _dist(items, lambda it: next(
+            (k for k in ["火鍋", "燒肉", "壽司", "拉麵", "咖啡", "甜點", "早午餐", "牛排", "素食", "小吃", "吃到飽"] if k in blob(it)), ""))})
+
+    elif vertical in ("job", "創業", "職缺"):
+        sals = []
+        for it in items:
+            for m in re.finditer(r"(?:月薪|年薪|時薪|NT\$|薪資)\s*([\d,]+)", blob(it)):
+                sals.append(float(m.group(1).replace(",", "")))
+        r = _range_facet("薪資出現值", sals, "")
+        if r:
+            facets.append(r)
+        facets.append({"type": "dist", "label": "地區分佈", "items": _dist(items, _region_of)})
+        facets.append({"type": "dist", "label": "工作型態", "items": _dist(items, lambda it: next(
+            (k for k in ["遠端", "在家", "兼職", "正職", "實習", "派遣", "接案"] if k in blob(it)), ""))})
+
+    elif vertical in ("realestate", "房產", "房地產"):
+        prices = [_num(re.sub(r".*?", "", "")) for _ in []]
+        totals, pings, ages = [], [], []
+        for it in items:
+            b = blob(it)
+            mt = re.search(r"([\d,]+)\s*萬", b)
+            if mt:
+                totals.append(float(mt.group(1).replace(",", "")))
+            mp = re.search(r"([\d.]+)\s*坪", b)
+            if mp:
+                pings.append(float(mp.group(1)))
+            ma = re.search(r"(?:屋齡)\s*([\d.]+)", b)
+            if ma:
+                ages.append(float(ma.group(1)))
+        for f in (_range_facet("總價", totals, "萬"), _range_facet("坪數", pings, "坪"), _range_facet("屋齡", ages, "年")):
+            if f:
+                facets.append(f)
+        facets.append({"type": "dist", "label": "地區分佈", "items": _dist(items, _region_of)})
+
+    elif vertical in ("travel", "旅遊"):
+        nights, stars = [], []
+        for it in items:
+            b = blob(it)
+            mn = re.search(r"(\d+)\s*天", b)
+            if mn:
+                nights.append(float(mn.group(1)))
+            ms = re.search(r"([1-5])\s*星", b)
+            if ms:
+                stars.append(float(ms.group(1)))
+        for f in (_range_facet("天數", nights, "天"), _range_facet("星等", stars, "★")):
+            if f:
+                facets.append(f)
+        facets.append({"type": "dist", "label": "目的地", "items": _dist(items, _region_of)})
+
+    elif vertical in ("course", "health", "課程", "健康"):
+        hours, ratings = [], []
+        for it in items:
+            b = blob(it)
+            mh = re.search(r"([\d.]+)\s*(?:小時|時數|hr)", b)
+            if mh:
+                hours.append(float(mh.group(1)))
+            mr = re.search(r"([0-5](?:\.\d)?)\s*(?:星|★|分)", b)
+            if mr:
+                ratings.append(float(mr.group(1)))
+        for f in (_range_facet("時數", hours, "小時"), _range_facet("評分", ratings, "★")):
+            if f:
+                facets.append(f)
+        facets.append({"type": "dist", "label": "難度", "items": _dist(items, lambda it: next(
+            (k for k in ["入門", "初級", "中級", "進階", "高級", "零基礎"] if k in blob(it)), ""))})
+
+    elif vertical in ("pet", "animal", "寵物", "動物"):
+        facets.append({"type": "dist", "label": "類別", "items": _dist(items, lambda it: next(
+            (k for k in ["貓", "狗", "兔", "鼠", "鳥", "魚", "爬蟲"] if k in blob(it)), ""))})
+        facets.append({"type": "dist", "label": "性質", "items": _dist(items, lambda it: next(
+            (k for k in ["送養", "認養", "領養", "販售", "出售", "走失", "協尋"] if k in blob(it)), ""))})
+        facets.append({"type": "dist", "label": "地區分佈", "items": _dist(items, _region_of)})
+
+    elif vertical in ("stock", "crypto", "股市", "加密貨幣"):
+        ups = sum(1 for it in items if any(k in blob(it) for k in ["漲", "上漲", "+"]))
+        downs = sum(1 for it in items if any(k in blob(it) for k in ["跌", "下跌", "-"]))
+        facets.append({"type": "dist", "label": "情緒傾向", "items": [{"name": "偏多/漲", "count": ups}, {"name": "偏空/跌", "count": downs}]})
+
+    # 共通:來源分佈(所有垂直都有用)
+    facets.append({"type": "dist", "label": "來源網站", "items": _dist(items, lambda it: it.get("domain", ""))})
+    return [f for f in facets if f and (f.get("items") or f.get("median") is not None)]
+
+
 def deep_insights(records: list[dict], vertical: str = "") -> dict:
     items = []
     for r in records or []:
@@ -162,6 +296,7 @@ def deep_insights(records: list[dict], vertical: str = "") -> dict:
 
     return {
         "total": len(items),
+        "vertical": vertical,
         "price_stats": stats,
         "histogram": histogram,
         "good_deals": good_deals[:10],
@@ -171,4 +306,5 @@ def deep_insights(records: list[dict], vertical: str = "") -> dict:
         "trust_dist": trust_dist,
         "cheapest": cheapest,
         "best_value": best,
+        "facets": _facets(items, vertical),
     }
