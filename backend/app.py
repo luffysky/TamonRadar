@@ -645,6 +645,26 @@ def admin_users(admin=Depends(auth.get_admin)):
     return {"users": db.admin_users()}
 
 
+class NoteRequest(BaseModel):
+    admin_note: str = ""
+    tags: list[str] = Field(default_factory=list)
+
+
+@app.get("/api/admin/users/{user_id}")
+def admin_user_detail(user_id: int, admin=Depends(auth.get_admin)):
+    d = db.get_user_detail(user_id)
+    if not d:
+        raise HTTPException(404, "找不到使用者")
+    return d
+
+
+@app.post("/api/admin/users/{user_id}/note")
+def admin_user_note(user_id: int, req: NoteRequest, admin=Depends(auth.get_admin)):
+    if not db.set_user_note(user_id, req.admin_note, req.tags):
+        raise HTTPException(404, "找不到使用者")
+    return {"ok": True}
+
+
 @app.post("/api/admin/users/{user_id}/plan")
 def admin_set_plan(user_id: int, req: PlanRequest, admin=Depends(auth.get_admin)):
     if req.plan not in ("free", "pro"):

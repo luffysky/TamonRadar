@@ -64,6 +64,8 @@ class User(Base):
     provider: Mapped[str] = mapped_column(String(32), default="local")   # local | google
     plan: Mapped[str] = mapped_column(String(20), default="free")        # free | pro
     ai_used: Mapped[int] = mapped_column(default=0)                      # AI 累計呼叫次數
+    admin_note: Mapped[str] = mapped_column(Text, default="")           # 後台備註(CRM)
+    tags: Mapped[list] = mapped_column(JSON, default=list)              # 後台標籤(CRM)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     runs: Mapped[list["Run"]] = relationship(back_populates="user", cascade="all, delete-orphan")
@@ -187,6 +189,8 @@ def _ensure_columns() -> None:
             ("provider", "ALTER TABLE tr_users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"),
             ("plan", "ALTER TABLE tr_users ADD COLUMN plan VARCHAR(20) DEFAULT 'free'"),
             ("ai_used", "ALTER TABLE tr_users ADD COLUMN ai_used INTEGER DEFAULT 0"),
+            ("admin_note", "ALTER TABLE tr_users ADD COLUMN admin_note TEXT DEFAULT ''"),
+            ("tags", "ALTER TABLE tr_users ADD COLUMN tags JSON"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -545,8 +549,37 @@ def admin_users(limit: int = 500) -> list[dict]:
             "provider": u.provider,
             "plan": u.plan,
             "ai_used": u.ai_used or 0,
+            "tags": u.tags or [],
             "created_at": u.created_at.isoformat() if u.created_at else None,
         } for u in rows]
+
+
+def get_user_detail(user_id: int) -> dict | None:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return None
+        runs = s.scalar(select(func.count()).select_from(Run).where(Run.user_id == user_id)) or 0
+        watches = s.scalar(select(func.count()).select_from(Watch).where(Watch.user_id == user_id)) or 0
+        schedules = s.scalar(select(func.count()).select_from(Schedule).where(Schedule.user_id == user_id)) or 0
+        threads = s.scalar(select(func.count()).select_from(Thread).where(Thread.author_id == user_id)) or 0
+        return {
+            "id": u.id, "email": u.email, "provider": u.provider, "plan": u.plan,
+            "ai_used": u.ai_used or 0, "admin_note": u.admin_note or "", "tags": u.tags or [],
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "counts": {"runs": int(runs), "watches": int(watches), "schedules": int(schedules), "threads": int(threads)},
+        }
+
+
+def set_user_note(user_id: int, note: str, tags: list) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return False
+        u.admin_note = note
+        u.tags = tags
+        s.commit()
+        return True
 
 
 # ---------- 部落格 ----------

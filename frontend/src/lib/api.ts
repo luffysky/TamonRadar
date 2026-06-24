@@ -417,6 +417,27 @@ export async function getAdminUsers(): Promise<{ users: AdminUser[] }> {
   return res.json();
 }
 
+export interface AdminUserDetail extends AdminUser {
+  admin_note: string;
+  tags: string[];
+  counts: { runs: number; watches: number; schedules: number; threads: number };
+}
+
+export async function getAdminUserDetail(id: number): Promise<AdminUserDetail> {
+  const res = await fetch(`${API_BASE}/api/admin/users/${id}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取使用者失敗");
+  return res.json();
+}
+
+export async function setUserNote(id: number, admin_note: string, tags: string[]): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/users/${id}/note`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ admin_note, tags }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("儲存備註失敗");
+}
+
 export async function setUserPlan(userId: number, plan: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/admin/users/${userId}/plan`, {
     method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ plan }),
