@@ -145,6 +145,8 @@ class Watch(Base):
     mode: Mapped[str] = mapped_column(String(20), default="stock")        # stock=到貨/補貨;content=內容新增減少
     snapshot: Mapped[list] = mapped_column(JSON, default=list)            # content 模式:上次該頁品項 [[標題,價格],...]
     notify_on: Mapped[list] = mapped_column(JSON, default=list)           # content 要通知的事件:new/removed/price
+    cta_text: Mapped[str] = mapped_column(String(60), default="")         # 對方頁面 CTA 文字(立即購買/加入購物車)
+    cta_url: Mapped[str] = mapped_column(String(1000), default="")        # CTA 連結
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -337,6 +339,8 @@ def _ensure_columns() -> None:
             ("mode", "ALTER TABLE tr_watches ADD COLUMN mode VARCHAR(20) DEFAULT 'stock'"),
             ("snapshot", "ALTER TABLE tr_watches ADD COLUMN snapshot JSON"),
             ("notify_on", "ALTER TABLE tr_watches ADD COLUMN notify_on JSON"),
+            ("cta_text", "ALTER TABLE tr_watches ADD COLUMN cta_text VARCHAR(60) DEFAULT ''"),
+            ("cta_url", "ALTER TABLE tr_watches ADD COLUMN cta_url VARCHAR(1000) DEFAULT ''"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -619,7 +623,9 @@ def _watch_dict(w: "Watch") -> dict:
         "last_price_twd": w.last_price_twd,
         "mode": w.mode or "stock",
         "snapshot": w.snapshot or [],
-        "notify_on": w.notify_on or ["new", "removed", "price"],
+        "notify_on": w.notify_on or ["new", "removed", "price", "restock"],
+        "cta_text": w.cta_text or "",
+        "cta_url": w.cta_url or "",
     }
 
 
@@ -655,7 +661,7 @@ def create_watch(user_id: int, data: dict) -> dict:
             enabled=data.get("enabled", True),
             target_price=data.get("target_price"),
             mode=data.get("mode", "stock"),
-            notify_on=data.get("notify_on") or ["new", "removed", "price"],
+            notify_on=data.get("notify_on") or ["new", "removed", "price", "restock"],
         )
         s.add(w)
         s.commit()
@@ -674,6 +680,15 @@ def update_watch(watch_id: int, user_id: int, data: dict) -> dict | None:
         s.commit()
         s.refresh(w)
         return _watch_dict(w)
+
+
+def set_watch_cta(watch_id: int, text: str, url: str) -> None:
+    with SessionLocal() as s:
+        w = s.get(Watch, watch_id)
+        if w and url:
+            w.cta_text = (text or "")[:60]
+            w.cta_url = url[:1000]
+            s.commit()
 
 
 def set_watch_snapshot(watch_id: int, items: list) -> None:

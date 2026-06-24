@@ -22,8 +22,7 @@ export default function WatchesPage() {
   const [url, setUrl] = useState("");
   const [interval, setIntervalMin] = useState(5);
   const [targetPrice, setTargetPrice] = useState("");
-  const [mode, setMode] = useState("stock");
-  const [notifyOn, setNotifyOn] = useState<string[]>(["new", "removed", "price"]);
+  const [notifyOn, setNotifyOn] = useState<string[]>(["new", "removed", "price", "restock"]);
   const [busy, setBusy] = useState(false);
 
   function toggleNotify(k: string) {
@@ -58,7 +57,6 @@ export default function WatchesPage() {
         available_keywords: [], unavailable_keywords: [],
         interval_minutes: interval, enabled: true,
         target_price: targetPrice.trim() ? Number(targetPrice.replace(/[^0-9]/g, "")) : null,
-        mode,
         notify_on: notifyOn,
       };
       await createWatch(data);
@@ -106,25 +104,16 @@ export default function WatchesPage() {
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="名稱(例:XXX 演唱會門票)" className={field} />
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://要監看的網址" className={field} />
         <div className="flex items-end gap-3">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600 dark:text-slate-300">監看模式</span>
-            <select value={mode} onChange={(e) => setMode(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600 dark:bg-slate-900">
-              <option value="stock">到貨/補貨(售完↔可購買)</option>
-              <option value="content">內容變動(新上架/下架/改價)</option>
-            </select>
-          </label>
-          {mode === "content" && (
-            <div className="flex flex-col gap-1 text-sm">
-              <span className="text-slate-600 dark:text-slate-300">通知條件</span>
-              <div className="flex flex-wrap gap-3 pt-1.5">
-                {[["new", "新增商品"], ["removed", "下架"], ["price", "價格變動"]].map(([k, label]) => (
-                  <label key={k} className="flex items-center gap-1.5">
-                    <input type="checkbox" checked={notifyOn.includes(k)} onChange={() => toggleNotify(k)} /> {label}
-                  </label>
-                ))}
-              </div>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600 dark:text-slate-300">通知條件(可複選,一個監看全包)</span>
+            <div className="flex flex-wrap gap-3 pt-1.5">
+              {[["restock", "補貨/到貨"], ["new", "新增商品"], ["removed", "下架"], ["price", "價格變動"]].map(([k, label]) => (
+                <label key={k} className="flex items-center gap-1.5">
+                  <input type="checkbox" checked={notifyOn.includes(k)} onChange={() => toggleNotify(k)} /> {label}
+                </label>
+              ))}
             </div>
-          )}
+          </div>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">每隔幾分鐘檢查</span>
             <input type="number" min={1} max={1440} value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600" />
@@ -160,6 +149,11 @@ export default function WatchesPage() {
               <span className={`rounded-full px-2 py-0.5 text-xs ${w.enabled ? "bg-brand-100 text-brand-700" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}>
                 {w.enabled ? "監看中" : "已停用"}
               </span>
+              {w.cta_url && (
+                <a href={w.cta_url} target="_blank" rel="noreferrer" className="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700">
+                  {w.cta_text || "前往購買"} →
+                </a>
+              )}
               <button onClick={() => checkNow(w.id)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">立即檢查</button>
               <button onClick={() => toggle(w)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">{w.enabled ? "停用" : "啟用"}</button>
               <button onClick={() => remove(w.id)} className="rounded-md border border-rose-200 px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50">刪除</button>

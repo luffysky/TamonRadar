@@ -142,7 +142,7 @@ class WatchRequest(BaseModel):
     enabled: bool = True
     target_price: int | None = None
     mode: str = "stock"
-    notify_on: list[str] = Field(default_factory=lambda: ["new", "removed", "price"])
+    notify_on: list[str] = Field(default_factory=lambda: ["new", "removed", "price", "restock"])
 
 
 # ---------- auth ----------
