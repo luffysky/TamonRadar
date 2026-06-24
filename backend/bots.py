@@ -74,12 +74,15 @@ def telegram_set_webhook(base_url: str) -> dict:
 # ---------- Discord ----------
 
 def verify_discord(signature: str, timestamp: str, body: bytes) -> bool:
-    pubkey = os.environ.get("DISCORD_PUBLIC_KEY")
-    if not pubkey or not signature or not timestamp:
+    pubkey = (os.environ.get("DISCORD_PUBLIC_KEY") or "").strip()
+    if not pubkey:
+        print("[discord] ⚠️ 未設定 DISCORD_PUBLIC_KEY,互動端點無法驗證")
+        return False
+    if not signature or not timestamp:
         return False
     try:
         from nacl.signing import VerifyKey
-        VerifyKey(bytes.fromhex(pubkey)).verify(timestamp.encode() + body, bytes.fromhex(signature))
+        VerifyKey(bytes.fromhex(pubkey)).verify(timestamp.encode() + body, bytes.fromhex(signature.strip()))
         return True
     except Exception:
         return False

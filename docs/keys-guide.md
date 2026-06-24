@@ -76,10 +76,14 @@
 1. 到 https://discord.com/developers/applications → **New Application**
 2. **General Information** → 複製 **Application ID** → `DISCORD_APP_ID`;複製 **Public Key** → `DISCORD_PUBLIC_KEY`
 3. **Bot** 分頁 → Reset Token → 複製 → `DISCORD_BOT_TOKEN`
-4. **General Information → Interactions Endpoint URL** 填:`https://你的後端網域/api/discord/interactions` → 存檔(Discord 會驗證,需後端已部署且 DISCORD_PUBLIC_KEY 正確)
+4. **⚠️ 順序很重要**:先把 `DISCORD_PUBLIC_KEY` 設到後端(Zeabur)並 **redeploy**,**再**回 Discord 填 Interactions Endpoint URL → 存檔。Discord 存檔時會即時發一個簽章請求驗證,後端沒設好 Public Key 就會回「無法驗證指定的互動端點 URL」。
+   - URL 填:`https://你的後端網域/api/discord/interactions`
+   - `DISCORD_PUBLIC_KEY` = General Information 的 **Public Key**(不是 Application ID、不是 Bot Token、不是 Client Secret)
 5. 後端 redeploy 後,到後台按 **「註冊 Discord 指令」**(註冊 `/ask`)
 6. 把 bot 邀請進你的伺服器(OAuth2 → URL Generator → scopes 勾 `applications.commands`)
 7. 在 Discord 打 `/ask 你的問題`
+
+> 驗證一直失敗的排查:① `DISCORD_PUBLIC_KEY` 是否為 Public Key 本身(64 字 hex)、有沒有多空白;② 後端是否已 redeploy 套用該變數;③ 後端網域可否公開連到 `/api/discord/interactions`(POST)。
 
 ---
 
@@ -92,11 +96,28 @@
 
 ---
 
-## 🔐 其他必填(雲端)
+## 🔔 Web Push 系統通知(關著網站也能收,選用)
+1. 產生 VAPID 金鑰:`pip install py-vapid` 然後 `vapid --gen`(或線上 VAPID 產生器)
+2. 後端設:`VAPID_PUBLIC_KEY`(公鑰)、`VAPID_PRIVATE_KEY`(私鑰)、`VAPID_SUBJECT=mailto:你的信箱`
+3. 後端要裝 `pywebpush`(已在 requirements)
+4. 使用者到網站「設定 → 開啟系統通知」訂閱即可。沒設 VAPID 則此功能停用(站內鈴鐺仍可用)。
+
+---
+
+## 🔐 其他必填 / 選用(雲端)
 - `DATABASE_URL`:Supabase/Postgres 連線字串
 - `JWT_SECRET`:亂打一長串(`python gen_secret.py` 可產生)
 - `ENCRYPTION_KEY`:亂打一長串(加密使用者金鑰用)
-- `ADMIN_EMAILS`:你的 email(管理員)
+- `ADMIN_EMAILS`:管理員 email;`OWNER_EMAILS`:擁有者(可給特權/停權,留空=管理員皆擁有者)
 - `CORS_ORIGINS`:前端網域
+- 選用:`FREE_AI_DAILY`/`FREE_SEARCH_DAILY`(免費配額)、`DISABLE_BROWSER=1`(雲端無 Chromium)、
+  `BLOCKED_DOMAINS`(手動封鎖網域)、`VAPID_*`(Web Push)
 - 前端 `NEXT_PUBLIC_API_BASE`:後端網域、`NEXT_PUBLIC_SITE_URL`:前端網域、
   `NEXT_PUBLIC_ADMIN_SLUG`:後台祕密路徑、`NEXT_PUBLIC_GIPHY_API_KEY`:Giphy(https://developers.giphy.com)
+
+---
+
+## 🗄️ 資料表(共 19 張,皆 tr_ 前綴,首次啟動自動建立 / 自動補欄位)
+tr_users、tr_runs、tr_user_settings、tr_schedules、tr_watches、tr_favorites、tr_posts、tr_threads、tr_replies、
+tr_subscriptions、tr_audit、tr_announcements、tr_reports、tr_app_settings、tr_usage、tr_ai_cost、
+tr_notifications、tr_push_subs、tr_ai_chat_log
