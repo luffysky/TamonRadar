@@ -37,7 +37,7 @@ def _default_provider() -> str:
     return "selenium"
 
 
-VALID_PROVIDERS = ("brave", "serpapi", "selenium")
+VALID_PROVIDERS = ("brave", "serpapi", "searxng", "duckduckgo", "selenium")
 
 
 @dataclass

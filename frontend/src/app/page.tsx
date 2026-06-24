@@ -6,8 +6,10 @@ import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
 
 const PROVIDER_LABELS: Record<string, string> = {
-  brave: "Brave Search API",
   serpapi: "SerpAPI",
+  brave: "Brave Search API",
+  searxng: "SearXNG(自架,開源)",
+  duckduckgo: "DuckDuckGo(免金鑰)",
   selenium: "Selenium(本機開 Chrome)",
 };
 import ProgressPanel from "@/components/ProgressPanel";
@@ -117,7 +119,7 @@ export default function HomePage() {
               onChange={(e) => setProvider(e.target.value)}
               className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5"
             >
-              {["brave", "serpapi", "selenium"].map((p) => {
+              {["serpapi", "brave", "searxng", "duckduckgo", "selenium"].map((p) => {
                 const ok = health?.search_providers?.[p];
                 return (
                   <option key={p} value={p} disabled={ok === false}>

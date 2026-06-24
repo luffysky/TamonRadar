@@ -18,12 +18,19 @@ class SearchApiError(Exception):
     """搜尋 API 呼叫失敗(沒金鑰、額度用完、網路錯誤等)。"""
 
 
+# 所有「API 型」搜尋來源(非 selenium),fallback 嘗試順序
+API_ORDER = ["serpapi", "brave", "searxng", "duckduckgo"]
+API_PROVIDERS = set(API_ORDER)
+
+
 def available_providers() -> dict[str, bool]:
-    """回報每個 provider 是否已設定金鑰,給前端顯示哪些可選。"""
+    """回報每個 provider 是否可用,給前端顯示哪些可選。"""
     return {
-        "brave": bool(os.environ.get("BRAVE_API_KEY")),
         "serpapi": bool(os.environ.get("SERPAPI_KEY")),
-        "selenium": True,  # 本機一定可用(雲端不建議)
+        "brave": bool(os.environ.get("BRAVE_API_KEY")),
+        "searxng": bool(os.environ.get("SEARXNG_URL")),
+        "duckduckgo": True,   # 開源、免金鑰(雲端 IP 可能被限流)
+        "selenium": True,     # 本機一定可用(雲端不建議)
     }
 
 
@@ -104,17 +111,53 @@ def _search_serpapi(keyword: str, pages: int, api_key: str) -> list[dict]:
     return results
 
 
-def resolve_order(primary: str) -> list[str]:
-    """依偏好回傳實際可用(有金鑰)的 API 嘗試順序。
+def _search_searxng(keyword: str, pages: int) -> list[dict]:
+    base = os.environ.get("SEARXNG_URL")
+    if not base:
+        raise SearchApiError("未設定 SEARXNG_URL")
+    results: list[dict] = []
+    for page in range(pages):
+        try:
+            resp = requests.get(
+                f"{base.rstrip('/')}/search",
+                params={"q": keyword, "format": "json", "pageno": page + 1, "language": "zh-TW"},
+                headers={"User-Agent": "TamonRadar"}, timeout=20,
+            )
+            resp.raise_for_status()
+            data = resp.json() or {}
+        except Exception as e:
+            raise SearchApiError(f"SearXNG:{e}")
+        for item in data.get("results", []):
+            row = _normalize(keyword, item.get("title", ""), item.get("url", ""), item.get("content", ""), page + 1)
+            if row:
+                results.append(row)
+    return results
 
-    例:primary=serpapi → ['serpapi','brave'](只保留有金鑰的)。
-    讓「先用 serp、額度用完自動 brave」成立。
-    """
+
+def _search_duckduckgo(keyword: str, pages: int) -> list[dict]:
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        raise SearchApiError("後端未安裝 ddgs 套件")
+    results: list[dict] = []
+    try:
+        with DDGS() as d:
+            for item in d.text(keyword, region="tw-tzh", max_results=pages * 10):
+                row = _normalize(keyword, item.get("title", ""), item.get("href", ""), item.get("body", ""), 1)
+                if row:
+                    results.append(row)
+    except Exception as e:
+        raise SearchApiError(f"DuckDuckGo:{e}")
+    return results
+
+
+def resolve_order(primary: str) -> list[str]:
+    """依偏好回傳實際可用的 API 嘗試順序(額度/失敗時自動 fallback)。"""
     avail = available_providers()
     order: list[str] = []
-    if primary in ("serpapi", "brave"):
+    if primary in API_ORDER:
         order.append(primary)
-    for p in ("serpapi", "brave"):
+    for p in API_ORDER:
         if p not in order:
             order.append(p)
     return [p for p in order if avail.get(p)]
@@ -132,4 +175,8 @@ def search_api(provider: str, keyword: str, pages: int = 1) -> list[dict]:
         if not key:
             raise SearchApiError("未設定 SERPAPI_KEY")
         return _search_serpapi(keyword, pages, key)
+    if provider == "searxng":
+        return _search_searxng(keyword, pages)
+    if provider == "duckduckgo":
+        return _search_duckduckgo(keyword, pages)
     raise SearchApiError(f"未知的搜尋 provider:{provider}")

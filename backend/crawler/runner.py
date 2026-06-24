@@ -17,7 +17,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 
 from .config import CrawlConfig, SKIP_EXTENSIONS
 from .google_search import search_google, BlockedError
-from .search_api import search_api, SearchApiError, resolve_order
+from .search_api import search_api, SearchApiError, resolve_order, API_PROVIDERS
 from .detail_scraper import scrape_detail_page, classify_search_only
 from .reporter import to_dataframe, build_summary
 from .utils import is_valid_url
@@ -79,7 +79,7 @@ def run_crawl(
 ) -> dict:
     """執行一次完整爬蟲。回傳 {records, summary}。"""
     config = config.normalized()
-    use_api = config.search_provider in ("brave", "serpapi")
+    use_api = config.search_provider in API_PROVIDERS
     need_driver = (not use_api) or config.scrape_details
 
     driver = None
