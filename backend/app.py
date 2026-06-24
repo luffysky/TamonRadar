@@ -351,7 +351,9 @@ async def discord_interactions(request: Request):
     if data.get("type") == 2:  # 斜線指令
         opts = data.get("data", {}).get("options", [])
         q = next((o.get("value", "") for o in opts if o.get("name") == "question"), "")
-        bots.handle_discord_command_async(data.get("application_id"), data.get("token"), q)
+        u = (data.get("member") or {}).get("user") or data.get("user") or {}
+        uname = u.get("username") or u.get("global_name") or str(u.get("id", ""))
+        bots.handle_discord_command_async(data.get("application_id"), data.get("token"), q, uname)
         return {"type": 5}  # 先 defer,背景算完再 followup 編輯回覆
     return {"type": 4, "data": {"content": "?"}}
 
@@ -1063,6 +1065,11 @@ def admin_crawls(admin=Depends(auth.get_admin)):
 @app.get("/api/admin/ai-costs")
 def admin_ai_costs(admin=Depends(auth.get_admin)):
     return db.admin_ai_costs()
+
+
+@app.get("/api/admin/bot-chats")
+def admin_bot_chats(admin=Depends(auth.get_admin)):
+    return {"chats": db.list_bot_chats()}
 
 
 @app.get("/api/admin/users")

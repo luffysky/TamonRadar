@@ -267,6 +267,16 @@ class AiChatLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
+class BotChatLog(Base):
+    __tablename__ = "tr_bot_chat_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    platform: Mapped[str] = mapped_column(String(20), default="")  # telegram | discord
+    platform_user: Mapped[str] = mapped_column(String(120), default="")
+    question: Mapped[str] = mapped_column(Text, default="")
+    answer: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class PushSub(Base):
     __tablename__ = "tr_push_subs"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -893,6 +903,24 @@ def mark_notifications_read(user_id: int) -> None:
         for n in s.scalars(select(Notification).where(Notification.user_id == user_id, Notification.read == False)).all():  # noqa: E712
             n.read = True
         s.commit()
+
+
+def add_bot_chat_log(platform: str, platform_user: str, question: str, answer: str) -> None:
+    try:
+        with SessionLocal() as s:
+            s.add(BotChatLog(platform=platform, platform_user=str(platform_user)[:120],
+                             question=(question or "")[:4000], answer=(answer or "")[:8000]))
+            s.commit()
+    except Exception:
+        pass
+
+
+def list_bot_chats(limit: int = 100) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(BotChatLog).order_by(BotChatLog.created_at.desc()).limit(limit)).all()
+        return [{"id": r.id, "platform": r.platform, "platform_user": r.platform_user,
+                 "question": r.question, "answer": r.answer,
+                 "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]
 
 
 def add_ai_chat_log(user_id: int, kind: str, question: str, answer: str) -> None:

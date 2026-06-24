@@ -8,6 +8,7 @@ import threading
 import requests
 
 import ai
+import db
 from knowledge import KNOWLEDGE
 
 
@@ -51,7 +52,10 @@ def _handle_telegram(update: dict) -> None:
     if text.startswith("/start"):
         telegram_send(chat_id, "嗨!我是 TamonRadar 小幫手 🦊\n直接問我任何關於這個網站怎麼用的問題吧。")
         return
-    telegram_send(chat_id, answer(text))
+    ans = answer(text)
+    uname = (msg.get("from", {}).get("username") or msg.get("from", {}).get("first_name") or str(chat_id))
+    db.add_bot_chat_log("telegram", uname, text, ans)
+    telegram_send(chat_id, ans)
 
 
 def handle_telegram_async(update: dict) -> None:
@@ -99,8 +103,12 @@ def _discord_followup(app_id: str, token: str, content: str) -> None:
         pass
 
 
-def handle_discord_command_async(app_id: str, token: str, question: str) -> None:
-    threading.Thread(target=lambda: _discord_followup(app_id, token, answer(question)), daemon=True).start()
+def handle_discord_command_async(app_id: str, token: str, question: str, user: str = "") -> None:
+    def _run():
+        ans = answer(question)
+        db.add_bot_chat_log("discord", user, question, ans)
+        _discord_followup(app_id, token, ans)
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def discord_register_command() -> dict:
