@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { getHistoryDiff, type RadarDiff, type RadarItem } from "@/lib/api";
+import ProductImage from "./ProductImage";
 
 function ItemRow({ item, kind }: { item: RadarItem; kind: "new" | "drop" | "restock" }) {
   return (
@@ -9,28 +10,25 @@ function ItemRow({ item, kind }: { item: RadarItem; kind: "new" | "drop" | "rest
       href={item.url}
       target="_blank"
       rel="noreferrer"
-      className="flex items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 hover:border-brand-300 hover:shadow-sm"
+      className="flex h-full items-center gap-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-2 hover:border-brand-300 hover:shadow-sm"
     >
-      <div className="h-10 w-10 shrink-0 overflow-hidden rounded bg-slate-100 dark:bg-slate-700">
-        {item.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.image_url} alt="" className="h-full w-full object-cover" loading="lazy" />
-        ) : null}
+      <div className="h-11 w-11 shrink-0 overflow-hidden rounded bg-slate-100 dark:bg-slate-700">
+        <ProductImage src={item.image_url} alt={item.title} />
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{item.title}</p>
-        <p className="text-xs text-slate-400">{item.domain}</p>
+        <p className="truncate text-xs text-slate-400">{item.domain}</p>
       </div>
       <div className="shrink-0 text-right">
         {kind === "drop" ? (
           <>
             <div className="text-xs text-slate-400 line-through">{item.old_price}</div>
-            <div className="text-sm font-bold text-rose-600">
+            <div className="text-sm font-bold text-rose-600 whitespace-nowrap">
               {item.price} <span className="text-xs">↓{item.drop_pct}%</span>
             </div>
           </>
         ) : (
-          <div className="text-sm font-bold text-emerald-600">{item.price || "—"}</div>
+          <div className="text-sm font-bold text-emerald-600 whitespace-nowrap">{item.price || "—"}</div>
         )}
       </div>
     </a>
