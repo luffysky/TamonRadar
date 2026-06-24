@@ -42,7 +42,15 @@ export default function RichTextEditor({
   const [showEmoji, setShowEmoji] = useState(false);
   const [showGif, setShowGif] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [pickerW, setPickerW] = useState(300);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const calc = () => setPickerW(Math.min(320, window.innerWidth - 24));
+    calc();
+    window.addEventListener("resize", calc);
+    return () => window.removeEventListener("resize", calc);
+  }, []);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -123,12 +131,12 @@ export default function RichTextEditor({
         <div className="relative">
           <Btn active={showEmoji} onClick={() => { setShowEmoji((s) => !s); setShowGif(false); }} title="表情"><Smile className="h-4 w-4" /></Btn>
           {showEmoji && (
-            <div className="absolute bottom-12 left-0 z-30">
+            <div className="fixed inset-x-3 bottom-20 z-40 mx-auto w-fit sm:absolute sm:inset-x-auto sm:bottom-12 sm:left-0 sm:z-30">
               <EmojiPicker
                 theme={Theme.AUTO}
                 onEmojiClick={(e) => { editor.chain().focus().insertContent(e.emoji).run(); setShowEmoji(false); }}
-                width={300}
-                height={360}
+                width={pickerW}
+                height={340}
               />
             </div>
           )}

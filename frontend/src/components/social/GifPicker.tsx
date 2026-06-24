@@ -61,7 +61,7 @@ export default function GifPicker({
   }
 
   return (
-    <div className="absolute bottom-12 left-0 z-30 w-[min(22rem,calc(100vw-3rem))] rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+    <div className="fixed inset-x-3 bottom-20 z-40 mx-auto w-[min(22rem,calc(100vw-1.5rem))] rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl dark:border-slate-700 dark:bg-slate-800 sm:absolute sm:inset-x-auto sm:bottom-12 sm:left-0 sm:z-30">
       <div className="mb-2 flex items-center gap-2">
         <div className="flex rounded-lg bg-slate-100 p-0.5 text-xs dark:bg-slate-700">
           {(["gifs", "stickers"] as const).map((k) => (
