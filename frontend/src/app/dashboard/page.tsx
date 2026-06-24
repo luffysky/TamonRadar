@@ -57,8 +57,8 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_auto]">
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-semibold text-slate-700 dark:text-slate-200">最近搜尋</h2>
             <Link href="/" className="flex items-center gap-1 text-sm text-brand-600 hover:underline dark:text-brand-300"><Search className="h-4 w-4" />新搜尋</Link>
