@@ -405,6 +405,8 @@ def assistant(req: AssistantRequest, user=Depends(auth.get_optional_user)):
         + f"使用者問題:{req.question}"
     )
     answer, _ = ai.ai_complete(prompt, max_tokens=900, user_id=(user.id if user else None), **args)
+    if user:
+        db.add_ai_chat_log(user.id, "assistant", req.question, answer or "")
     return {"available": True, "answer": answer}
 
 
@@ -753,6 +755,7 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
         + f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
     )
     answer, model = ai.ai_complete(prompt, max_tokens=1500, user_id=user.id, **args)
+    db.add_ai_chat_log(user.id, "chat", req.question, answer or "")
     db.bump_ai_usage(user.id)
     return {"available": True, "answer": answer, "model": model}
 
@@ -1076,6 +1079,14 @@ def admin_user_detail(user_id: int, admin=Depends(auth.get_admin)):
     if not d:
         raise HTTPException(404, "找不到使用者")
     return d
+
+
+@app.get("/api/admin/run/{run_id}")
+def admin_run(run_id: str, admin=Depends(auth.get_admin)):
+    run = db.get_run(run_id)  # 管理員可看任何人的搜尋結果
+    if not run:
+        raise HTTPException(404, "找不到這筆紀錄")
+    return run
 
 
 @app.post("/api/admin/users/{user_id}/note")

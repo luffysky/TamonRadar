@@ -255,6 +255,16 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class AiChatLog(Base):
+    __tablename__ = "tr_ai_chat_log"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="chat")  # chat|assistant|summary|compare|keywords
+    question: Mapped[str] = mapped_column(Text, default="")
+    answer: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class PushSub(Base):
     __tablename__ = "tr_push_subs"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -873,6 +883,23 @@ def mark_notifications_read(user_id: int) -> None:
         s.commit()
 
 
+def add_ai_chat_log(user_id: int, kind: str, question: str, answer: str) -> None:
+    try:
+        with SessionLocal() as s:
+            s.add(AiChatLog(user_id=user_id, kind=kind, question=(question or "")[:4000], answer=(answer or "")[:8000]))
+            s.commit()
+    except Exception:
+        pass
+
+
+def list_ai_chat_logs(user_id: int, limit: int = 30) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(AiChatLog).where(AiChatLog.user_id == user_id)
+                         .order_by(AiChatLog.created_at.desc()).limit(limit)).all()
+        return [{"id": r.id, "kind": r.kind, "question": r.question, "answer": r.answer,
+                 "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]
+
+
 def record_ai_cost(user_id: int, provider: str, model: str, in_tok: int, out_tok: int, cost_usd: float) -> None:
     with SessionLocal() as s:
         s.add(AiCost(user_id=user_id, provider=provider, model=model,
@@ -1008,6 +1035,15 @@ def get_user_detail(user_id: int) -> dict | None:
             "own_ai_keys": bool(st and (st.openai_key or st.anthropic_key or st.gemini_key or st.groq_key or st.openrouter_key)),
             "daily_digest": bool(st and st.daily_digest),
         }
+        watch_rows = s.scalars(select(Watch).where(Watch.user_id == user_id).order_by(Watch.id.desc()).limit(20)).all()
+        watches_list = [{"id": x.id, "name": x.name or x.url, "url": x.url, "last_status": x.last_status,
+                         "interval_minutes": x.interval_minutes, "enabled": x.enabled,
+                         "target_price": x.target_price} for x in watch_rows]
+        sched_rows = s.scalars(select(Schedule).where(Schedule.user_id == user_id).order_by(Schedule.id.desc()).limit(20)).all()
+        sched_list = [{"id": x.id, "keywords": x.keywords or [], "interval_hours": x.interval_hours,
+                       "enabled": x.enabled, "provider": x.provider,
+                       "last_run": x.last_run.isoformat() if x.last_run else None} for x in sched_rows]
+        ai_cost_total = s.scalar(select(func.coalesce(func.sum(AiCost.cost_usd), 0.0)).where(AiCost.user_id == user_id)) or 0.0
         return {
             "id": u.id, "email": u.email, "username": u.username or "", "provider": u.provider, "plan": u.plan,
             "privileged": bool(u.privileged), "banned": bool(u.banned),
@@ -1017,6 +1053,10 @@ def get_user_detail(user_id: int) -> dict | None:
                        "threads": int(threads), "favorites": int(favorites), "posts": int(posts), "replies": int(replies)},
             "recent_runs": recent_runs,
             "channels": channels,
+            "watches": watches_list,
+            "schedules": sched_list,
+            "ai_cost": round(float(ai_cost_total), 4),
+            "ai_chats": list_ai_chat_logs(user_id, 30),
         }
 
 

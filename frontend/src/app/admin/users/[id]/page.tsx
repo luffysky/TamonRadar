@@ -121,13 +121,57 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
         ) : (
           <div className="divide-y divide-slate-100 text-sm dark:divide-slate-700">
             {u.recent_runs.map((r) => (
-              <div key={r.id} className="flex items-center justify-between py-1.5">
-                <span className="truncate text-slate-700 dark:text-slate-200">{r.keywords.join("、") || "(無關鍵字)"}</span>
+              <Link key={r.id} href={`${ADMIN_BASE}/run/${r.id}`} className="flex items-center justify-between py-1.5 hover:opacity-80">
+                <span className="truncate text-brand-600 hover:underline dark:text-brand-300">{r.keywords.join("、") || "(無關鍵字)"}</span>
                 <span className="shrink-0 text-xs text-slate-400">{r.total} 筆 · {r.finished_at ? new Date(r.finished_at).toLocaleDateString("zh-TW") : "-"}</span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">AI 對話紀錄(完整內容)</h2>
+        {u.ai_chats.length === 0 ? <p className="text-xs text-slate-400">沒有紀錄</p> : (
+          <div className="space-y-3">
+            {u.ai_chats.map((c) => (
+              <div key={c.id} className="rounded-lg border border-slate-100 p-2 text-sm dark:border-slate-700">
+                <p className="text-[10px] text-slate-400">{c.kind} · {c.created_at ? new Date(c.created_at).toLocaleString("zh-TW") : ""}</p>
+                <p className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">問:{c.question}</p>
+                <p className="mt-0.5 whitespace-pre-wrap text-slate-600 dark:text-slate-300">答:{c.answer}</p>
               </div>
             ))}
           </div>
         )}
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">監看({u.watches.length})</h2>
+          {u.watches.length === 0 ? <p className="text-xs text-slate-400">無</p> : (
+            <div className="divide-y divide-slate-100 text-sm dark:divide-slate-700">
+              {u.watches.map((w) => (
+                <div key={w.id} className="py-1.5">
+                  <a href={w.url} target="_blank" rel="noreferrer" className="block truncate text-slate-700 hover:underline dark:text-slate-200">{w.name}</a>
+                  <p className="text-xs text-slate-400">{w.last_status} · 每 {w.interval_minutes} 分{w.target_price ? ` · 目標 NT$${w.target_price}` : ""}{w.enabled ? "" : " · 停用"}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">排程({u.schedules.length})· AI 成本 ${u.ai_cost}</h2>
+          {u.schedules.length === 0 ? <p className="text-xs text-slate-400">無</p> : (
+            <div className="divide-y divide-slate-100 text-sm dark:divide-slate-700">
+              {u.schedules.map((sc) => (
+                <div key={sc.id} className="py-1.5">
+                  <span className="block truncate text-slate-700 dark:text-slate-200">{sc.keywords.join("、") || "(無)"}</span>
+                  <p className="text-xs text-slate-400">每 {sc.interval_hours} 小時 · {sc.provider}{sc.enabled ? "" : " · 停用"}{sc.last_run ? ` · 上次 ${new Date(sc.last_run).toLocaleDateString("zh-TW")}` : ""}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">

@@ -552,6 +552,17 @@ export interface AdminUserDetail extends AdminUser {
   counts: { runs: number; watches: number; schedules: number; threads: number; favorites: number; posts: number; replies: number };
   recent_runs: { id: string; keywords: string[]; total: number; finished_at: string | null }[];
   channels: { discord: boolean; telegram: boolean; own_ai_keys: boolean; daily_digest: boolean };
+  watches: { id: number; name: string; url: string; last_status: string; interval_minutes: number; enabled: boolean; target_price: number | null }[];
+  schedules: { id: number; keywords: string[]; interval_hours: number; enabled: boolean; provider: string; last_run: string | null }[];
+  ai_cost: number;
+  ai_chats: { id: number; kind: string; question: string; answer: string; created_at: string | null }[];
+}
+
+export async function getAdminRun(runId: string): Promise<{ keywords: string[]; summary: CrawlResult["summary"]; records: CrawlResult["records"] }> {
+  const res = await fetch(`${API_BASE}/api/admin/run/${runId}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取搜尋結果失敗");
+  return res.json();
 }
 
 export async function getAdminUserDetail(id: number): Promise<AdminUserDetail> {
