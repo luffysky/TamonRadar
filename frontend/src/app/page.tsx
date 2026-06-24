@@ -71,7 +71,7 @@ export default function HomePage() {
         },
         () => {
           setRunning(false);
-          setError("與後端的連線中斷,請確認後端是否在執行。");
+          setError("連線中斷(後端可能正在重新部署)。已完成的搜尋會出現在「歷史」;若沒有,稍候再重新搜尋一次。");
         }
       );
     } catch {

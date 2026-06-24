@@ -135,38 +135,68 @@ export async function getCrawl(jobId: string) {
   return res.json();
 }
 
-/** 用 SSE 訂閱進度。回傳一個關閉函式。 */
+/** 用 SSE 訂閱進度,對斷線有韌性:短暫斷線自動重連、已完成則補抓結果、真的沒了才報錯。 */
 export function streamCrawl(
   jobId: string,
   onProgress: (e: ProgressEvent) => void,
   onEnd: (payload: { status: string; result: CrawlResult | null; error: string | null }) => void,
   onError: () => void
 ): () => void {
-  const es = new EventSource(`${API_BASE}/api/crawl/${jobId}/stream`);
+  let closed = false;
+  let retries = 0;
+  let es: EventSource | null = null;
 
-  es.addEventListener("progress", (ev) => {
-    try {
-      onProgress(JSON.parse((ev as MessageEvent).data));
-    } catch {
-      /* ignore */
-    }
-  });
+  const open = () => {
+    es = new EventSource(`${API_BASE}/api/crawl/${jobId}/stream`);
 
-  es.addEventListener("end", (ev) => {
-    try {
-      onEnd(JSON.parse((ev as MessageEvent).data));
-    } catch {
-      /* ignore */
-    }
-    es.close();
-  });
+    es.addEventListener("progress", (ev) => {
+      try {
+        onProgress(JSON.parse((ev as MessageEvent).data));
+      } catch {
+        /* ignore */
+      }
+    });
 
-  es.onerror = () => {
-    onError();
-    es.close();
+    es.addEventListener("end", (ev) => {
+      closed = true;
+      try {
+        onEnd(JSON.parse((ev as MessageEvent).data));
+      } catch {
+        /* ignore */
+      }
+      es?.close();
+    });
+
+    es.onerror = async () => {
+      es?.close();
+      if (closed) return;
+      // 嘗試從狀態端點補救:已完成就直接給結果,還在跑就重連
+      try {
+        const r = await fetch(`${API_BASE}/api/crawl/${jobId}`);
+        if (r.ok) {
+          const data = await r.json();
+          if (["done", "error", "stopped"].includes(data.status)) {
+            closed = true;
+            onEnd({ status: data.status, result: data.result, error: data.error });
+            return;
+          }
+          if (retries++ < 6) {
+            setTimeout(open, 2000); // 還在跑 → 2 秒後重連
+            return;
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      onError();
+    };
   };
 
-  return () => es.close();
+  open();
+  return () => {
+    closed = true;
+    es?.close();
+  };
 }
 
 export async function getHistory(): Promise<{ runs: HistoryRun[] }> {
