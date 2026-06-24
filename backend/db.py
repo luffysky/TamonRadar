@@ -167,6 +167,8 @@ class Post(Base):
     published: Mapped[bool] = mapped_column(default=False)
     featured: Mapped[bool] = mapped_column(default=False)  # 精選(首頁置頂)
     likes: Mapped[int] = mapped_column(default=0)
+    views: Mapped[int] = mapped_column(default=0)
+    password: Mapped[str] = mapped_column(String(100), default="")  # 密碼保護(明碼比對,簡易)
     author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -180,6 +182,8 @@ class PostComment(Base):
     author_name: Mapped[str] = mapped_column(String(120), default="")
     content: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(10), default="visible")  # visible | hidden
+    parent_id: Mapped[int | None] = mapped_column(nullable=True, index=True)  # 巢狀回覆
+    like_count: Mapped[int] = mapped_column(default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
@@ -190,6 +194,23 @@ class PostLike(Base):
     post_id: Mapped[int] = mapped_column(ForeignKey("tr_posts.id"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PostCommentLike(Base):
+    __tablename__ = "tr_post_comment_likes"
+    __table_args__ = (UniqueConstraint("comment_id", "user_id", name="uq_clike"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    comment_id: Mapped[int] = mapped_column(ForeignKey("tr_post_comments.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+
+
+class PostReaction(Base):
+    __tablename__ = "tr_post_reactions"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", "emoji", name="uq_reaction"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("tr_posts.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    emoji: Mapped[str] = mapped_column(String(8), default="")
 
 
 class Thread(Base):
@@ -383,6 +404,19 @@ def _ensure_columns() -> None:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE tr_threads ADD COLUMN likes INTEGER DEFAULT 0"))
 
+    if "tr_post_comments" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_post_comments")}
+        for col, ddl in (
+            ("parent_id", "ALTER TABLE tr_post_comments ADD COLUMN parent_id INTEGER"),
+            ("like_count", "ALTER TABLE tr_post_comments ADD COLUMN like_count INTEGER DEFAULT 0"),
+        ):
+            if col not in cols:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text(ddl))
+                except Exception:
+                    pass
+
     if "tr_audit" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_audit")}
         is_pg = engine.dialect.name == "postgresql"
@@ -405,6 +439,8 @@ def _ensure_columns() -> None:
             ("series", "ALTER TABLE tr_posts ADD COLUMN series VARCHAR(100) DEFAULT ''"),
             ("featured", "ALTER TABLE tr_posts ADD COLUMN featured BOOLEAN DEFAULT false"),
             ("likes", "ALTER TABLE tr_posts ADD COLUMN likes INTEGER DEFAULT 0"),
+            ("views", "ALTER TABLE tr_posts ADD COLUMN views INTEGER DEFAULT 0"),
+            ("password", "ALTER TABLE tr_posts ADD COLUMN password VARCHAR(100) DEFAULT ''"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -1725,6 +1761,8 @@ def _post_dict(p: "Post", full: bool = False, author_name: str = "") -> dict:
         "published": p.published,
         "featured": bool(getattr(p, "featured", False)),
         "likes": getattr(p, "likes", 0) or 0,
+        "views": getattr(p, "views", 0) or 0,
+        "has_password": bool(getattr(p, "password", "")),
         "author_id": p.author_id,
         "author": author_name,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -1816,26 +1854,81 @@ def user_liked_post(post_id: int, user_id: int) -> bool:
         return s.scalar(select(PostLike).where(PostLike.post_id == post_id, PostLike.user_id == user_id)) is not None
 
 
+def _comment_dict(c) -> dict:
+    return {"id": c.id, "post_id": c.post_id, "author_id": c.author_id, "author_name": c.author_name,
+            "content": c.content, "status": c.status, "parent_id": getattr(c, "parent_id", None),
+            "like_count": getattr(c, "like_count", 0) or 0,
+            "created_at": c.created_at.isoformat() if c.created_at else None, "replies": []}
+
+
 def list_post_comments(post_id: int, include_hidden: bool = False) -> list[dict]:
     with SessionLocal() as s:
         q = select(PostComment).where(PostComment.post_id == post_id)
         if not include_hidden:
             q = q.where(PostComment.status == "visible")
-        rows = s.scalars(q.order_by(PostComment.created_at.desc())).all()
-        return [{"id": c.id, "post_id": c.post_id, "author_id": c.author_id, "author_name": c.author_name,
-                 "content": c.content, "status": c.status,
-                 "created_at": c.created_at.isoformat() if c.created_at else None} for c in rows]
+        rows = s.scalars(q.order_by(PostComment.created_at.asc())).all()
+        nodes = {c.id: _comment_dict(c) for c in rows}
+        top = []
+        for c in rows:
+            pid = getattr(c, "parent_id", None)
+            if pid and pid in nodes:
+                nodes[pid]["replies"].append(nodes[c.id])
+            else:
+                top.append(nodes[c.id])
+        top.reverse()  # 最新的主留言在前
+        return top
 
 
-def add_post_comment(post_id: int, author_id: int, author_name: str, content: str) -> dict:
+def add_post_comment(post_id: int, author_id: int, author_name: str, content: str, parent_id: int | None = None) -> dict:
     with SessionLocal() as s:
-        c = PostComment(post_id=post_id, author_id=author_id, author_name=author_name[:120], content=content[:3000])
+        c = PostComment(post_id=post_id, author_id=author_id, author_name=author_name[:120],
+                        content=content[:3000], parent_id=parent_id)
         s.add(c)
         s.commit()
         s.refresh(c)
-        return {"id": c.id, "post_id": c.post_id, "author_id": c.author_id, "author_name": c.author_name,
-                "content": c.content, "status": c.status,
-                "created_at": c.created_at.isoformat() if c.created_at else None}
+        return _comment_dict(c)
+
+
+def toggle_comment_like(comment_id: int, user_id: int) -> dict:
+    with SessionLocal() as s:
+        c = s.get(PostComment, comment_id)
+        if not c:
+            return {"ok": False}
+        row = s.scalar(select(PostCommentLike).where(PostCommentLike.comment_id == comment_id, PostCommentLike.user_id == user_id))
+        if row:
+            s.delete(row)
+            liked = False
+        else:
+            s.add(PostCommentLike(comment_id=comment_id, user_id=user_id))
+            liked = True
+        s.flush()
+        cnt = s.scalar(select(func.count()).select_from(PostCommentLike).where(PostCommentLike.comment_id == comment_id)) or 0
+        c.like_count = int(cnt)
+        s.commit()
+        return {"ok": True, "liked": liked, "like_count": int(cnt)}
+
+
+def toggle_reaction(post_id: int, user_id: int, emoji: str) -> dict:
+    with SessionLocal() as s:
+        row = s.scalar(select(PostReaction).where(PostReaction.post_id == post_id,
+                                                  PostReaction.user_id == user_id, PostReaction.emoji == emoji))
+        if row:
+            s.delete(row)
+        else:
+            s.add(PostReaction(post_id=post_id, user_id=user_id, emoji=emoji))
+        s.commit()
+        return get_reactions(post_id, user_id)
+
+
+def get_reactions(post_id: int, user_id: int | None = None) -> dict:
+    with SessionLocal() as s:
+        rows = s.execute(select(PostReaction.emoji, func.count()).where(PostReaction.post_id == post_id)
+                         .group_by(PostReaction.emoji)).all()
+        mine = []
+        if user_id:
+            mine = [e for e in s.scalars(select(PostReaction.emoji).where(
+                PostReaction.post_id == post_id, PostReaction.user_id == user_id)).all()]
+        return {"counts": {e: int(c) for e, c in rows}, "mine": mine}
 
 
 def admin_list_comments(limit: int = 200) -> list[dict]:
@@ -1883,7 +1976,40 @@ def get_post_by_slug(slug: str, only_published: bool = True) -> dict | None:
         if p is None or (only_published and not p.published):
             return None
         names = _author_map(s, [p])
-        return _post_dict(p, full=True, author_name=names.get(p.author_id, ""))
+        d = _post_dict(p, full=True, author_name=names.get(p.author_id, ""))
+        # 上一篇 / 下一篇(已發布,依時間)
+        nxt = s.scalar(select(Post).where(Post.published == True, Post.created_at > p.created_at)  # noqa: E712
+                       .order_by(Post.created_at.asc()).limit(1))
+        prv = s.scalar(select(Post).where(Post.published == True, Post.created_at < p.created_at)  # noqa: E712
+                       .order_by(Post.created_at.desc()).limit(1))
+        d["next"] = {"slug": nxt.slug, "title": nxt.title} if nxt else None
+        d["prev"] = {"slug": prv.slug, "title": prv.title} if prv else None
+        # 相關文章:標籤重疊度最高的前 3 篇
+        tags = set(p.tags or [])
+        related = []
+        if tags:
+            others = s.scalars(select(Post).where(Post.published == True, Post.id != p.id)).all()  # noqa: E712
+            scored = sorted(((len(tags & set(o.tags or [])), o) for o in others), key=lambda x: -x[0])
+            related = [{"slug": o.slug, "title": o.title, "cover_image": o.cover_image or "", "likes": o.likes or 0}
+                       for n, o in scored if n > 0][:3]
+        d["related"] = related
+        return d
+
+
+def increment_post_views(post_id: int) -> int:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        if not p:
+            return 0
+        p.views = (p.views or 0) + 1
+        s.commit()
+        return p.views
+
+
+def check_post_password(post_id: int, password: str) -> bool:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        return bool(p) and (not p.password or p.password == password)
 
 
 def get_post(post_id: int) -> dict | None:
@@ -1972,6 +2098,8 @@ def create_post(author_id: int, data: dict) -> dict:
             series=data.get("series", ""),
             tags=data.get("tags", []),
             published=data.get("published", False),
+            featured=data.get("featured", False),
+            password=data.get("password", ""),
             author_id=author_id,
         )
         s.add(p)
@@ -1985,7 +2113,7 @@ def update_post(post_id: int, data: dict) -> dict | None:
         p = s.get(Post, post_id)
         if p is None:
             return None
-        for key in ("title", "excerpt", "content", "cover_image", "category", "series", "tags", "published", "featured"):
+        for key in ("title", "excerpt", "content", "cover_image", "category", "series", "tags", "published", "featured", "password"):
             if key in data and data[key] is not None:
                 setattr(p, key, data[key])
         if data.get("slug") and data["slug"].strip() != p.slug:

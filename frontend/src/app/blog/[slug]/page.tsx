@@ -4,6 +4,8 @@ import { notFound } from "next/navigation";
 import { API_BASE, type BlogPost } from "@/lib/api";
 import RichContent from "@/components/social/RichContent";
 import PostInteractions from "@/components/PostInteractions";
+import ReadingProgress from "@/components/ReadingProgress";
+import PostPasswordGate from "@/components/PostPasswordGate";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tamonradar.snowrealm.pet";
 
@@ -73,6 +75,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
 
   return (
     <article className="mx-auto max-w-3xl">
+      <ReadingProgress />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Link href="/blog" className="text-sm text-brand-600 hover:underline dark:text-brand-300">← 回部落格</Link>
       {post.category && (
@@ -85,6 +88,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
         ) : null}
         {post.created_at ? new Date(post.created_at).toLocaleDateString("zh-TW") : ""}
         {" · 約 " + minutes + " 分鐘閱讀"}
+        {typeof post.views === "number" ? ` · 👁 ${post.views} 次瀏覽` : ""}
       </p>
       {post.cover_image && (
         // eslint-disable-next-line @next/next/no-img-element
@@ -104,9 +108,37 @@ export default async function ArticlePage({ params }: { params: { slug: string }
         </nav>
       )}
 
-      <div className="mt-6 scroll-mt-20">
-        <RichContent html={withIds} />
-      </div>
+      {post.locked ? (
+        <PostPasswordGate postId={post.id} />
+      ) : (
+        <div className="mt-6 scroll-mt-20">
+          <RichContent html={withIds} />
+        </div>
+      )}
+
+      {(post.prev || post.next) && (
+        <div className="mt-8 grid gap-3 sm:grid-cols-2">
+          {post.prev ? <Link href={`/blog/${post.prev.slug}`} className="rounded-xl border border-slate-200 p-3 text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"><span className="text-xs text-slate-400">← 上一篇</span><p className="line-clamp-1 font-medium text-slate-700 dark:text-slate-200">{post.prev.title}</p></Link> : <span />}
+          {post.next ? <Link href={`/blog/${post.next.slug}`} className="rounded-xl border border-slate-200 p-3 text-right text-sm hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800"><span className="text-xs text-slate-400">下一篇 →</span><p className="line-clamp-1 font-medium text-slate-700 dark:text-slate-200">{post.next.title}</p></Link> : <span />}
+        </div>
+      )}
+
+      {post.related && post.related.length > 0 && (
+        <div className="mt-8">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">相關文章</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {post.related.map((r) => (
+              <Link key={r.slug} href={`/blog/${r.slug}`} className="card overflow-hidden transition hover:-translate-y-0.5 hover:shadow-lg">
+                {r.cover_image
+                  // eslint-disable-next-line @next/next/no-img-element
+                  ? <img src={r.cover_image} alt={r.title} className="h-24 w-full object-cover" />
+                  : <div className="h-24 w-full bg-gradient-to-br from-brand-500 to-brand-700" />}
+                <p className="line-clamp-2 p-2 text-xs font-medium text-slate-700 dark:text-slate-200">{r.title}</p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
 
       {post.tags && post.tags.length > 0 && (
         <div className="mt-6 flex flex-wrap gap-1.5">

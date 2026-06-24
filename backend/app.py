@@ -1491,6 +1491,7 @@ class PostRequest(BaseModel):
     tags: list[str] = Field(default_factory=list)
     published: bool = False
     featured: bool = False
+    password: str = ""
 
 
 @app.get("/api/blog")
@@ -1605,13 +1606,58 @@ def blog_get(slug: str, user=Depends(auth.get_optional_user)):
     p = db.get_post_by_slug(slug)
     if not p:
         raise HTTPException(404, "找不到文章")
+    # 密碼文章:未解鎖前不送內文(作者/管理員例外)
+    if p.get("has_password") and not (user and (user.id == p.get("author_id") or auth.is_admin(user.email))):
+        p["content"] = ""
+        p["locked"] = True
     p["comments"] = db.list_post_comments(p["id"])
     p["liked"] = db.user_liked_post(p["id"], user.id) if user else False
     return p
 
 
+class UnlockRequest(BaseModel):
+    password: str
+
+
+@app.post("/api/blog/{post_id}/unlock")
+def blog_unlock(post_id: int, req: UnlockRequest):
+    if not db.check_post_password(post_id, req.password):
+        raise HTTPException(403, "密碼錯誤")
+    full = db.get_post(post_id)
+    return {"ok": True, "content": (full or {}).get("content", "")}
+
+
+@app.post("/api/blog/{post_id}/view")
+def blog_view(post_id: int):
+    return {"views": db.increment_post_views(post_id)}
+
+
+class AiWriteRequest(BaseModel):
+    mode: str = "full"   # full | outline | refine
+    topic: str = ""
+    content: str = ""
+
+
+@app.post("/api/blog/ai-write")
+def blog_ai_write(req: AiWriteRequest, user=Depends(auth.get_current_user)):
+    keys = db.get_settings(user.id)
+    if req.mode == "outline":
+        prompt = f"為主題「{req.topic}」用繁體中文寫一份結構化部落格大綱(H2/H3 標題 + 重點),Markdown 格式。"
+    elif req.mode == "refine":
+        prompt = f"用繁體中文潤飾、改善下面這篇文章,保留原意、讓行文更流暢專業,輸出 Markdown:\n\n{req.content[:6000]}"
+    else:
+        prompt = (f"用繁體中文寫一篇關於「{req.topic}」的完整部落格文章,Markdown 格式,"
+                  "包含吸睛標題(# )、引言、數個 H2 段落與小結,內容具體實用。")
+    text, model = ai.ai_complete(prompt, max_tokens=2000, user_keys=keys, user_id=user.id)
+    if not text:
+        raise HTTPException(400, "AI 暫時無法使用,請於後台設定 AI 金鑰")
+    db.add_ai_chat_log(user.id, "blog_ai", f"[{req.mode}] {req.topic}", text)
+    return {"content": text, "model": model}
+
+
 class CommentRequest(BaseModel):
     content: str
+    parent_id: int | None = None
 
 
 @app.post("/api/blog/{post_id}/like")
@@ -1633,7 +1679,29 @@ def blog_add_comment(post_id: int, req: CommentRequest, user=Depends(auth.get_cu
     if not content:
         raise HTTPException(400, "留言不能是空的")
     name = getattr(user, "username", "") or user.email.split("@")[0]
-    return db.add_post_comment(post_id, user.id, name, content)
+    return db.add_post_comment(post_id, user.id, name, content, req.parent_id)
+
+
+@app.post("/api/blog/comment/{comment_id}/like")
+def blog_comment_like(comment_id: int, user=Depends(auth.get_current_user)):
+    r = db.toggle_comment_like(comment_id, user.id)
+    if not r.get("ok"):
+        raise HTTPException(404, "找不到留言")
+    return r
+
+
+@app.get("/api/blog/{post_id}/reactions")
+def blog_get_reactions(post_id: int, user=Depends(auth.get_optional_user)):
+    return db.get_reactions(post_id, user.id if user else None)
+
+
+class ReactionRequest(BaseModel):
+    emoji: str
+
+
+@app.post("/api/blog/{post_id}/reactions")
+def blog_react(post_id: int, req: ReactionRequest, user=Depends(auth.get_current_user)):
+    return db.toggle_reaction(post_id, user.id, req.emoji[:8])
 
 
 # ---- 後台:留言審核 + 精選 ----

@@ -849,24 +849,55 @@ export interface BlogPost {
   featured?: boolean;
   likes?: number;
   liked?: boolean;
+  views?: number;
+  has_password?: boolean;
+  locked?: boolean;
   content?: string;
   author?: string;
   author_id?: number;
   series?: string;
   comments?: BlogComment[];
+  prev?: { slug: string; title: string } | null;
+  next?: { slug: string; title: string } | null;
+  related?: { slug: string; title: string; cover_image: string; likes: number }[];
   created_at: string | null;
   updated_at: string | null;
 }
 
 export interface BlogComment {
   id: number; post_id: number; author_id?: number; author_name: string;
-  content: string; status: string; post_title?: string; created_at: string | null;
+  content: string; status: string; post_title?: string; parent_id?: number | null;
+  like_count?: number; replies?: BlogComment[]; created_at: string | null;
 }
 
 export type PostInput = {
   title: string; slug: string; excerpt: string; content: string;
-  cover_image: string; category: string; series: string; tags: string[]; published: boolean; featured?: boolean;
+  cover_image: string; category: string; series: string; tags: string[]; published: boolean; featured?: boolean; password?: string;
 };
+
+export async function likeComment(commentId: number): Promise<{ liked: boolean; like_count: number }> {
+  const res = await fetch(`${API_BASE}/api/blog/comment/${commentId}/like`, { method: "POST", headers: authHeaders() });
+  check401(res); if (!res.ok) throw new Error("操作失敗"); return res.json();
+}
+export async function getReactions(postId: number): Promise<{ counts: Record<string, number>; mine: string[] }> {
+  const res = await fetch(`${API_BASE}/api/blog/${postId}/reactions`, { headers: authHeaders() });
+  if (!res.ok) return { counts: {}, mine: [] }; return res.json();
+}
+export async function toggleReaction(postId: number, emoji: string): Promise<{ counts: Record<string, number>; mine: string[] }> {
+  const res = await fetch(`${API_BASE}/api/blog/${postId}/reactions`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ emoji }) });
+  check401(res); if (!res.ok) throw new Error("操作失敗"); return res.json();
+}
+export async function unlockPost(postId: number, password: string): Promise<{ content: string }> {
+  const res = await fetch(`${API_BASE}/api/blog/${postId}/unlock`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
+  if (!res.ok) throw new Error("密碼錯誤"); return res.json();
+}
+export async function incrementView(postId: number): Promise<void> {
+  try { await fetch(`${API_BASE}/api/blog/${postId}/view`, { method: "POST" }); } catch { /* */ }
+}
+export async function aiWritePost(mode: "full" | "outline" | "refine", topic: string, content = ""): Promise<{ content: string; model: string }> {
+  const res = await fetch(`${API_BASE}/api/blog/ai-write`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ mode, topic, content }) });
+  check401(res); if (!res.ok) throw new Error("AI 產生失敗"); return res.json();
+}
 
 export async function getBlogTaxonomy(): Promise<{ categories: { name: string; count: number }[]; tags: { name: string; count: number }[] }> {
   const res = await fetch(`${API_BASE}/api/blog-taxonomy`);
@@ -879,8 +910,8 @@ export async function likeBlogPost(postId: number): Promise<{ liked: boolean; li
   if (!res.ok) throw new Error("操作失敗");
   return res.json();
 }
-export async function addBlogComment(postId: number, content: string): Promise<BlogComment> {
-  const res = await fetch(`${API_BASE}/api/blog/${postId}/comments`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ content }) });
+export async function addBlogComment(postId: number, content: string, parent_id?: number | null): Promise<BlogComment> {
+  const res = await fetch(`${API_BASE}/api/blog/${postId}/comments`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ content, parent_id: parent_id ?? null }) });
   check401(res);
   if (!res.ok) throw new Error("留言失敗");
   return res.json();
