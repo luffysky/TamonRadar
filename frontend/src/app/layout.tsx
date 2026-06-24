@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Link from "next/link";
 import { Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/components/AuthProvider";
@@ -6,6 +7,8 @@ import { ToastProvider } from "@/components/Toast";
 import Nav from "@/components/Nav";
 import PWARegister from "@/components/PWARegister";
 import AssistantWidget from "@/components/AssistantWidget";
+import CookieConsent from "@/components/CookieConsent";
+import OnboardingTour from "@/components/OnboardingTour";
 
 const sans = Noto_Sans_TC({
   subsets: ["latin"],
@@ -79,10 +82,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <Nav />
             <main className="mx-auto max-w-6xl px-4 py-6 animate-fade-in">{children}</main>
-            <footer className="mx-auto max-w-6xl px-4 py-10 text-center text-xs text-slate-400">
-              TamonRadar · 多聞情報雷達 · 教學用途 · 請控制爬取頻率,勿繞過網站限制
+            <footer className="mt-10 border-t border-slate-200 dark:border-slate-700">
+              <div className="mx-auto max-w-6xl space-y-2 px-4 py-8 text-center text-xs text-slate-400">
+                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1">
+                  <Link href="/about" className="hover:text-brand-600 dark:hover:text-brand-300">關於</Link>
+                  <Link href="/blog" className="hover:text-brand-600 dark:hover:text-brand-300">部落格</Link>
+                  <Link href="/forum" className="hover:text-brand-600 dark:hover:text-brand-300">討論區</Link>
+                  <Link href="/privacy" className="hover:text-brand-600 dark:hover:text-brand-300">隱私權政策</Link>
+                  <Link href="/terms" className="hover:text-brand-600 dark:hover:text-brand-300">服務條款</Link>
+                  <Link href="/cookies" className="hover:text-brand-600 dark:hover:text-brand-300">Cookie 政策</Link>
+                </div>
+                <div>© {new Date().getFullYear()} TamonRadar. All rights reserved.</div>
+              </div>
             </footer>
             <AssistantWidget />
+            <CookieConsent />
+            <OnboardingTour />
           </AuthProvider>
         </ToastProvider>
       </body>
