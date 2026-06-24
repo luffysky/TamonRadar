@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { Radar, Sparkles } from "lucide-react";
 import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords, scrapePage, startSiteCrawl } from "@/lib/api";
 import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
@@ -158,7 +159,7 @@ export default function HomePage() {
   return (
     <div className="space-y-6">
       <section className="rounded-2xl bg-gradient-to-br from-brand-600 to-brand-500 p-6 text-white shadow">
-        <h1 className="text-2xl font-bold">📡 TamonRadar</h1>
+        <h1 className="flex items-center gap-2 text-2xl font-bold"><Radar className="h-6 w-6" /> TamonRadar</h1>
         <p className="text-sm font-medium text-brand-50">多聞情報雷達</p>
         <p className="mt-2 text-sm text-brand-50">
           輸入關鍵字 → 即時掃描 Google → 自動分類、抓價格、整理成可篩選的報告與 AI 摘要。
@@ -185,7 +186,7 @@ export default function HomePage() {
           <p className="mb-2 text-xs text-slate-400">{getVertical(vertical).tagline}</p>
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-200">搜尋關鍵字(一行一個)</label>
-            <button onClick={aiSuggest} disabled={running} className="text-xs text-brand-600 hover:underline disabled:opacity-50 dark:text-brand-300">✨ AI 想關鍵字</button>
+            <button onClick={aiSuggest} disabled={running} className="flex items-center gap-1 text-xs text-brand-600 hover:underline disabled:opacity-50 dark:text-brand-300"><Sparkles className="h-3.5 w-3.5" /> AI 想關鍵字</button>
           </div>
           <textarea
             data-tour="search"

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Radar } from "lucide-react";
 import { getHistoryDiff, type RadarDiff, type RadarItem } from "@/lib/api";
 import ProductImage from "./ProductImage";
 
@@ -84,7 +85,7 @@ export default function RadarPanel({ runId }: { runId: string }) {
   return (
     <div className="space-y-4 rounded-2xl border border-brand-200 bg-gradient-to-br from-brand-50 to-white p-5 shadow-sm dark:border-brand-700 dark:from-slate-800 dark:to-slate-800">
       <div className="flex flex-wrap items-center gap-3">
-        <h3 className="text-base font-bold text-brand-700">📡 價格雷達</h3>
+        <h3 className="flex items-center gap-1.5 text-base font-bold text-brand-700"><Radar className="h-5 w-5" /> 價格雷達</h3>
         <span className="text-xs text-slate-400">
           對比上一次（{data.previous_at ? new Date(data.previous_at).toLocaleString("zh-TW") : ""}）
         </span>

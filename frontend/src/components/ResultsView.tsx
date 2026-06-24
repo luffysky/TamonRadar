@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CrawlResult, CrawlRecord } from "@/lib/types";
 import { exportUrl, aiClean, aiCompare, getFavorites, addFavorite, removeFavorite } from "@/lib/api";
 import { useAuth } from "./AuthProvider";
+import { Sparkles, GitCompare } from "lucide-react";
 import Markdown from "./Markdown";
 import StatCards from "./StatCards";
 import BarChart from "./BarChart";
@@ -111,8 +112,8 @@ export default function ResultsView({
               還原全部
             </button>
           )}
-          <button onClick={clean} disabled={cleaning} className="rounded-lg border border-violet-300 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50 disabled:opacity-50">
-            {cleaning ? "整理中…" : "🧹 AI 濾雜訊"}
+          <button onClick={clean} disabled={cleaning} className="flex items-center gap-1 rounded-lg border border-violet-300 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm text-violet-600 hover:bg-violet-50 disabled:opacity-50">
+            <Sparkles className="h-4 w-4" /> {cleaning ? "整理中…" : "AI 濾雜訊"}
           </button>
         </div>
       </div>
@@ -148,8 +149,8 @@ export default function ResultsView({
           {selected.size > 0 && (
             <div className="flex items-center gap-2 text-sm">
               <span className="text-slate-500 dark:text-slate-400">已選 {selected.size}</span>
-              <button onClick={doCompare} disabled={selected.size < 2 || comparing} className="rounded-lg bg-violet-600 px-3 py-1.5 text-white hover:bg-violet-700 disabled:opacity-50">
-                {comparing ? "比較中…" : "🤖 AI 比較選取"}
+              <button onClick={doCompare} disabled={selected.size < 2 || comparing} className="flex items-center gap-1 rounded-lg bg-violet-600 px-3 py-1.5 text-white hover:bg-violet-700 disabled:opacity-50">
+                <GitCompare className="h-4 w-4" /> {comparing ? "比較中…" : "AI 比較選取"}
               </button>
               <button onClick={() => setSelected(new Set())} className="rounded-lg border border-slate-300 px-3 py-1.5 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">清除</button>
             </div>
