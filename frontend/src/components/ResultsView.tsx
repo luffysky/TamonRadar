@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import type { CrawlResult, CrawlRecord } from "@/lib/types";
-import { exportUrl, aiClean, getFavorites, addFavorite, removeFavorite } from "@/lib/api";
+import { exportUrl, aiClean, aiCompare, getFavorites, addFavorite, removeFavorite } from "@/lib/api";
 import { useAuth } from "./AuthProvider";
+import Markdown from "./Markdown";
 import StatCards from "./StatCards";
 import BarChart from "./BarChart";
 import ProductCards from "./ProductCards";
@@ -28,6 +29,25 @@ export default function ResultsView({
   const [cleanMsg, setCleanMsg] = useState<string | null>(null);
   const [favUrls, setFavUrls] = useState<Set<string>>(new Set());
   const [favIds, setFavIds] = useState<Record<string, number>>({});
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [compareMd, setCompareMd] = useState<string | null>(null);
+  const [comparing, setComparing] = useState(false);
+
+  function toggleSelect(url: string) {
+    setSelected((s) => { const n = new Set(s); n.has(url) ? n.delete(url) : n.add(url); return n; });
+  }
+  async function doCompare() {
+    setComparing(true);
+    setCompareMd(null);
+    try {
+      const r = await aiCompare(runId, [...selected]);
+      setCompareMd(r.answer);
+    } catch (e) {
+      setCompareMd(e instanceof Error ? e.message : "比較失敗");
+    } finally {
+      setComparing(false);
+    }
+  }
 
   useEffect(() => {
     if (!user) return;
@@ -123,8 +143,24 @@ export default function ResultsView({
       )}
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">完整結果</h2>
-        <ResultsTable records={records} hiddenUrls={hiddenUrls} />
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-200">完整結果</h2>
+          {selected.size > 0 && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-slate-500 dark:text-slate-400">已選 {selected.size}</span>
+              <button onClick={doCompare} disabled={selected.size < 2 || comparing} className="rounded-lg bg-violet-600 px-3 py-1.5 text-white hover:bg-violet-700 disabled:opacity-50">
+                {comparing ? "比較中…" : "🤖 AI 比較選取"}
+              </button>
+              <button onClick={() => setSelected(new Set())} className="rounded-lg border border-slate-300 px-3 py-1.5 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">清除</button>
+            </div>
+          )}
+        </div>
+        {compareMd && (
+          <div className="mb-3 rounded-xl border border-violet-200 bg-violet-50/50 p-4 dark:border-violet-900 dark:bg-violet-950/30">
+            <Markdown>{compareMd}</Markdown>
+          </div>
+        )}
+        <ResultsTable records={records} hiddenUrls={hiddenUrls} selectedUrls={selected} onToggleSelect={user ? toggleSelect : undefined} />
       </section>
     </div>
   );

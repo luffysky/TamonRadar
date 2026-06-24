@@ -244,12 +244,21 @@ export function exportUrl(runId: string, fmt: "csv" | "xlsx" | "md"): string {
 
 // ---------- AI ----------
 
-export async function aiChat(runId: string, question: string): Promise<{ available: boolean; answer: string }> {
+export async function aiChat(runId: string, question: string, history?: ChatTurn[]): Promise<{ available: boolean; answer: string }> {
   const res = await fetch(`${API_BASE}/api/ai/chat`, {
-    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId, question }),
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId, question, history }),
   });
   check401(res);
   if (!res.ok) throw new Error("AI 對話失敗");
+  return res.json();
+}
+
+export async function aiCompare(runId: string, urls: string[]): Promise<{ available: boolean; answer: string }> {
+  const res = await fetch(`${API_BASE}/api/ai/compare`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId, urls }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "比較失敗");
   return res.json();
 }
 

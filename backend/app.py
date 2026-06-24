@@ -78,6 +78,12 @@ class SummarizeRequest(BaseModel):
 class ChatRequest(BaseModel):
     run_id: str
     question: str
+    history: list[dict] | None = None
+
+
+class CompareRequest(BaseModel):
+    run_id: str
+    urls: list[str]
 
 
 class AssistantRequest(BaseModel):
@@ -556,15 +562,45 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
     args = _ai_args(user)
     if not ai.ai_available(**args):
         return {"available": False, "answer": "尚未設定 AI 金鑰(可在「設定」填自己的,或由後端提供)。"}
+    hist = ""
+    for h in (req.history or [])[-6:]:
+        who = "使用者" if h.get("role") == "user" else "助手"
+        hist += f"{who}:{h.get('content', '')}\n"
     prompt = (
         "你是一個資料查詢助理。以下是一批網路搜尋結果(JSON)。請根據這些資料用繁體中文回答"
         "使用者的問題;提到具體項目時附上連結(若有價格、日期、數據也一併附上),"
         "資料裡沒有就老實說。\n\n"
-        f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
+        + (f"先前對話:\n{hist}\n" if hist else "")
+        + f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
     )
     answer, model = ai.ai_complete(prompt, max_tokens=1500, **args)
     db.bump_ai_usage(user.id)
     return {"available": True, "answer": answer, "model": model}
+
+
+@app.post("/api/ai/compare")
+def ai_compare(req: CompareRequest, user=Depends(auth.get_current_user)):
+    records = _user_records(req.run_id, user)
+    args = _ai_args(user)
+    if not ai.ai_available(**args):
+        return {"available": False, "answer": "尚未設定 AI 金鑰。"}
+    chosen = [r for r in records if r.get("url") in set(req.urls)][:8]
+    if len(chosen) < 2:
+        raise HTTPException(400, "請至少選 2 個商品比較")
+    import money
+    slim = [{
+        "title": r.get("title", ""), "url": r.get("url", ""), "price": r.get("price", ""),
+        "price_twd": money.to_twd(r.get("price", "")), "category": r.get("category", ""),
+        "snippet": r.get("snippet", ""),
+    } for r in chosen]
+    prompt = (
+        "比較以下幾個商品(JSON),用繁體中文 Markdown 表格列出:名稱、價格(台幣)、重點差異/規格、"
+        "並在最後給「最划算」與「最推薦」各一個建議(附連結)。\n\n"
+        f"商品:\n{json.dumps(slim, ensure_ascii=False)}"
+    )
+    answer, _ = ai.ai_complete(prompt, max_tokens=1500, **args)
+    db.bump_ai_usage(user.id)
+    return {"available": True, "answer": answer}
 
 
 @app.post("/api/ai/keywords")

@@ -14,9 +14,13 @@ function priceValue(p: string): number {
 export default function ResultsTable({
   records,
   hiddenUrls,
+  selectedUrls,
+  onToggleSelect,
 }: {
   records: CrawlRecord[];
   hiddenUrls?: Set<string>;
+  selectedUrls?: Set<string>;
+  onToggleSelect?: (url: string) => void;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
@@ -127,6 +131,7 @@ export default function ResultsTable({
         <table className="w-full border-collapse text-sm">
           <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-300">
             <tr>
+              {onToggleSelect && <th className="px-2 py-2" />}
               <Th k="category">分類</Th>
               <Th k="title">標題</Th>
               <Th k="price">價格</Th>
@@ -136,6 +141,11 @@ export default function ResultsTable({
           <tbody>
             {filtered.map((r, i) => (
               <tr key={`${r.url}-${i}`} className="border-t border-slate-100 dark:border-slate-700 align-top hover:bg-slate-50 dark:bg-slate-900">
+                {onToggleSelect && (
+                  <td className="px-2 py-2">
+                    <input type="checkbox" checked={selectedUrls?.has(r.url) ?? false} onChange={() => onToggleSelect(r.url)} />
+                  </td>
+                )}
                 <td className="px-3 py-2">
                   <span className={`inline-block whitespace-nowrap rounded-full border px-2 py-0.5 text-xs ${categoryClass(r.category)}`}>
                     {r.category || "其他"}
@@ -161,7 +171,7 @@ export default function ResultsTable({
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-10 text-center text-slate-400">
+                <td colSpan={onToggleSelect ? 5 : 4} className="px-3 py-10 text-center text-slate-400">
                   沒有符合條件的資料
                 </td>
               </tr>
