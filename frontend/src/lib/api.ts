@@ -647,6 +647,13 @@ export interface KpiReport {
   daily: { date: string; signups: number; searches: number; active: number }[];
   days: number;
 }
+export async function getEnvCheck(): Promise<{ groups: Record<string, Record<string, boolean>> }> {
+  const res = await fetch(`${API_BASE}/api/admin/env-check`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取環境檢查失敗");
+  return res.json();
+}
+
 export async function getKpi(days = 30): Promise<KpiReport> {
   const res = await fetch(`${API_BASE}/api/admin/kpi?days=${days}`, { headers: authHeaders() });
   check401(res);

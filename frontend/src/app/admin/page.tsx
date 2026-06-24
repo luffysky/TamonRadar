@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  getAdminStats, getAdminUsers, setUserPlan, setUserPrivilege, setupTelegramBot, setupDiscordBot,
+  getAdminStats, getAdminUsers, setUserPlan, setUserPrivilege, setupTelegramBot, setupDiscordBot, getEnvCheck,
   type AdminStats, type AdminUser,
 } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
@@ -27,12 +27,14 @@ export default function AdminPage() {
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [denied, setDenied] = useState(false);
   const [q, setQ] = useState("");
+  const [env, setEnv] = useState<Record<string, Record<string, boolean>> | null>(null);
 
   async function load() {
     try {
       const [s, u] = await Promise.all([getAdminStats(), getAdminUsers()]);
       setStats(s);
       setUsers(u.users);
+      getEnvCheck().then((d) => setEnv(d.groups)).catch(() => {});
     } catch (e) {
       if (e instanceof Error && e.message !== "UNAUTHORIZED") setDenied(true);
     }
@@ -132,6 +134,25 @@ export default function AdminPage() {
             </div>
           )}
         </>
+      )}
+
+      {env && (
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">⚙️ 環境變數檢查(✅=已設定 / ❌=未填)</p>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {Object.entries(env).map(([group, items]) => (
+              <div key={group} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-900">
+                <p className="mb-1 text-xs font-semibold text-slate-500 dark:text-slate-400">{group}</p>
+                {Object.entries(items).map(([k, ok]) => (
+                  <div key={k} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600 dark:text-slate-300">{k}</span>
+                    <span>{ok ? "✅" : "❌"}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       <DashboardCharts />

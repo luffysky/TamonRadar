@@ -1159,6 +1159,44 @@ def admin_bot_chats(admin=Depends(auth.get_admin)):
     return {"chats": db.list_bot_chats()}
 
 
+@app.get("/api/admin/env-check")
+def admin_env_check(admin=Depends(auth.get_admin)):
+    """回報各環境變數有沒有設定(只回布林,不外洩內容)。"""
+    def has(k):
+        return bool(os.environ.get(k))
+    ai_env = any(has(k) for k in ["OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY", "OPENROUTER_API_KEY", "ANTHROPIC_API_KEY"])
+    ai_db = any(db.get_ai_config(masked=True)["providers"][p]["has_key"] for p in db.AI_PROVIDERS)
+    search = any(has(k) for k in ["BRAVE_API_KEY", "SERPAPI_KEY", "SERPER_API_KEY", "GOOGLE_CSE_KEY", "TAVILY_API_KEY", "SEARXNG_URL"])
+    groups = {
+        "核心(必填)": {
+            "DATABASE_URL": has("DATABASE_URL"), "JWT_SECRET": has("JWT_SECRET"),
+            "CORS_ORIGINS": has("CORS_ORIGINS"), "ADMIN_EMAILS": has("ADMIN_EMAILS"),
+        },
+        "建議": {
+            "ENCRYPTION_KEY": has("ENCRYPTION_KEY"), "OWNER_EMAILS": has("OWNER_EMAILS"),
+            "搜尋來源(任一)": search,
+        },
+        "AI(env 或後台設定任一即可)": {"AI 金鑰(env)": ai_env, "AI 金鑰(後台)": ai_db},
+        "通知": {
+            "VAPID(Web Push 三個)": has("VAPID_PUBLIC_KEY") and has("VAPID_PRIVATE_KEY") and has("VAPID_SUBJECT"),
+            "TELEGRAM_BOT_TOKEN": has("TELEGRAM_BOT_TOKEN"), "TELEGRAM_WEBHOOK_SECRET": has("TELEGRAM_WEBHOOK_SECRET"),
+            "DISCORD_BOT_TOKEN": has("DISCORD_BOT_TOKEN"), "DISCORD_PUBLIC_KEY": has("DISCORD_PUBLIC_KEY"),
+            "DISCORD_APP_ID": has("DISCORD_APP_ID"), "DISCORD_WEBHOOK(共用,選)": has("DISCORD_WEBHOOK"),
+        },
+        "檔案/圖片 R2(封面、附圖、AI 封面)": {
+            "R2 五項齊全": all(has(k) for k in ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET_NAME", "R2_URL"]),
+        },
+        "Google 登入": {
+            "GOOGLE_CLIENT_ID": has("GOOGLE_CLIENT_ID"), "GOOGLE_CLIENT_SECRET": has("GOOGLE_CLIENT_SECRET"),
+            "OAUTH_REDIRECT_BASE": has("OAUTH_REDIRECT_BASE"),
+        },
+        "寄信(驗證/忘記密碼/群發)": {
+            "Resend 或 Gmail(任一)": has("RESEND_API_KEY") or (has("GMAIL_USER") and has("GMAIL_APP_PASSWORD")),
+        },
+    }
+    return {"groups": groups}
+
+
 @app.get("/api/admin/kpi")
 def admin_kpi(days: int = 30, admin=Depends(auth.get_admin)):
     return db.kpi_report(days)
