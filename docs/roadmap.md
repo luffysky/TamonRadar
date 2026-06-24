@@ -6,16 +6,23 @@
 **後端**:DATABASE_URL、JWT_SECRET、ADMIN_EMAILS、CORS_ORIGINS、BRAVE_API_KEY/SERPAPI_KEY、
 SEARCH_PROVIDER、OPENAI_API_KEY/ANTHROPIC_API_KEY/**GEMINI_API_KEY/GROQ_API_KEY/OPENROUTER_API_KEY**(+各模型)、
 GOOGLE_CLIENT_ID/SECRET、OAUTH_REDIRECT_BASE、FRONTEND_URL、RESEND_API_KEY/RESEND_FROM、GMAIL_*、TWD_PER_*、
-**R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET_NAME/R2_URL(檔案上傳,新)**
+**R2_ACCOUNT_ID/R2_ACCESS_KEY_ID/R2_SECRET_ACCESS_KEY/R2_BUCKET_NAME/R2_URL(檔案上傳)**、
+**ENCRYPTION_KEY(設定加密)**、**TELEGRAM_BOT_TOKEN/TELEGRAM_WEBHOOK_SECRET/DISCORD_PUBLIC_KEY/DISCORD_APP_ID/DISCORD_BOT_TOKEN(AI 機器人)**、
+**SEARXNG_URL(自架搜尋,選用)**
 **前端**:NEXT_PUBLIC_API_BASE、NEXT_PUBLIC_SITE_URL、**NEXT_PUBLIC_GIPHY_API_KEY(GIF/貼圖)**
 
 ### 近期完成(追加)
-- ~~UI 全面換 lucide icon、AI 對話重做、UX 動畫(slide/scale/漢堡平滑展開/按鈕微互動)~~
+- ~~UI 全面換 lucide icon、AI 對話重做、UX 動畫(slide/scale/按鈕微互動)~~
+- ~~手機側邊抽屜(右→左滑入、滿視口高)~~
 - ~~吉祥物 logo + favicon 修正~~
 - ~~Spotlight 新手導覽(聚焦照亮 + 逐步說明)~~
 - ~~法律頁(隱私/條款/Cookie)+ 頁尾版權 + Cookie 同意~~
 - ~~富文本編輯器(Tiptap)+ emoji + Giphy GIF/貼圖 + R2 上傳(圖片/影片/音樂/任意檔案)→ 接入部落格與討論區~~
 - ~~BYO AI 金鑰擴充:OpenAI/Gemini/Groq/OpenRouter/Anthropic~~
+- ~~敏感設定(AI金鑰/Discord/TG)加密存 DB、讀取解密~~
+- ~~TG/Discord 接上 AI(共用機器人:Telegram webhook + Discord interactions)~~
+- ~~搜尋來源加 SearXNG(自架開源)+ DuckDuckGo(免金鑰)+ 自動 fallback~~
+- ~~輕量 Dockerfile(雲端免 Chromium)+ SSE 斷線自動重連/補抓~~
 
 
 ## ✅ 已完成(基礎)
