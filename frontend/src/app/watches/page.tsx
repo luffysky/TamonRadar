@@ -41,7 +41,11 @@ export default function WatchesPage() {
   }
 
   useEffect(() => {
-    if (user) reload();
+    if (!user) return;
+    reload();
+    // 自動更新:每 20 秒重抓監看狀態,不用手動重新整理
+    const t = setInterval(reload, 20000);
+    return () => clearInterval(t);
   }, [user]);
 
   if (!ready || !user) {
