@@ -141,6 +141,7 @@ class WatchRequest(BaseModel):
     interval_minutes: int = 5
     enabled: bool = True
     target_price: int | None = None
+    mode: str = "stock"
 
 
 # ---------- auth ----------

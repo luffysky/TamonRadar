@@ -22,6 +22,7 @@ export default function WatchesPage() {
   const [url, setUrl] = useState("");
   const [interval, setIntervalMin] = useState(5);
   const [targetPrice, setTargetPrice] = useState("");
+  const [mode, setMode] = useState("stock");
   const [busy, setBusy] = useState(false);
 
   async function reload() {
@@ -52,6 +53,7 @@ export default function WatchesPage() {
         available_keywords: [], unavailable_keywords: [],
         interval_minutes: interval, enabled: true,
         target_price: targetPrice.trim() ? Number(targetPrice.replace(/[^0-9]/g, "")) : null,
+        mode,
       };
       await createWatch(data);
       setName(""); setUrl(""); setTargetPrice("");
@@ -98,6 +100,13 @@ export default function WatchesPage() {
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="名稱(例:XXX 演唱會門票)" className={field} />
         <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://要監看的網址" className={field} />
         <div className="flex items-end gap-3">
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600 dark:text-slate-300">監看模式</span>
+            <select value={mode} onChange={(e) => setMode(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600 dark:bg-slate-900">
+              <option value="stock">到貨/補貨(售完↔可購買)</option>
+              <option value="content">內容變動(新上架/下架)</option>
+            </select>
+          </label>
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">每隔幾分鐘檢查</span>
             <input type="number" min={1} max={1440} value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600" />

@@ -48,6 +48,37 @@ def check_watch(watch_id: int) -> dict:
     if not w or not w["enabled"]:
         return {"ok": False, "reason": "停用或不存在"}
 
+    name = w["name"] or w["url"]
+
+    # 內容變動模式:對比上次品項清單,有新增/減少就通知(新上架/下架)
+    if w.get("mode") == "content":
+        from crawler.detail_scraper import items_from_soup
+        try:
+            resp = requests.get(w["url"], headers=_HEADERS, timeout=20)
+            soup = BeautifulSoup(resp.text, "lxml")
+        except Exception as e:
+            return {"ok": False, "reason": f"抓取失敗:{e}"[:200]}
+        items = items_from_soup(soup, w["url"])
+        keys = sorted({(it.get("title") or "").strip() for it in items if (it.get("title") or "").strip()})
+        prev = set(w.get("snapshot") or [])
+        notified = False
+        if prev:  # 第一次只建立基準,不通知
+            added = [k for k in keys if k not in prev]
+            removed = [k for k in prev if k not in set(keys)]
+            if added or removed:
+                settings = db.get_settings(w["user_id"])
+                lines = [f"🔔 TamonRadar 內容變動:{name}"]
+                if added:
+                    lines.append(f"➕ 新增 {len(added)} 項:" + "、".join(added[:5]) + ("…" if len(added) > 5 else ""))
+                if removed:
+                    lines.append(f"➖ 減少 {len(removed)} 項:" + "、".join(removed[:5]) + ("…" if len(removed) > 5 else ""))
+                lines.append(w["url"])
+                embed = notify.make_embed("🔔 頁面內容變動", f"{name}:新增 {len(added)} / 減少 {len(removed)}", w["url"])
+                notify.notify_all(settings, "\n".join(lines), embed=embed)
+                notified = True
+        db.set_watch_snapshot(watch_id, keys)
+        return {"ok": True, "mode": "content", "items": len(keys), "notified": notified}
+
     try:
         resp = requests.get(w["url"], headers=_HEADERS, timeout=20)
         text = BeautifulSoup(resp.text, "lxml").get_text(" ", strip=True)
