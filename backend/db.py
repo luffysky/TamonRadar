@@ -88,6 +88,7 @@ class Run(Base):
     keywords: Mapped[list] = mapped_column(JSON, default=list)
     summary: Mapped[dict] = mapped_column(JSON, default=dict)
     records: Mapped[list] = mapped_column(JSON, default=list)
+    shared: Mapped[bool] = mapped_column(default=False)
 
     user: Mapped["User"] = relationship(back_populates="runs")
 
@@ -270,6 +271,12 @@ def _ensure_columns() -> None:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE tr_threads ADD COLUMN likes INTEGER DEFAULT 0"))
 
+    if "tr_runs" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_runs")}
+        if "shared" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE tr_runs ADD COLUMN shared BOOLEAN DEFAULT false"))
+
     if "tr_watches" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_watches")}
         for col, ddl in (
@@ -361,6 +368,32 @@ def get_run(run_id: str, user_id: int | None = None) -> dict | None:
             "created_at": run.created_at.isoformat() if run.created_at else None,
             "finished_at": run.finished_at.isoformat() if run.finished_at else None,
             "status": run.status,
+            "keywords": run.keywords or [],
+            "summary": run.summary or {},
+            "records": run.records or [],
+            "shared": bool(run.shared),
+        }
+
+
+def set_run_shared(run_id: str, user_id: int, shared: bool) -> bool:
+    with SessionLocal() as s:
+        run = s.get(Run, run_id)
+        if run is None or run.user_id != user_id:
+            return False
+        run.shared = bool(shared)
+        s.commit()
+        return True
+
+
+def get_shared_run(run_id: str) -> dict | None:
+    """公開分享用:只有被標記 shared 的才回傳。"""
+    with SessionLocal() as s:
+        run = s.get(Run, run_id)
+        if run is None or not run.shared:
+            return None
+        return {
+            "id": run.id,
+            "finished_at": run.finished_at.isoformat() if run.finished_at else None,
             "keywords": run.keywords or [],
             "summary": run.summary or {},
             "records": run.records or [],

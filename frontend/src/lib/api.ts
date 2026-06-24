@@ -706,6 +706,22 @@ export async function deletePost(id: number): Promise<void> {
   if (!res.ok) throw new Error("刪除文章失敗");
 }
 
+// ---- 分享連結 ----
+export async function setRunShared(runId: string, shared: boolean): Promise<{ shared: boolean }> {
+  const res = await fetch(`${API_BASE}/api/history/${runId}/share`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ shared }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("設定分享失敗");
+  return res.json();
+}
+
+export async function getSharedRun(runId: string): Promise<{ id: string; keywords: string[]; summary: CrawlResult["summary"]; records: CrawlResult["records"] }> {
+  const res = await fetch(`${API_BASE}/api/share/${runId}`);
+  if (!res.ok) throw new Error("這個分享連結不存在或已關閉");
+  return res.json();
+}
+
 // ---- 使用者自己的部落格 ----
 export async function getMyPosts(): Promise<{ posts: BlogPost[] }> {
   const res = await fetch(`${API_BASE}/api/blog/mine`, { headers: authHeaders() });

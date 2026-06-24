@@ -454,6 +454,25 @@ def get_history_run(run_id: str, user=Depends(auth.get_current_user)):
     return run
 
 
+class ShareRequest(BaseModel):
+    shared: bool
+
+
+@app.post("/api/history/{run_id}/share")
+def history_share(run_id: str, req: ShareRequest, user=Depends(auth.get_current_user)):
+    if not db.set_run_shared(run_id, user.id, req.shared):
+        raise HTTPException(404, "找不到這筆歷史紀錄")
+    return {"shared": req.shared}
+
+
+@app.get("/api/share/{run_id}")
+def public_share(run_id: str):
+    run = db.get_shared_run(run_id)
+    if not run:
+        raise HTTPException(404, "這個分享連結不存在或已關閉")
+    return run
+
+
 @app.get("/api/history/{run_id}/diff")
 def history_diff(run_id: str, user=Depends(auth.get_current_user)):
     import radar
