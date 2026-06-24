@@ -509,6 +509,7 @@ def health():
 
 class ScrapePageRequest(BaseModel):
     url: str
+    keywords: list[str] = Field(default_factory=list)   # 選填:只收含關鍵字的項目
 
 
 @app.post("/api/scrape-page")
@@ -524,6 +525,11 @@ def scrape_page(req: ScrapePageRequest, user=Depends(auth.get_current_user)):
         recs = scrape_full_page(req.url.strip())
     except Exception as e:
         raise HTTPException(400, f"抓取失敗:{e}")
+    kws = [k.strip() for k in (req.keywords or []) if k.strip()]
+    if kws:
+        from crawler.utils import keyword_tokens, is_relevant
+        toks = keyword_tokens(kws)
+        recs = [it for it in recs if is_relevant(it, toks)]
     df = to_dataframe(recs)
     summary = build_summary(df)
     records = df.to_dict(orient="records")
@@ -536,6 +542,7 @@ class SiteCrawlRequest(BaseModel):
     url: str
     max_pages: int = 30
     max_depth: int = 2
+    keywords: list[str] = Field(default_factory=list)   # 選填:只收含關鍵字的項目
 
 
 @app.post("/api/crawl-site")
@@ -549,6 +556,7 @@ def start_site_crawl(req: SiteCrawlRequest, user=Depends(auth.get_current_user))
         site_url=req.url.strip(),
         site_max_pages=req.max_pages,
         site_max_depth=req.max_depth,
+        filter_keywords=req.keywords,
     )
     job = manager.create(config, user.id)
     return {"job_id": job.id, "status": job.status}

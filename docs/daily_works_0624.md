@@ -66,6 +66,13 @@
 - 推播中心:分群(全體/特權/已驗證/TG/Discord)+ 排程發送(tr_scheduled_broadcasts,每分鐘檢查)。
 - 各 tab 分析做深:金額解析(萬/k/範圍)、每垂直專屬面向(租金設備/票價座位/薪資經驗/幣種主題/航空公司/料理供應…)+ headline 一句話總結。
 
+## 後續批次 5(抓取/圖表/過濾)
+- 整站爬移除 40 頁寫死 → 前端自訂頁數/深度(預設40、上限5000,SITE_MAX_PAGES_CAP env 可調)。
+- 抓整頁 / 整站爬 新增「選填關鍵字過濾」(留空全收;填了只收標題/摘要/網址含關鍵字的項目)。
+- 分類統計/來源網站圖:改回動態 recharts 但用穩定寫法(數字 height + 掛載後渲染 + debounce);summary 空時自動從 records 重算。
+- 修相關性過濾過兇:中英分開斷詞 + 中文 2-gram(「Python線上課程」→ python/線上/課程)。
+- 後台總覽新增「環境變數檢查」面板(只回布林,看哪些 env 沒填)。
+
 ## 資料庫(已建,共 26 表,皆 tr_ 前綴)
 tr_users / tr_runs / tr_user_settings / tr_schedules / tr_watches / tr_favorites /
 tr_posts / tr_post_comments / tr_post_likes / tr_post_comment_likes / tr_post_reactions /

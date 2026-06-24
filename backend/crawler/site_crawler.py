@@ -29,8 +29,13 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
     records: list[dict] = []
     pages = 0
 
+    # 選填關鍵字過濾:只收標題/摘要/網址含關鍵字的項目
+    from .utils import keyword_tokens, is_relevant
+    f_tokens = keyword_tokens(getattr(config, "filter_keywords", []) or [])
+
+    kw_msg = f"、只收含「{'、'.join(config.filter_keywords)}」" if f_tokens else ""
     on_event({"type": "phase", "phase": "starting",
-              "message": f"整站爬:{start}(最多 {max_pages} 頁、深度 {max_depth})"})
+              "message": f"整站爬:{start}(最多 {max_pages} 頁、深度 {max_depth}{kw_msg})"})
 
     while queue and pages < max_pages:
         if should_stop():
@@ -52,6 +57,8 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
 
         pages += 1
         items = items_from_soup(soup, url)
+        if f_tokens:
+            items = [it for it in items if is_relevant(it, f_tokens)]
         records.extend(items)
         on_event({
             "type": "page", "current": pages, "total": max_pages,

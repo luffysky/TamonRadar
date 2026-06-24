@@ -92,18 +92,18 @@ export interface CrawlParams {
   vertical?: string;
 }
 
-export async function scrapePage(url: string): Promise<{ run_id: string; records: CrawlResult["records"]; summary: CrawlResult["summary"] }> {
+export async function scrapePage(url: string, keywords: string[] = []): Promise<{ run_id: string; records: CrawlResult["records"]; summary: CrawlResult["summary"] }> {
   const res = await fetch(`${API_BASE}/api/scrape-page`, {
-    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ url }),
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ url, keywords }),
   });
   check401(res);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "整頁抓取失敗");
   return res.json();
 }
 
-export async function startSiteCrawl(url: string, max_pages = 40, max_depth = 2): Promise<{ job_id: string }> {
+export async function startSiteCrawl(url: string, max_pages = 40, max_depth = 2, keywords: string[] = []): Promise<{ job_id: string }> {
   const res = await fetch(`${API_BASE}/api/crawl-site`, {
-    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ url, max_pages, max_depth }),
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ url, max_pages, max_depth, keywords }),
   });
   check401(res);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "整站爬啟動失敗");

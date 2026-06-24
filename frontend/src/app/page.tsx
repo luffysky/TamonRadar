@@ -50,6 +50,7 @@ export default function HomePage() {
   const [pageUrl, setPageUrl] = useState("");
   const [sitePages, setSitePages] = useState(40);
   const [siteDepth, setSiteDepth] = useState(2);
+  const [pageKeywords, setPageKeywords] = useState("");
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
   const [result, setResult] = useState<CrawlResult | null>(null);
@@ -117,7 +118,8 @@ export default function HomePage() {
     if (!url.startsWith("http") || running) return;
     setRunning(true); setError(null); setResult(null); setEvents([]);
     try {
-      const r = await scrapePage(url);
+      const kws = pageKeywords.split(/[,,\s]+/).map((k) => k.trim()).filter(Boolean);
+      const r = await scrapePage(url, kws);
       setJobId(r.run_id);
       setResult({ records: r.records, summary: r.summary });
     } catch (e) {
@@ -132,7 +134,8 @@ export default function HomePage() {
     if (!url.startsWith("http") || running) return;
     setError(null); setResult(null); setEvents([]); setRunning(true);
     try {
-      const { job_id } = await startSiteCrawl(url, Math.max(1, sitePages || 40), Math.max(1, siteDepth || 2));
+      const kws = pageKeywords.split(/[,,\s]+/).map((k) => k.trim()).filter(Boolean);
+      const { job_id } = await startSiteCrawl(url, Math.max(1, sitePages || 40), Math.max(1, siteDepth || 2), kws);
       setJobId(job_id);
       closeRef.current = streamCrawl(
         job_id,
@@ -305,6 +308,13 @@ export default function HomePage() {
                 整站爬
               </button>
             </div>
+            <input
+              value={pageKeywords}
+              onChange={(e) => setPageKeywords(e.target.value)}
+              placeholder="只收含這些關鍵字的項目(選填,逗號分隔;留空=全收)"
+              disabled={running}
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900"
+            />
             <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
               <label className="flex items-center gap-1.5">頁數上限
                 <input type="number" min={1} max={5000} value={sitePages} onChange={(e) => setSitePages(Number(e.target.value))} className="w-20 rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-600 dark:bg-slate-900" />
