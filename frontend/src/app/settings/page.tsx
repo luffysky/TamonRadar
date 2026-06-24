@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, updateProfile, createBindCode, type NotifySettings } from "@/lib/api";
+import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, updateProfile, createBindCode, API_BASE, type NotifySettings } from "@/lib/api";
 import { useRequireAuth, useAuth } from "@/components/AuthProvider";
 import PasswordInput from "@/components/PasswordInput";
 import PushToggle from "@/components/PushToggle";
@@ -85,6 +85,10 @@ export default function SettingsPage() {
           <p className="mt-1 text-xs text-slate-400">
             不想自己建 webhook 就填這個 → 由平台共用 bot 私訊你(需與 bot 同伺服器或允許陌生 DM)。
           </p>
+          <a href={`${API_BASE}/api/go/discord`} target="_blank" rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#5865F2] px-4 py-2 text-sm font-medium text-white hover:opacity-90">
+            ➕ 加入 TamonRadar Discord 伺服器
+          </a>
         </div>
 
         <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
@@ -105,6 +109,10 @@ export default function SettingsPage() {
           <p className="mt-1 text-xs text-slate-400">
             最簡單:**只填 Chat ID**,先到平台的 Telegram bot 按一次「開始」,通知就由共用 bot 發給你;要用自己的 bot 才填 token。
           </p>
+          <a href={`${API_BASE}/api/go/telegram`} target="_blank" rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-[#229ED9] px-4 py-2 text-sm font-medium text-white hover:opacity-90">
+            ➕ 開啟 TamonRadar Telegram Bot
+          </a>
         </div>
 
         <div className="border-t border-slate-100 pt-4 dark:border-slate-700">

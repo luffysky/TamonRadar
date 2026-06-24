@@ -1322,6 +1322,69 @@ def save_app_settings(data: dict) -> None:
         s.commit()
 
 
+# ---------- AI 模型 / 金鑰設定(後台集中管理,金鑰加密)----------
+AI_PROVIDERS = ["openai", "gemini", "groq", "openrouter", "anthropic"]
+
+
+def get_ai_config(masked: bool = True) -> dict:
+    """回傳各 provider 的設定;masked=True 時金鑰只回 has_key/前後綴(給後台顯示)。"""
+    with SessionLocal() as s:
+        rows = {k: v for (k, v) in s.execute(select(AppSetting.key, AppSetting.value)).all() if k.startswith("ai:")}
+    default_provider = rows.get("ai:provider", "")
+    out = {"default_provider": default_provider, "providers": {}}
+    for p in AI_PROVIDERS:
+        raw = rows.get(f"ai:{p}:key", "")
+        key = crypto.decrypt(raw) if raw else ""
+        info = {
+            "model": rows.get(f"ai:{p}:model", ""),
+            "enabled": rows.get(f"ai:{p}:enabled", "1") != "0",
+            "has_key": bool(key),
+        }
+        if masked:
+            info["key_hint"] = (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("已設定" if key else "")
+        else:
+            info["key"] = key
+        out["providers"][p] = info
+    return out
+
+
+def save_ai_config(provider: str, data: dict) -> None:
+    """儲存單一 provider 設定。data 可含 key(明文,會加密)/model/enabled。"""
+    if provider not in AI_PROVIDERS:
+        raise ValueError("unknown provider")
+    payload = {}
+    if "key" in data and data["key"] is not None:
+        kv = (data["key"] or "").strip()
+        # 空字串 = 清除;非空才加密儲存
+        payload[f"ai:{provider}:key"] = crypto.encrypt(kv) if kv else ""
+    if "model" in data:
+        payload[f"ai:{provider}:model"] = (data.get("model") or "").strip()
+    if "enabled" in data:
+        payload[f"ai:{provider}:enabled"] = "1" if data.get("enabled") else "0"
+    if payload:
+        save_app_settings(payload)
+
+
+def set_ai_default_provider(provider: str) -> None:
+    save_app_settings({"ai:provider": provider if provider in AI_PROVIDERS else ""})
+
+
+def ai_db_setting(provider: str, field: str) -> str:
+    """給 ai.py 用:取單一 AI 設定值(key 會解密)。沒設回空字串。"""
+    with SessionLocal() as s:
+        row = s.get(AppSetting, f"ai:{provider}:{field}")
+        val = row.value if row else ""
+    if field == "key" and val:
+        return crypto.decrypt(val)
+    return val or ""
+
+
+def ai_db_default_provider() -> str:
+    with SessionLocal() as s:
+        row = s.get(AppSetting, "ai:provider")
+        return row.value if row else ""
+
+
 def save_page_seo(path: str, data: dict) -> None:
     import json as _json
     save_app_settings({f"page:{path}": _json.dumps({

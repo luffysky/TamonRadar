@@ -10,7 +10,7 @@ import os
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
@@ -416,6 +416,19 @@ def assistant(req: AssistantRequest, user=Depends(auth.get_optional_user)):
     if user:
         db.add_ai_chat_log(user.id, "assistant", req.question, answer or "")
     return {"available": True, "answer": answer}
+
+
+@app.get("/api/go/{target}")
+def go_redirect(target: str):
+    """轉址到社群連結(真實邀請藏在後端,只在登入後的設定頁露出此短連結)。"""
+    urls = {
+        "discord": os.environ.get("DISCORD_INVITE_URL", "https://discord.gg/yMVZNZE8W"),
+        "telegram": os.environ.get("TELEGRAM_BOT_URL", "https://t.me/TamonRadarsBot"),
+    }
+    url = urls.get(target)
+    if not url:
+        raise HTTPException(404, "未知的連結")
+    return RedirectResponse(url, status_code=302)
 
 
 @app.get("/api/health")
@@ -1080,6 +1093,47 @@ def admin_ai_costs(admin=Depends(auth.get_admin)):
 @app.get("/api/admin/bot-chats")
 def admin_bot_chats(admin=Depends(auth.get_admin)):
     return {"chats": db.list_bot_chats()}
+
+
+# ---- 後台:AI 模型 / 金鑰集中設定 ----
+@app.get("/api/admin/ai-config")
+def admin_ai_config(admin=Depends(auth.get_admin)):
+    return db.get_ai_config(masked=True)
+
+
+class AiConfigRequest(BaseModel):
+    provider: str
+    key: str | None = None
+    model: str | None = None
+    enabled: bool | None = None
+
+
+@app.post("/api/admin/ai-config")
+def admin_ai_config_save(req: AiConfigRequest, admin=Depends(auth.get_admin)):
+    data = {}
+    if req.key is not None:
+        data["key"] = req.key
+    if req.model is not None:
+        data["model"] = req.model
+    if req.enabled is not None:
+        data["enabled"] = req.enabled
+    db.save_ai_config(req.provider, data)
+    return {"ok": True}
+
+
+class AiDefaultRequest(BaseModel):
+    provider: str
+
+
+@app.post("/api/admin/ai-config/default")
+def admin_ai_default(req: AiDefaultRequest, admin=Depends(auth.get_admin)):
+    db.set_ai_default_provider(req.provider)
+    return {"ok": True}
+
+
+@app.post("/api/admin/ai-config/test")
+def admin_ai_test(req: AiConfigRequest, admin=Depends(auth.get_admin)):
+    return ai.test_provider(req.provider, req.key or "")
 
 
 @app.get("/api/admin/users")

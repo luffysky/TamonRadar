@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, FileText, Megaphone, Shield, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, FileText, Megaphone, Shield, ShieldCheck, Bot } from "lucide-react";
 import { ADMIN_BASE } from "@/lib/admin";
 
 const NAV = [
@@ -10,6 +10,7 @@ const NAV = [
   { href: `${ADMIN_BASE}/crawls`, label: "爬取檢核", icon: ShieldCheck },
   { href: `${ADMIN_BASE}/ops`, label: "營運管理", icon: Megaphone },
   { href: `${ADMIN_BASE}/blog`, label: "部落格管理", icon: FileText },
+  { href: `${ADMIN_BASE}/ai-models`, label: "AI 模型", icon: Bot },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

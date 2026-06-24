@@ -21,20 +21,64 @@ _USER_KEY_FIELD = {
 }
 
 
-def _key_for(provider: str, user_keys: dict) -> str:
-    user_val = user_keys.get(_USER_KEY_FIELD[provider], "")
-    if user_val:
-        return user_val
+def _db(provider: str, field: str) -> str:
+    """從後台設定讀(key 會解密);失敗或沒設回空字串。"""
+    try:
+        import db
+        return db.ai_db_setting(provider, field)
+    except Exception:
+        return ""
+
+
+def _enabled(provider: str) -> bool:
+    """後台明確設為停用(enabled=0)才視為停用;預設啟用。"""
+    return _db(provider, "enabled") != "0"
+
+
+def _env_key(provider: str) -> str:
     if provider == "anthropic":
         return os.environ.get("ANTHROPIC_API_KEY", "")
     return os.environ.get(_OPENAI_COMPATIBLE[provider]["env_key"], "")
 
 
+def _key_for(provider: str, user_keys: dict) -> str:
+    # 優先序:使用者自備 > 後台設定(DB)> 環境變數
+    user_val = user_keys.get(_USER_KEY_FIELD[provider], "")
+    if user_val:
+        return user_val
+    db_val = _db(provider, "key")
+    if db_val:
+        return db_val
+    return _env_key(provider)
+
+
+def _model_for(provider: str) -> str:
+    """模型:後台設定 > 環境變數 > 預設。"""
+    db_model = _db(provider, "model")
+    if db_model:
+        return db_model
+    if provider == "anthropic":
+        return os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+    cfg = _OPENAI_COMPATIBLE[provider]
+    return os.environ.get(cfg["env_model"], cfg["default_model"])
+
+
+def _default_provider() -> str:
+    try:
+        import db
+        return (db.ai_db_default_provider() or os.environ.get("AI_PROVIDER", "")).lower()
+    except Exception:
+        return os.environ.get("AI_PROVIDER", "").lower()
+
+
 def _pick(user_keys: dict, prefer: str) -> str | None:
-    prefer = (prefer or os.environ.get("AI_PROVIDER", "")).lower()
+    prefer = (prefer or _default_provider()).lower()
     order = ([prefer] if prefer in ORDER else []) + [p for p in ORDER if p != prefer]
     for p in order:
-        if _key_for(p, user_keys):
+        # 使用者自備金鑰不受後台停用限制;否則需該 provider 未被停用
+        if user_keys.get(_USER_KEY_FIELD[p], ""):
+            return p
+        if _enabled(p) and _key_for(p, user_keys):
             return p
     return None
 
@@ -83,7 +127,7 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
     if provider == "anthropic":
         from anthropic import Anthropic
         client = Anthropic(api_key=key)
-        model = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
+        model = _model_for("anthropic")
         m = client.messages.create(model=model, max_tokens=max_tokens,
                                     messages=[{"role": "user", "content": prompt}])
         text = "".join(b.text for b in m.content if getattr(b, "type", "") == "text")
@@ -92,7 +136,7 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
         return text, f"anthropic:{model}"
 
     cfg = _OPENAI_COMPATIBLE[provider]
-    model = os.environ.get(cfg["env_model"], cfg["default_model"])
+    model = _model_for(provider)
     from openai import OpenAI
     client = OpenAI(api_key=key, base_url=cfg["base_url"]) if cfg["base_url"] else OpenAI(api_key=key)
     r = client.chat.completions.create(model=model, max_tokens=max_tokens,
@@ -100,3 +144,27 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
     u = getattr(r, "usage", None)
     _record(user_id, provider, model, getattr(u, "prompt_tokens", 0), getattr(u, "completion_tokens", 0))
     return (r.choices[0].message.content or ""), f"{provider}:{model}"
+
+
+def test_provider(provider: str, key: str = "") -> dict:
+    """測試某 provider 的金鑰是否可用。key 留空則用現有設定(DB/env)。"""
+    if provider not in ORDER:
+        return {"ok": False, "error": "未知的 provider"}
+    key = (key or "").strip() or _key_for(provider, {})
+    if not key:
+        return {"ok": False, "error": "尚未設定金鑰"}
+    model = _model_for(provider)
+    try:
+        if provider == "anthropic":
+            from anthropic import Anthropic
+            Anthropic(api_key=key).messages.create(model=model, max_tokens=5,
+                                                    messages=[{"role": "user", "content": "ping"}])
+        else:
+            cfg = _OPENAI_COMPATIBLE[provider]
+            from openai import OpenAI
+            client = OpenAI(api_key=key, base_url=cfg["base_url"]) if cfg["base_url"] else OpenAI(api_key=key)
+            client.chat.completions.create(model=model, max_tokens=5,
+                                           messages=[{"role": "user", "content": "ping"}])
+        return {"ok": True, "model": model}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200], "model": model}

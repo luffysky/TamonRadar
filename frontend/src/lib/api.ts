@@ -706,6 +706,30 @@ export async function getAiCosts(): Promise<AiCosts> {
   return res.json();
 }
 
+export interface AiProviderConfig { model: string; enabled: boolean; has_key: boolean; key_hint?: string; }
+export interface AiConfig { default_provider: string; providers: Record<string, AiProviderConfig>; }
+export async function getAiConfig(): Promise<AiConfig> {
+  const res = await fetch(`${API_BASE}/api/admin/ai-config`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取 AI 設定失敗");
+  return res.json();
+}
+export async function saveAiConfig(provider: string, data: { key?: string; model?: string; enabled?: boolean }): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/ai-config`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ provider, ...data }) });
+  check401(res);
+  if (!res.ok) throw new Error("儲存失敗");
+}
+export async function setAiDefault(provider: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/ai-config/default`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ provider }) });
+  check401(res);
+  if (!res.ok) throw new Error("儲存失敗");
+}
+export async function testAiProvider(provider: string, key?: string): Promise<{ ok: boolean; error?: string; model?: string }> {
+  const res = await fetch(`${API_BASE}/api/admin/ai-config/test`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ provider, key }) });
+  check401(res);
+  return res.json();
+}
+
 export interface BotChat { id: number; platform: string; platform_user: string; question: string; answer: string; created_at: string | null; }
 export async function getBotChats(): Promise<{ chats: BotChat[] }> {
   const res = await fetch(`${API_BASE}/api/admin/bot-chats`, { headers: authHeaders() });
