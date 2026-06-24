@@ -100,6 +100,7 @@ class Settings(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), primary_key=True)
     # 全部用 Text:加密後的密文會比原值長很多(新版 OpenAI sk-proj 金鑰更長),VARCHAR 會爆
     discord_webhook: Mapped[str] = mapped_column(Text, default="")
+    discord_user_id: Mapped[str] = mapped_column(String(40), default="")  # 用平台 bot DM 你時用
     telegram_token: Mapped[str] = mapped_column(Text, default="")
     telegram_chat_id: Mapped[str] = mapped_column(Text, default="")
     # 使用者自備的 AI 金鑰(BYO);留空則用後端共用金鑰
@@ -377,6 +378,7 @@ def _ensure_columns() -> None:
             ("openrouter_key", "ALTER TABLE tr_user_settings ADD COLUMN openrouter_key VARCHAR(255) DEFAULT ''"),
             ("ai_provider", "ALTER TABLE tr_user_settings ADD COLUMN ai_provider VARCHAR(20) DEFAULT ''"),
             ("daily_digest", "ALTER TABLE tr_user_settings ADD COLUMN daily_digest BOOLEAN DEFAULT false"),
+            ("discord_user_id", "ALTER TABLE tr_user_settings ADD COLUMN discord_user_id VARCHAR(40) DEFAULT ''"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -505,7 +507,7 @@ def create_run_record(user_id: int, run_id: str, keywords: list, result: dict) -
 # ---------- 通知設定 ----------
 
 def get_settings(user_id: int) -> dict:
-    fields = ("discord_webhook", "telegram_token", "telegram_chat_id",
+    fields = ("discord_webhook", "discord_user_id", "telegram_token", "telegram_chat_id",
               "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key", "ai_provider")
     with SessionLocal() as s:
         st = s.get(Settings, user_id)
@@ -527,7 +529,7 @@ _SECRET_FIELDS = {
 
 
 def save_settings(user_id: int, data: dict) -> None:
-    fields = ("discord_webhook", "telegram_token", "telegram_chat_id",
+    fields = ("discord_webhook", "discord_user_id", "telegram_token", "telegram_chat_id",
               "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key", "ai_provider")
     with SessionLocal() as s:
         st = s.get(Settings, user_id)

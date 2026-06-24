@@ -337,6 +337,7 @@ export async function getHistoryDiff(id: string): Promise<RadarDiff> {
 
 export interface NotifySettings {
   discord_webhook: string;
+  discord_user_id: string;
   telegram_token: string;
   telegram_chat_id: string;
   openai_key: string;

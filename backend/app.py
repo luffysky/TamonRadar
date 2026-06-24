@@ -112,6 +112,7 @@ class ResetRequest(BaseModel):
 
 class SettingsRequest(BaseModel):
     discord_webhook: str = ""
+    discord_user_id: str = ""
     telegram_token: str = ""
     telegram_chat_id: str = ""
     openai_key: str = ""
@@ -886,6 +887,7 @@ def get_settings(user=Depends(auth.get_current_user)):
 def put_settings(req: SettingsRequest, user=Depends(auth.get_current_user)):
     db.save_settings(user.id, {
         "discord_webhook": req.discord_webhook.strip(),
+        "discord_user_id": req.discord_user_id.strip(),
         "telegram_token": req.telegram_token.strip(),
         "telegram_chat_id": req.telegram_chat_id.strip(),
         "openai_key": req.openai_key.strip(),

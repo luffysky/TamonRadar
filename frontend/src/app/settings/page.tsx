@@ -14,7 +14,7 @@ export default function SettingsPage() {
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
   const [form, setForm] = useState<NotifySettings>({
-    discord_webhook: "", telegram_token: "", telegram_chat_id: "",
+    discord_webhook: "", discord_user_id: "", telegram_token: "", telegram_chat_id: "",
     openai_key: "", anthropic_key: "", gemini_key: "", groq_key: "", openrouter_key: "", ai_provider: "",
     daily_digest: false,
   });
@@ -74,25 +74,35 @@ export default function SettingsPage() {
           <p className="mt-1 text-xs text-slate-400">
             Discord 頻道 → 編輯頻道 → 整合 → Webhook → 複製 Webhook 網址
           </p>
-        </div>
-
-        <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
-          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Telegram Bot Token</label>
+          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700 dark:text-slate-200">或:Discord 使用者 ID(用平台 bot 私訊你)</label>
           <input
-            value={form.telegram_token}
-            onChange={(e) => setForm({ ...form, telegram_token: e.target.value })}
-            placeholder="123456:ABC-..."
-            className={field}
-          />
-          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700 dark:text-slate-200">Telegram Chat ID</label>
-          <input
-            value={form.telegram_chat_id}
-            onChange={(e) => setForm({ ...form, telegram_chat_id: e.target.value })}
-            placeholder="你的 chat id"
+            value={form.discord_user_id}
+            onChange={(e) => setForm({ ...form, discord_user_id: e.target.value })}
+            placeholder="你的 Discord 使用者 ID(開發者模式→右鍵你的頭像→複製 ID)"
             className={field}
           />
           <p className="mt-1 text-xs text-slate-400">
-            跟 @BotFather 建立 bot 拿 token;chat id 可向 @userinfobot 詢問。
+            不想自己建 webhook 就填這個 → 由平台共用 bot 私訊你(需與 bot 同伺服器或允許陌生 DM)。
+          </p>
+        </div>
+
+        <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">Telegram Chat ID(必填)</label>
+          <input
+            value={form.telegram_chat_id}
+            onChange={(e) => setForm({ ...form, telegram_chat_id: e.target.value })}
+            placeholder="你的 chat id(向 @userinfobot 詢問)"
+            className={field}
+          />
+          <label className="mb-1 mt-3 block text-sm font-medium text-slate-700 dark:text-slate-200">Telegram Bot Token(選填)</label>
+          <input
+            value={form.telegram_token}
+            onChange={(e) => setForm({ ...form, telegram_token: e.target.value })}
+            placeholder="留空 = 用平台共用 bot 發送"
+            className={field}
+          />
+          <p className="mt-1 text-xs text-slate-400">
+            最簡單:**只填 Chat ID**,先到平台的 Telegram bot 按一次「開始」,通知就由共用 bot 發給你;要用自己的 bot 才填 token。
           </p>
         </div>
 
