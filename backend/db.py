@@ -98,15 +98,16 @@ class Settings(Base):
     __tablename__ = "tr_user_settings"
 
     user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), primary_key=True)
-    discord_webhook: Mapped[str] = mapped_column(String(500), default="")
-    telegram_token: Mapped[str] = mapped_column(String(200), default="")
-    telegram_chat_id: Mapped[str] = mapped_column(String(100), default="")
+    # 全部用 Text:加密後的密文會比原值長很多(新版 OpenAI sk-proj 金鑰更長),VARCHAR 會爆
+    discord_webhook: Mapped[str] = mapped_column(Text, default="")
+    telegram_token: Mapped[str] = mapped_column(Text, default="")
+    telegram_chat_id: Mapped[str] = mapped_column(Text, default="")
     # 使用者自備的 AI 金鑰(BYO);留空則用後端共用金鑰
-    openai_key: Mapped[str] = mapped_column(String(255), default="")
-    anthropic_key: Mapped[str] = mapped_column(String(255), default="")
-    gemini_key: Mapped[str] = mapped_column(String(255), default="")
-    groq_key: Mapped[str] = mapped_column(String(255), default="")
-    openrouter_key: Mapped[str] = mapped_column(String(255), default="")
+    openai_key: Mapped[str] = mapped_column(Text, default="")
+    anthropic_key: Mapped[str] = mapped_column(Text, default="")
+    gemini_key: Mapped[str] = mapped_column(Text, default="")
+    groq_key: Mapped[str] = mapped_column(Text, default="")
+    openrouter_key: Mapped[str] = mapped_column(Text, default="")
     ai_provider: Mapped[str] = mapped_column(String(20), default="")  # ""=自動 / openai / gemini / groq / openrouter / anthropic
     daily_digest: Mapped[bool] = mapped_column(default=False)  # 每日彙整通知
 
@@ -380,6 +381,15 @@ def _ensure_columns() -> None:
             if col not in cols:
                 with engine.begin() as conn:
                     conn.execute(text(ddl))
+        # 加密後的密文常超過 VARCHAR(255) → 在 Postgres 把這些欄位放寬成 TEXT(SQLite 不限長,免處理)
+        if engine.dialect.name == "postgresql":
+            for c in ("discord_webhook", "telegram_token", "telegram_chat_id",
+                      "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key"):
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text(f"ALTER TABLE tr_user_settings ALTER COLUMN {c} TYPE TEXT"))
+                except Exception:
+                    pass
 
 
 # ---------- Run 持久化 ----------
