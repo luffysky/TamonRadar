@@ -16,20 +16,26 @@ export default function ProductCards({
   onToggleFav?: (r: CrawlRecord) => void;
 }) {
   const [lightbox, setLightbox] = useState<CrawlRecord | null>(null);
+  const [page, setPage] = useState(0);
+  const PER = 20;
 
   const score = (r: CrawlRecord) => ((r.price || "").trim() ? 2 : 0) + (r.image_url ? 1 : 0);
   const items = [...records]
     .filter((r) => !r.is_listing) // 排除搜尋/列表頁,只放真正的商品/內容頁
-    .sort((a, b) => score(b) - score(a)); // 全部列出(有價/有圖優先,不設上限)
+    .sort((a, b) => score(b) - score(a)); // 有價/有圖優先
 
   if (items.length === 0) {
     return <p className="text-sm text-slate-400">這次沒有商品頁(多為搜尋/列表頁,請看下方完整結果)。</p>;
   }
 
+  const pageCount = Math.ceil(items.length / PER);
+  const cur = Math.min(page, pageCount - 1);
+  const shown = items.slice(cur * PER, (cur + 1) * PER);
+
   return (
     <>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
-        {items.map((r, i) => (
+        {shown.map((r, i) => (
           <div
             key={`${r.url}-${i}`}
             className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
@@ -70,6 +76,14 @@ export default function ProductCards({
           </div>
         ))}
       </div>
+
+      {pageCount > 1 && (
+        <div className="mt-4 flex items-center justify-center gap-3 text-sm">
+          <button onClick={() => setPage(cur - 1)} disabled={cur === 0} className="rounded-lg border border-slate-300 px-3 py-1.5 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:hover:bg-slate-700">← 上一頁</button>
+          <span className="text-slate-500 dark:text-slate-400">{cur + 1} / {pageCount}(共 {items.length} 件)</span>
+          <button onClick={() => setPage(cur + 1)} disabled={cur >= pageCount - 1} className="rounded-lg border border-slate-300 px-3 py-1.5 hover:bg-slate-50 disabled:opacity-40 dark:border-slate-600 dark:hover:bg-slate-700">下一頁 →</button>
+        </div>
+      )}
 
       {lightbox && (
         <div
