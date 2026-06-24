@@ -1088,6 +1088,26 @@ def admin_audit(admin=Depends(auth.get_admin)):
     return {"logs": db.list_audit()}
 
 
+@app.get("/api/admin/app-settings")
+def admin_app_settings(admin=Depends(auth.get_admin)):
+    return {"settings": db.get_app_settings()}
+
+
+class AppSettingRequest(BaseModel):
+    key: str
+    value: str = ""
+
+
+@app.post("/api/admin/app-settings")
+def admin_save_app_setting(req: AppSettingRequest, admin=Depends(auth.get_admin)):
+    k = req.key.strip()
+    if not k:
+        raise HTTPException(400, "key 不可為空")
+    db.save_app_settings({k: req.value})
+    db.log_audit(admin.email, "app_setting", k, req.value[:80])
+    return {"ok": True}
+
+
 # ---- 站內公告 ----
 class AnnouncementRequest(BaseModel):
     title: str = ""

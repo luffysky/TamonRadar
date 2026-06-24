@@ -270,6 +270,8 @@ def _feed_items(soup: BeautifulSoup, base_url: str) -> list[dict]:
 def scrape_full_page(url: str) -> list[dict]:
     """整頁抓取:給一個網址,抓出該頁所有表格列 + 內嵌商品(適合股票/排行/列表頁)。"""
     from . import robots
+    if robots.blocked(url):
+        raise RuntimeError("此網站在封鎖清單(登入牆/禁止自動抓取)")
     if not robots.allowed(url):
         raise RuntimeError("該網站的 robots.txt 不允許抓取此頁")
     r = requests.get(url, headers=_LIGHT_HEADERS, timeout=15)

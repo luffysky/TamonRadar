@@ -8,14 +8,14 @@ import { ADMIN_BASE } from "@/lib/admin";
 import {
   adminListAnnouncements, adminCreateAnnouncement, adminDeleteAnnouncement,
   getAuditLogs, getReports, resolveReport, adminEmailBlast, getSeo, saveSeo, exportUsersUrl,
-  listPageSeo, savePageSeo,
+  listPageSeo, savePageSeo, getAppSettings, saveAppSetting,
   type Announcement, type AuditLog, type ReportItem, type PageSeo,
 } from "@/lib/api";
 
 export default function AdminOpsPage() {
   const { user, ready } = useRequireAuth();
   const toast = useToast();
-  const [tab, setTab] = useState<"ann" | "audit" | "report" | "email" | "seo">("ann");
+  const [tab, setTab] = useState<"ann" | "audit" | "report" | "email" | "seo" | "app">("ann");
 
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [annForm, setAnnForm] = useState({ title: "", body: "", level: "info", active: true });
@@ -25,6 +25,8 @@ export default function AdminOpsPage() {
   const [seo, setSeo] = useState<Record<string, string>>({});
   const [pages, setPages] = useState<PageSeo[]>([]);
   const [pageForm, setPageForm] = useState<PageSeo>({ path: "/", title: "", description: "", keywords: "" });
+  const [appSettings, setAppSettings] = useState<Record<string, string>>({});
+  const [appForm, setAppForm] = useState({ key: "", value: "" });
 
   useEffect(() => {
     if (!user) return;
@@ -33,13 +35,14 @@ export default function AdminOpsPage() {
     getReports().then((d) => setReports(d.reports)).catch(() => {});
     getSeo().then(setSeo).catch(() => {});
     listPageSeo().then((d) => setPages(d.pages)).catch(() => {});
+    getAppSettings().then((d) => setAppSettings(d.settings)).catch(() => {});
   }, [user]);
 
   if (!ready || !user) return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
   if (!user.is_admin) return <p className="py-20 text-center text-sm text-rose-500">沒有管理員權限。</p>;
 
   const field = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900";
-  const tabs: [typeof tab, string][] = [["ann", "站內公告"], ["audit", "稽核日誌"], ["report", "檢舉佇列"], ["email", "Email 群發"], ["seo", "SEO"]];
+  const tabs: [typeof tab, string][] = [["ann", "站內公告"], ["audit", "稽核日誌"], ["report", "檢舉佇列"], ["email", "Email 群發"], ["seo", "SEO"], ["app", "應用設定"]];
 
   return (
     <div className="space-y-5">
@@ -144,6 +147,25 @@ export default function AdminOpsPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {tab === "app" && (
+        <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <p className="text-xs text-slate-400">站台設定 / 功能旗標(key-value),例如聯絡信箱、維護模式等。</p>
+          <div className="flex flex-wrap gap-2">
+            <input value={appForm.key} onChange={(e) => setAppForm({ ...appForm, key: e.target.value })} placeholder="key" className={`${field} max-w-[200px]`} />
+            <input value={appForm.value} onChange={(e) => setAppForm({ ...appForm, value: e.target.value })} placeholder="value" className={field + " flex-1"} />
+            <button onClick={async () => { if (!appForm.key.trim()) return; await saveAppSetting(appForm.key.trim(), appForm.value); toast("已儲存", "success"); getAppSettings().then((d) => setAppSettings(d.settings)); setAppForm({ key: "", value: "" }); }} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">儲存</button>
+          </div>
+          <div className="divide-y divide-slate-100 text-sm dark:divide-slate-700">
+            {Object.entries(appSettings).map(([k, v]) => (
+              <button key={k} onClick={() => setAppForm({ key: k, value: v })} className="flex w-full items-center justify-between gap-3 py-2 text-left hover:opacity-80">
+                <span className="shrink-0 font-mono text-xs text-brand-600 dark:text-brand-300">{k}</span>
+                <span className="truncate text-slate-500 dark:text-slate-400">{v}</span>
+              </button>
+            ))}
           </div>
         </div>
       )}

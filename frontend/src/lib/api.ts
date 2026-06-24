@@ -662,6 +662,18 @@ export async function saveSeo(data: Record<string, string>): Promise<void> {
   if (!res.ok) throw new Error("儲存 SEO 失敗");
 }
 
+export async function getAppSettings(): Promise<{ settings: Record<string, string> }> {
+  const res = await fetch(`${API_BASE}/api/admin/app-settings`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取應用設定失敗");
+  return res.json();
+}
+export async function saveAppSetting(key: string, value: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/app-settings`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ key, value }) });
+  check401(res);
+  if (!res.ok) throw new Error("儲存應用設定失敗");
+}
+
 export interface PageSeo { path: string; title?: string; description?: string; keywords?: string; }
 export async function listPageSeo(): Promise<{ pages: PageSeo[] }> {
   const res = await fetch(`${API_BASE}/api/admin/seo/pages`, { headers: authHeaders() });

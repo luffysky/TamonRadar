@@ -34,8 +34,8 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
             on_event({"type": "stopped", "message": "已被使用者停止"})
             break
         url, depth = queue.pop(0)
-        if not robots.allowed(url):
-            on_event({"type": "warning", "message": f"robots.txt 禁止,略過:{url}"})
+        if robots.blocked(url) or not robots.allowed(url):
+            on_event({"type": "warning", "message": f"robots/封鎖清單禁止,略過:{url}"})
             continue
         try:
             r = requests.get(url, headers=_LIGHT_HEADERS, timeout=12)
