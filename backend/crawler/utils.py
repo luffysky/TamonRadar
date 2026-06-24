@@ -190,6 +190,25 @@ def is_listing_url(url: str) -> bool:
     return any(m in u for m in markers)
 
 
+def keyword_tokens(keywords: list[str]) -> set[str]:
+    """把關鍵字拆成 token(長度>=2),用來判斷結果相關性。"""
+    toks: set[str] = set()
+    for kw in keywords or []:
+        for t in re.split(r"\s+", (kw or "").strip()):
+            t = t.strip().lower()
+            if len(t) >= 2:
+                toks.add(t)
+    return toks
+
+
+def is_relevant(item: dict, tokens: set[str]) -> bool:
+    """標題/摘要/網址有出現任一關鍵字 token 才算相關。"""
+    if not tokens:
+        return True
+    hay = f"{item.get('title', '')} {item.get('snippet', '')} {item.get('url', '')}".lower()
+    return any(t in hay for t in tokens)
+
+
 def is_valid_url(url: str, skip_extensions: tuple[str, ...]) -> bool:
     """修正:用網址 path 判斷副檔名,去掉 query string,避免 ...png?x=1 漏擋。"""
     if not url:

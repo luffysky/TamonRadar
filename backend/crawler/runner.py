@@ -20,7 +20,7 @@ from .google_search import search_google, BlockedError
 from .search_api import search_api, SearchApiError, resolve_order, API_PROVIDERS
 from .detail_scraper import scrape_detail_page, classify_search_only, light_enrich
 from .reporter import to_dataframe, build_summary
-from .utils import is_valid_url
+from .utils import is_valid_url, keyword_tokens, is_relevant
 
 EventCallback = Callable[[dict], None]
 
@@ -182,9 +182,15 @@ def run_crawl(
             all_search_results.extend(results)
 
         deduped = dedupe_results(all_search_results)
+        # 相關性過濾:濾掉標題/摘要/網址完全沒提到關鍵字的結果
+        tokens = keyword_tokens(config.keywords)
+        relevant = [it for it in deduped if is_relevant(it, tokens)]
+        dropped = len(deduped) - len(relevant)
+        if relevant:  # 全被濾掉就保留原本(避免太嚴格變空)
+            deduped = relevant
         on_event({
             "type": "dedup", "count": len(deduped),
-            "message": f"去重複後共 {len(deduped)} 筆",
+            "message": f"去重複後共 {len(deduped)} 筆" + (f"(濾掉 {dropped} 筆無關)" if dropped else ""),
         })
 
         if not config.scrape_details or config.max_detail_pages == 0:

@@ -50,6 +50,7 @@ class CrawlConfig:
     headless: bool = True
     scrape_details: bool = True
     search_provider: str = field(default_factory=_default_provider)
+    vertical: str = ""
     output_dir: str = "output"
 
     def normalized(self) -> "CrawlConfig":
@@ -67,5 +68,6 @@ class CrawlConfig:
             headless=self.headless,
             scrape_details=self.scrape_details,
             search_provider=provider,
+            vertical=self.vertical,
             output_dir=self.output_dir,
         )

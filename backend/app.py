@@ -67,6 +67,7 @@ class CrawlRequest(BaseModel):
     headless: bool = True
     scrape_details: bool = True
     search_provider: str | None = None   # brave | serpapi | selenium;None=自動
+    vertical: str = ""                   # 搜尋領域:merch/food/pet/...(影響分類框架)
 
 
 class SummarizeRequest(BaseModel):
@@ -426,6 +427,7 @@ def start_crawl(req: CrawlRequest, user=Depends(auth.get_current_user)):
         headless=req.headless,
         scrape_details=req.scrape_details,
         search_provider=req.search_provider or CrawlConfig().search_provider,
+        vertical=req.vertical,
     )
     job = manager.create(config, user.id)
     return {"job_id": job.id, "status": job.status}
