@@ -1,17 +1,11 @@
-# TamonRadar 後端 — 含 Chromium,讓 Selenium 在 Zeabur / 任何容器都能跑
+# TamonRadar 後端 — 輕量版(雲端用,不含 Chromium)
+# 雲端用搜尋 API(SerpAPI/Brave/SearXNG/DuckDuckGo),不需要瀏覽器,
+# 映像小很多 → 部署更快、停機更短。
+# 若要在容器內跑 Selenium,改用 Dockerfile.selenium(含 Chromium)。
 FROM python:3.12-slim
 
-# 安裝 chromium 與對應的 driver(同一套件庫版本相符),以及中文字型(圖表用)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    chromium \
-    chromium-driver \
-    fonts-noto-cjk \
-    && rm -rf /var/lib/apt/lists/*
-
-# 告訴 runner.py 用系統的 chromium / chromedriver,不再走 webdriver-manager 下載
-ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROMEDRIVER=/usr/bin/chromedriver
-ENV PYTHONUNBUFFERED=1
+ENV PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
@@ -20,7 +14,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-# Zeabur 會以 $PORT 注入對外埠;本機預設 8000
 ENV PORT=8000
 EXPOSE 8000
 

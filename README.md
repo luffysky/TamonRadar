@@ -73,7 +73,9 @@ npm run dev
 ### 後端服務(API + 爬蟲)
 1. Zeabur → Add Service → Git → 選 `TamonRadar`。
 2. 設定 **Root Directory = `backend`**。
-   後端有 `Dockerfile`(內含 Chromium),Zeabur 會用它建置,Selenium 才能在雲端跑。
+   後端有**輕量 `Dockerfile`(不含 Chromium)**,部署快、停機短;雲端用搜尋 API 不需瀏覽器。
+   (要在容器內跑 Selenium 才改用 `Dockerfile.selenium`,含 Chromium。)
+   建議到 Settings → Health Check 設 `/api/health` 以接近零停機。
 3. 環境變數(參考 `backend/.env.example`):
    - `DATABASE_URL` = Supabase 連線字串(**雲端必填**,否則資料會在每次重部署後消失)
    - `JWT_SECRET` = 自己亂打一長串(**雲端必填**,帳號 token 的簽章密鑰)
