@@ -74,12 +74,16 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
           <button onClick={togglePlan} className="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
             {u.plan === "pro" ? "降為 free" : "升為 pro"}
           </button>
-          <button onClick={togglePriv} className={`rounded-md border px-3 py-1 text-xs ${u.privileged ? "border-violet-300 text-violet-600 hover:bg-violet-50" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"}`}>
-            {u.privileged ? "取消特權" : "給予特權(全功能免費)"}
-          </button>
-          <button onClick={toggleBan} className={`rounded-md border px-3 py-1 text-xs ${u.banned ? "border-emerald-300 text-emerald-600 hover:bg-emerald-50" : "border-rose-300 text-rose-600 hover:bg-rose-50"}`}>
-            {u.banned ? "解除停權" : "停權"}
-          </button>
+          {user.is_owner && (
+            <>
+              <button onClick={togglePriv} className={`rounded-md border px-3 py-1 text-xs ${u.privileged ? "border-violet-300 text-violet-600 hover:bg-violet-50" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"}`}>
+                {u.privileged ? "取消特權" : "給予特權(全功能免費)"}
+              </button>
+              <button onClick={toggleBan} className={`rounded-md border px-3 py-1 text-xs ${u.banned ? "border-emerald-300 text-emerald-600 hover:bg-emerald-50" : "border-rose-300 text-rose-600 hover:bg-rose-50"}`}>
+                {u.banned ? "解除停權" : "停權"}
+              </button>
+            </>
+          )}
           {u.banned && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">已停權</span>}
         </div>
       </div>

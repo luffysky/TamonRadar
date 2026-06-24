@@ -6,6 +6,7 @@ export interface AuthUser {
   privileged?: boolean;
   email_verified?: boolean;
   is_admin?: boolean;
+  is_owner?: boolean;
 }
 
 const TOKEN_KEY = "tr_token";

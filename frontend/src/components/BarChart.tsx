@@ -19,12 +19,13 @@ export default function BarChart({
   const height = Math.min(420, Math.max(160, entries.length * 34));
 
   return (
-    <div className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+    <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
       <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
       {entries.length === 0 ? (
         <p className="text-sm text-slate-400">沒有資料</p>
       ) : (
-        <ResponsiveContainer width="100%" height={height}>
+        <div style={{ width: "100%", height }}>
+        <ResponsiveContainer width="100%" height="100%">
           <RBarChart data={entries} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" horizontal={false} />
             <XAxis type="number" stroke="#94a3b8" fontSize={11} allowDecimals={false} />
@@ -41,6 +42,7 @@ export default function BarChart({
             </Bar>
           </RBarChart>
         </ResponsiveContainer>
+        </div>
       )}
     </div>
   );

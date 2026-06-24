@@ -181,9 +181,11 @@ export default function AdminPage() {
                       <button onClick={() => togglePlan(u)} className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
                         {u.plan === "pro" ? "降 free" : "升 pro"}
                       </button>
-                      <button onClick={() => togglePriv(u)} className={`rounded-md border px-2 py-1 text-xs ${u.privileged ? "border-violet-300 text-violet-600 hover:bg-violet-50" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"}`}>
-                        {u.privileged ? "取消特權" : "給特權"}
-                      </button>
+                      {user.is_owner && (
+                        <button onClick={() => togglePriv(u)} className={`rounded-md border px-2 py-1 text-xs ${u.privileged ? "border-violet-300 text-violet-600 hover:bg-violet-50" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"}`}>
+                          {u.privileged ? "取消特權" : "給特權"}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

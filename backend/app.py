@@ -155,6 +155,7 @@ def _public_user(user) -> dict:
         "privileged": priv,
         "email_verified": bool(getattr(user, "email_verified", False)) or getattr(user, "provider", "local") != "local",
         "is_admin": auth.is_admin(user.email),
+        "is_owner": auth.is_owner(user.email),
     }
 
 
@@ -1054,7 +1055,7 @@ class PrivilegeRequest(BaseModel):
 
 
 @app.post("/api/admin/users/{user_id}/privilege")
-def admin_set_privilege(user_id: int, req: PrivilegeRequest, admin=Depends(auth.get_admin)):
+def admin_set_privilege(user_id: int, req: PrivilegeRequest, admin=Depends(auth.get_owner)):
     if not db.set_privilege(user_id, req.privileged):
         raise HTTPException(404, "找不到使用者")
     db.log_audit(admin.email, "privilege" if req.privileged else "unprivilege", str(user_id))
@@ -1066,7 +1067,7 @@ class BanRequest(BaseModel):
 
 
 @app.post("/api/admin/users/{user_id}/ban")
-def admin_ban(user_id: int, req: BanRequest, admin=Depends(auth.get_admin)):
+def admin_ban(user_id: int, req: BanRequest, admin=Depends(auth.get_owner)):
     if not db.set_banned(user_id, req.banned):
         raise HTTPException(404, "找不到使用者")
     db.log_audit(admin.email, "ban" if req.banned else "unban", str(user_id))

@@ -26,7 +26,7 @@ export default function DashboardCharts() {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       <Card title="📈 註冊趨勢(近 30 天)">
-        <ResponsiveContainer width="100%" height={200}>
+        <div style={{ width: "100%", height: 200 }}><ResponsiveContainer width="100%" height="100%">
           <AreaChart data={d.signups}>
             <defs>
               <linearGradient id="g-su" x1="0" y1="0" x2="0" y2="1">
@@ -40,11 +40,11 @@ export default function DashboardCharts() {
             <Tooltip {...tip} />
             <Area type="monotone" dataKey="count" name="新註冊" stroke="#2f5597" fill="url(#g-su)" strokeWidth={2} />
           </AreaChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer></div>
       </Card>
 
       <Card title="🤖 AI / 搜尋用量(近 30 天)">
-        <ResponsiveContainer width="100%" height={200}>
+        <div style={{ width: "100%", height: 200 }}><ResponsiveContainer width="100%" height="100%">
           <BarChart data={d.ai_usage}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
             <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={4} />
@@ -54,11 +54,11 @@ export default function DashboardCharts() {
             <Bar dataKey="ai" name="AI" fill="#8b5cf6" radius={[3, 3, 0, 0]} />
             <Bar dataKey="search" name="搜尋" fill="#22c55e" radius={[3, 3, 0, 0]} />
           </BarChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer></div>
       </Card>
 
       <Card title="📊 內容成長(搜尋次數 / 文章)">
-        <ResponsiveContainer width="100%" height={200}>
+        <div style={{ width: "100%", height: 200 }}><ResponsiveContainer width="100%" height="100%">
           <LineChart data={d.content}>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
             <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={4} />
@@ -68,7 +68,7 @@ export default function DashboardCharts() {
             <Line type="monotone" dataKey="runs" name="搜尋" stroke="#2f5597" strokeWidth={2} dot={false} />
             <Line type="monotone" dataKey="posts" name="文章" stroke="#f59e0b" strokeWidth={2} dot={false} />
           </LineChart>
-        </ResponsiveContainer>
+        </ResponsiveContainer></div>
       </Card>
     </div>
   );

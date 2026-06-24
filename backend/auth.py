@@ -120,6 +120,14 @@ def is_admin(email: str) -> bool:
     return bool(email) and email.lower() in admins
 
 
+def is_owner(email: str) -> bool:
+    """擁有者(超級管理員)。未設 OWNER_EMAILS 時,管理員即視為擁有者(向後相容)。"""
+    owners = {e.strip().lower() for e in os.environ.get("OWNER_EMAILS", "").split(",") if e.strip()}
+    if not owners:
+        return is_admin(email)
+    return bool(email) and email.lower() in owners
+
+
 def get_current_user(
     cred: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> User:
@@ -151,4 +159,10 @@ def get_optional_user(cred: HTTPAuthorizationCredentials | None = Depends(_beare
 def get_admin(user: User = Depends(get_current_user)) -> User:
     if not is_admin(user.email):
         raise HTTPException(403, "需要管理員權限")
+    return user
+
+
+def get_owner(user: User = Depends(get_current_user)) -> User:
+    if not is_owner(user.email):
+        raise HTTPException(403, "需要擁有者權限")
     return user
