@@ -9,13 +9,14 @@ import {
   adminListAnnouncements, adminCreateAnnouncement, adminDeleteAnnouncement,
   getAuditLogs, getReports, resolveReport, adminEmailBlast, getSeo, saveSeo, exportUsersUrl,
   listPageSeo, savePageSeo, getAppSettings, saveAppSetting, getAiCosts, getBotChats,
-  type Announcement, type AuditLog, type ReportItem, type PageSeo, type AiCosts, type BotChat,
+  adminListComments, setCommentStatus,
+  type Announcement, type AuditLog, type ReportItem, type PageSeo, type AiCosts, type BotChat, type BlogComment,
 } from "@/lib/api";
 
 export default function AdminOpsPage() {
   const { user, ready } = useRequireAuth();
   const toast = useToast();
-  const [tab, setTab] = useState<"ann" | "audit" | "report" | "email" | "seo" | "app" | "ai" | "bot">("ann");
+  const [tab, setTab] = useState<"ann" | "audit" | "report" | "email" | "seo" | "app" | "ai" | "bot" | "mod">("ann");
 
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [annForm, setAnnForm] = useState({ title: "", body: "", level: "info", active: true });
@@ -31,6 +32,8 @@ export default function AdminOpsPage() {
   const [botChats, setBotChats] = useState<BotChat[]>([]);
   const [botPlatform, setBotPlatform] = useState("");
   const [botQuery, setBotQuery] = useState("");
+  const [comments, setComments] = useState<BlogComment[]>([]);
+  const [modQuery, setModQuery] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -42,13 +45,22 @@ export default function AdminOpsPage() {
     getAppSettings().then((d) => setAppSettings(d.settings)).catch(() => {});
     getAiCosts().then(setAiCosts).catch(() => {});
     getBotChats().then((d) => setBotChats(d.chats)).catch(() => {});
+    adminListComments().then((d) => setComments(d.comments)).catch(() => {});
   }, [user]);
+
+  async function moderate(id: number, status: "visible" | "hidden" | "delete") {
+    try {
+      await setCommentStatus(id, status);
+      if (status === "delete") setComments((cs) => cs.filter((c) => c.id !== id));
+      else setComments((cs) => cs.map((c) => (c.id === id ? { ...c, status } : c)));
+    } catch { /* */ }
+  }
 
   if (!ready || !user) return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
   if (!user.is_admin) return <p className="py-20 text-center text-sm text-rose-500">沒有管理員權限。</p>;
 
   const field = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900";
-  const tabs: [typeof tab, string][] = [["ann", "站內公告"], ["audit", "稽核日誌"], ["report", "檢舉佇列"], ["email", "Email 群發"], ["seo", "SEO"], ["app", "應用設定"], ["ai", "AI 成本"], ["bot", "Bot 對話"]];
+  const tabs: [typeof tab, string][] = [["ann", "站內公告"], ["audit", "稽核日誌"], ["report", "檢舉佇列"], ["email", "Email 群發"], ["seo", "SEO"], ["app", "應用設定"], ["ai", "AI 成本"], ["bot", "Bot 對話"], ["mod", "留言審核"]];
 
   return (
     <div className="space-y-5">
@@ -224,6 +236,28 @@ export default function AdminOpsPage() {
               <p className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">問:{c.question}</p>
               <p className="mt-0.5 whitespace-pre-wrap text-slate-600 dark:text-slate-300">答:{c.answer}</p>
             </div>
+            ));
+          })()}
+        </div>
+      )}
+
+      {tab === "mod" && (
+        <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <input value={modQuery} onChange={(e) => setModQuery(e.target.value)} placeholder="搜尋留言 / 作者 / 文章…" className="w-full rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" />
+          {(() => {
+            const q = modQuery.trim().toLowerCase();
+            const list = comments.filter((c) => !q || `${c.author_name} ${c.content} ${c.post_title}`.toLowerCase().includes(q));
+            return list.length === 0 ? <p className="text-sm text-slate-400">沒有留言</p> : list.map((c) => (
+              <div key={c.id} className={`rounded-lg border p-2 text-sm ${c.status === "hidden" ? "border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/30" : "border-slate-100 dark:border-slate-700"}`}>
+                <p className="text-[10px] text-slate-400">{c.author_name} · 文章「{c.post_title}」· {c.created_at ? new Date(c.created_at).toLocaleString("zh-TW") : ""} · {c.status === "hidden" ? "已隱藏" : "顯示中"}</p>
+                <p className="mt-0.5 whitespace-pre-wrap text-slate-700 dark:text-slate-200">{c.content}</p>
+                <div className="mt-1.5 flex gap-2">
+                  {c.status === "hidden"
+                    ? <button onClick={() => moderate(c.id, "visible")} className="rounded border border-emerald-300 px-2 py-0.5 text-xs text-emerald-600 hover:bg-emerald-50">顯示</button>
+                    : <button onClick={() => moderate(c.id, "hidden")} className="rounded border border-amber-300 px-2 py-0.5 text-xs text-amber-600 hover:bg-amber-50">隱藏</button>}
+                  <button onClick={() => moderate(c.id, "delete")} className="rounded border border-rose-300 px-2 py-0.5 text-xs text-rose-600 hover:bg-rose-50">刪除</button>
+                </div>
+              </div>
             ));
           })()}
         </div>

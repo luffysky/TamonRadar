@@ -1331,11 +1331,17 @@ class PostRequest(BaseModel):
     series: str = ""
     tags: list[str] = Field(default_factory=list)
     published: bool = False
+    featured: bool = False
 
 
 @app.get("/api/blog")
-def blog_list(category: str | None = None):
-    return {"posts": db.list_published_posts(category)}
+def blog_list(category: str | None = None, tag: str | None = None, featured: bool = False):
+    return {"posts": db.list_published_posts(category, tag, featured)}
+
+
+@app.get("/api/blog-taxonomy")
+def blog_taxonomy():
+    return db.list_blog_taxonomy()
 
 
 # ---- 使用者自己的部落格(所有登入者都能寫)----
@@ -1436,11 +1442,67 @@ def blog_subscribed(author_id: int, user=Depends(auth.get_current_user)):
 
 
 @app.get("/api/blog/{slug}")
-def blog_get(slug: str):
+def blog_get(slug: str, user=Depends(auth.get_optional_user)):
     p = db.get_post_by_slug(slug)
     if not p:
         raise HTTPException(404, "找不到文章")
+    p["comments"] = db.list_post_comments(p["id"])
+    p["liked"] = db.user_liked_post(p["id"], user.id) if user else False
     return p
+
+
+class CommentRequest(BaseModel):
+    content: str
+
+
+@app.post("/api/blog/{post_id}/like")
+def blog_like(post_id: int, user=Depends(auth.get_current_user)):
+    r = db.toggle_post_like(post_id, user.id)
+    if not r.get("ok"):
+        raise HTTPException(404, "找不到文章")
+    return r
+
+
+@app.get("/api/blog/{post_id}/comments")
+def blog_comments(post_id: int):
+    return {"comments": db.list_post_comments(post_id)}
+
+
+@app.post("/api/blog/{post_id}/comments")
+def blog_add_comment(post_id: int, req: CommentRequest, user=Depends(auth.get_current_user)):
+    content = (req.content or "").strip()
+    if not content:
+        raise HTTPException(400, "留言不能是空的")
+    name = getattr(user, "username", "") or user.email.split("@")[0]
+    return db.add_post_comment(post_id, user.id, name, content)
+
+
+# ---- 後台:留言審核 + 精選 ----
+@app.get("/api/admin/comments")
+def admin_comments(admin=Depends(auth.get_admin)):
+    return {"comments": db.admin_list_comments()}
+
+
+class CommentStatusRequest(BaseModel):
+    status: str  # visible | hidden | delete
+
+
+@app.post("/api/admin/comments/{comment_id}/status")
+def admin_comment_status(comment_id: int, req: CommentStatusRequest, admin=Depends(auth.get_admin)):
+    if not db.set_comment_status(comment_id, req.status):
+        raise HTTPException(404, "找不到留言")
+    return {"ok": True}
+
+
+class FeaturedRequest(BaseModel):
+    featured: bool
+
+
+@app.post("/api/admin/blog/{post_id}/featured")
+def admin_blog_featured(post_id: int, req: FeaturedRequest, admin=Depends(auth.get_admin)):
+    if not db.set_post_featured(post_id, req.featured):
+        raise HTTPException(404, "找不到文章")
+    return {"ok": True}
 
 
 @app.get("/api/admin/blog")

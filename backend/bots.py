@@ -20,11 +20,12 @@ def answer(question: str) -> str:
         return "AI 暫時無法使用(後端尚未設定 AI 金鑰)。"
     prompt = (
         KNOWLEDGE
-        + "\n\n你是 TamonRadar 的助手,只根據上面的網站說明用繁體中文簡潔回答。"
-        "與本站無關就禮貌說明你主要回答 TamonRadar 相關問題。\n\n問題:" + question
+        + "\n\n你是 TamonRadar 的 AI 助手,請用繁體中文、友善、簡潔地回答使用者的問題。"
+        "若問題和 TamonRadar 有關,優先參考上面的網站說明;若是一般性問題(購物、比價、生活、知識等),"
+        "也請正常、實用地回答,不要拒答。只有在被要求做違法或有害的事時才婉拒。\n\n問題:" + question
     )
-    text, _ = ai.ai_complete(prompt, max_tokens=600)
-    return text or "抱歉,我無法回答。"
+    text, _ = ai.ai_complete(prompt, max_tokens=800)
+    return text or "抱歉,我這邊暫時無法回答,請稍後再試。"
 
 
 # ---------- Telegram ----------

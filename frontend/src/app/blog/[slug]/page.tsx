@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { API_BASE, type BlogPost } from "@/lib/api";
 import RichContent from "@/components/social/RichContent";
+import PostInteractions from "@/components/PostInteractions";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tamonradar.snowrealm.pet";
 
@@ -106,6 +107,24 @@ export default async function ArticlePage({ params }: { params: { slug: string }
       <div className="mt-6 scroll-mt-20">
         <RichContent html={withIds} />
       </div>
+
+      {post.tags && post.tags.length > 0 && (
+        <div className="mt-6 flex flex-wrap gap-1.5">
+          {post.tags.map((t) => (
+            <Link key={t} href={`/blog?tag=${encodeURIComponent(t)}`} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-200 dark:bg-slate-700 dark:text-slate-300">#{t}</Link>
+          ))}
+        </div>
+      )}
+
+      <PostInteractions
+        postId={post.id}
+        slug={post.slug}
+        title={post.title}
+        coverImage={post.cover_image}
+        initialLikes={post.likes ?? 0}
+        initialLiked={post.liked ?? false}
+        initialComments={post.comments ?? []}
+      />
     </article>
   );
 }

@@ -764,18 +764,61 @@ export interface BlogPost {
   category: string;
   tags: string[];
   published: boolean;
+  featured?: boolean;
+  likes?: number;
+  liked?: boolean;
   content?: string;
   author?: string;
   author_id?: number;
   series?: string;
+  comments?: BlogComment[];
   created_at: string | null;
   updated_at: string | null;
 }
 
+export interface BlogComment {
+  id: number; post_id: number; author_id?: number; author_name: string;
+  content: string; status: string; post_title?: string; created_at: string | null;
+}
+
 export type PostInput = {
   title: string; slug: string; excerpt: string; content: string;
-  cover_image: string; category: string; series: string; tags: string[]; published: boolean;
+  cover_image: string; category: string; series: string; tags: string[]; published: boolean; featured?: boolean;
 };
+
+export async function getBlogTaxonomy(): Promise<{ categories: { name: string; count: number }[]; tags: { name: string; count: number }[] }> {
+  const res = await fetch(`${API_BASE}/api/blog-taxonomy`);
+  if (!res.ok) return { categories: [], tags: [] };
+  return res.json();
+}
+export async function likeBlogPost(postId: number): Promise<{ liked: boolean; likes: number }> {
+  const res = await fetch(`${API_BASE}/api/blog/${postId}/like`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("操作失敗");
+  return res.json();
+}
+export async function addBlogComment(postId: number, content: string): Promise<BlogComment> {
+  const res = await fetch(`${API_BASE}/api/blog/${postId}/comments`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ content }) });
+  check401(res);
+  if (!res.ok) throw new Error("留言失敗");
+  return res.json();
+}
+export async function adminListComments(): Promise<{ comments: BlogComment[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/comments`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取留言失敗");
+  return res.json();
+}
+export async function setCommentStatus(id: number, status: "visible" | "hidden" | "delete"): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/comments/${id}/status`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ status }) });
+  check401(res);
+  if (!res.ok) throw new Error("操作失敗");
+}
+export async function setPostFeatured(id: number, featured: boolean): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/blog/${id}/featured`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ featured }) });
+  check401(res);
+  if (!res.ok) throw new Error("操作失敗");
+}
 
 export async function subscribeAuthor(authorId: number): Promise<void> {
   const res = await fetch(`${API_BASE}/api/blog/author/${authorId}/subscribe`, { method: "POST", headers: authHeaders() });

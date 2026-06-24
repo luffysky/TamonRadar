@@ -12,7 +12,7 @@ import RichTextEditor from "@/components/social/RichTextEditor";
 import { ADMIN_BASE } from "@/lib/admin";
 
 const EMPTY: PostInput = {
-  title: "", slug: "", excerpt: "", content: "", cover_image: "", category: "", series: "", tags: [], published: false,
+  title: "", slug: "", excerpt: "", content: "", cover_image: "", category: "", series: "", tags: [], published: false, featured: false,
 };
 
 export default function AdminBlogPage() {
@@ -42,7 +42,7 @@ export default function AdminBlogPage() {
     setEditingId(id);
     setForm({
       title: p.title, slug: p.slug, excerpt: p.excerpt, content: p.content ?? "",
-      cover_image: p.cover_image, category: p.category, series: p.series ?? "", tags: p.tags, published: p.published,
+      cover_image: p.cover_image, category: p.category, series: p.series ?? "", tags: p.tags, published: p.published, featured: p.featured ?? false,
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -88,10 +88,16 @@ export default function AdminBlogPage() {
         <input value={form.cover_image} onChange={(e) => setForm({ ...form, cover_image: e.target.value })} placeholder="封面圖網址(選填)" className={field} />
         <input value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} placeholder="摘要(列表/SEO 用)" className={field} />
         <RichTextEditor content={form.content} onChange={(html) => setForm({ ...form, content: html })} placeholder="內文…" />
-        <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-          <input type="checkbox" checked={form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} />
-          發布(打勾才會公開顯示)
-        </label>
+        <div className="flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} />
+            發布(打勾才會公開顯示)
+          </label>
+          <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={form.featured ?? false} onChange={(e) => setForm({ ...form, featured: e.target.checked })} />
+            ★ 精選(首頁置頂)
+          </label>
+        </div>
         <div className="flex gap-2">
           <button onClick={save} disabled={saving} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
             {editingId ? "更新" : "建立"}

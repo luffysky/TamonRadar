@@ -165,9 +165,31 @@ class Post(Base):
     series: Mapped[str] = mapped_column(String(100), default="")  # 系列名稱(同作者下歸類)
     tags: Mapped[list] = mapped_column(JSON, default=list)
     published: Mapped[bool] = mapped_column(default=False)
+    featured: Mapped[bool] = mapped_column(default=False)  # 精選(首頁置頂)
+    likes: Mapped[int] = mapped_column(default=0)
     author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class PostComment(Base):
+    __tablename__ = "tr_post_comments"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("tr_posts.id"), index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
+    author_name: Mapped[str] = mapped_column(String(120), default="")
+    content: Mapped[str] = mapped_column(Text, default="")
+    status: Mapped[str] = mapped_column(String(10), default="visible")  # visible | hidden
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class PostLike(Base):
+    __tablename__ = "tr_post_likes"
+    __table_args__ = (UniqueConstraint("post_id", "user_id", name="uq_postlike"),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    post_id: Mapped[int] = mapped_column(ForeignKey("tr_posts.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 class Thread(Base):
@@ -360,9 +382,14 @@ def _ensure_columns() -> None:
 
     if "tr_posts" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_posts")}
-        if "series" not in cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE tr_posts ADD COLUMN series VARCHAR(100) DEFAULT ''"))
+        for col, ddl in (
+            ("series", "ALTER TABLE tr_posts ADD COLUMN series VARCHAR(100) DEFAULT ''"),
+            ("featured", "ALTER TABLE tr_posts ADD COLUMN featured BOOLEAN DEFAULT false"),
+            ("likes", "ALTER TABLE tr_posts ADD COLUMN likes INTEGER DEFAULT 0"),
+        ):
+            if col not in cols:
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
 
     if "tr_runs" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_runs")}
@@ -1483,6 +1510,8 @@ def _post_dict(p: "Post", full: bool = False, author_name: str = "") -> dict:
         "series": p.series or "",
         "tags": p.tags or [],
         "published": p.published,
+        "featured": bool(getattr(p, "featured", False)),
+        "likes": getattr(p, "likes", 0) or 0,
         "author_id": p.author_id,
         "author": author_name,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -1511,14 +1540,114 @@ def _unique_slug(s, base: str) -> str:
     return slug
 
 
-def list_published_posts(category: str | None = None) -> list[dict]:
+def list_published_posts(category: str | None = None, tag: str | None = None, featured: bool = False) -> list[dict]:
     with SessionLocal() as s:
         q = select(Post).where(Post.published == True)  # noqa: E712
         if category:
             q = q.where(Post.category == category)
+        if featured:
+            q = q.where(Post.featured == True)  # noqa: E712
         rows = s.scalars(q.order_by(Post.created_at.desc())).all()
+        if tag:
+            rows = [p for p in rows if tag in (p.tags or [])]
         names = _author_map(s, rows)
         return [_post_dict(p, author_name=names.get(p.author_id, "")) for p in rows]
+
+
+def list_blog_taxonomy() -> dict:
+    """已發佈文章的分類與標籤(含數量)。"""
+    with SessionLocal() as s:
+        rows = s.scalars(select(Post).where(Post.published == True)).all()  # noqa: E712
+        cats: dict = {}
+        tags: dict = {}
+        for p in rows:
+            if p.category:
+                cats[p.category] = cats.get(p.category, 0) + 1
+            for t in (p.tags or []):
+                tags[t] = tags.get(t, 0) + 1
+        return {"categories": [{"name": k, "count": v} for k, v in sorted(cats.items(), key=lambda x: -x[1])],
+                "tags": [{"name": k, "count": v} for k, v in sorted(tags.items(), key=lambda x: -x[1])]}
+
+
+def set_post_featured(post_id: int, featured: bool) -> bool:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        if not p:
+            return False
+        p.featured = bool(featured)
+        s.commit()
+        return True
+
+
+def toggle_post_like(post_id: int, user_id: int) -> dict:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        if not p:
+            return {"ok": False}
+        row = s.scalar(select(PostLike).where(PostLike.post_id == post_id, PostLike.user_id == user_id))
+        if row:
+            s.delete(row)
+            liked = False
+        else:
+            s.add(PostLike(post_id=post_id, user_id=user_id))
+            liked = True
+        s.flush()
+        cnt = s.scalar(select(func.count()).select_from(PostLike).where(PostLike.post_id == post_id)) or 0
+        p.likes = int(cnt)
+        s.commit()
+        return {"ok": True, "liked": liked, "likes": int(cnt)}
+
+
+def user_liked_post(post_id: int, user_id: int) -> bool:
+    with SessionLocal() as s:
+        return s.scalar(select(PostLike).where(PostLike.post_id == post_id, PostLike.user_id == user_id)) is not None
+
+
+def list_post_comments(post_id: int, include_hidden: bool = False) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(PostComment).where(PostComment.post_id == post_id)
+        if not include_hidden:
+            q = q.where(PostComment.status == "visible")
+        rows = s.scalars(q.order_by(PostComment.created_at.desc())).all()
+        return [{"id": c.id, "post_id": c.post_id, "author_id": c.author_id, "author_name": c.author_name,
+                 "content": c.content, "status": c.status,
+                 "created_at": c.created_at.isoformat() if c.created_at else None} for c in rows]
+
+
+def add_post_comment(post_id: int, author_id: int, author_name: str, content: str) -> dict:
+    with SessionLocal() as s:
+        c = PostComment(post_id=post_id, author_id=author_id, author_name=author_name[:120], content=content[:3000])
+        s.add(c)
+        s.commit()
+        s.refresh(c)
+        return {"id": c.id, "post_id": c.post_id, "author_id": c.author_id, "author_name": c.author_name,
+                "content": c.content, "status": c.status,
+                "created_at": c.created_at.isoformat() if c.created_at else None}
+
+
+def admin_list_comments(limit: int = 200) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(PostComment).order_by(PostComment.created_at.desc()).limit(limit)).all()
+        post_titles = {}
+        pids = {c.post_id for c in rows}
+        if pids:
+            post_titles = {pid: title for pid, title in s.execute(select(Post.id, Post.title).where(Post.id.in_(pids))).all()}
+        return [{"id": c.id, "post_id": c.post_id, "post_title": post_titles.get(c.post_id, ""),
+                 "author_name": c.author_name, "content": c.content, "status": c.status,
+                 "created_at": c.created_at.isoformat() if c.created_at else None} for c in rows]
+
+
+def set_comment_status(comment_id: int, status: str) -> bool:
+    with SessionLocal() as s:
+        c = s.get(PostComment, comment_id)
+        if not c:
+            return False
+        if status == "delete":
+            s.delete(c)
+        else:
+            c.status = "hidden" if status == "hidden" else "visible"
+        s.commit()
+        return True
 
 
 def list_all_posts() -> list[dict]:
@@ -1643,7 +1772,7 @@ def update_post(post_id: int, data: dict) -> dict | None:
         p = s.get(Post, post_id)
         if p is None:
             return None
-        for key in ("title", "excerpt", "content", "cover_image", "category", "series", "tags", "published"):
+        for key in ("title", "excerpt", "content", "cover_image", "category", "series", "tags", "published", "featured"):
             if key in data and data[key] is not None:
                 setattr(p, key, data[key])
         if data.get("slug") and data["slug"].strip() != p.slug:
