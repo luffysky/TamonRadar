@@ -746,6 +746,31 @@ def admin_stats() -> dict:
     }
 
 
+def admin_recent_crawls(limit: int = 100) -> list[dict]:
+    """所有使用者的每一輪爬取紀錄(給後台檢核:誰、爬什麼、幾筆、何時)。"""
+    with SessionLocal() as s:
+        rows = s.execute(
+            select(Run, User.email, User.username)
+            .join(User, Run.user_id == User.id)
+            .order_by(Run.finished_at.desc()).limit(limit)
+        ).all()
+        out = []
+        for run, email, uname in rows:
+            kws = run.keywords or []
+            target = "、".join(str(k) for k in kws)
+            mode = "整站爬" if (target.startswith("http") and len(kws) == 1) else "關鍵字"
+            out.append({
+                "id": run.id,
+                "user": uname or (email.split("@")[0] if email else "?"),
+                "email": email,
+                "mode": mode,
+                "target": target,
+                "total": (run.summary or {}).get("total", 0) if isinstance(run.summary, dict) else 0,
+                "finished_at": run.finished_at.isoformat() if run.finished_at else None,
+            })
+        return out
+
+
 def admin_charts() -> dict:
     """後台圖表用的近 30 天時間序列:註冊、AI/搜尋用量、內容成長。"""
     from datetime import timedelta

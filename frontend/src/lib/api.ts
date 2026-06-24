@@ -520,6 +520,14 @@ export async function getAdminCharts(): Promise<AdminCharts> {
   return res.json();
 }
 
+export interface CrawlLog { id: string; user: string; email: string; mode: string; target: string; total: number; finished_at: string | null; }
+export async function getAdminCrawls(): Promise<{ crawls: CrawlLog[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/crawls`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取爬取紀錄失敗");
+  return res.json();
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
   const res = await fetch(`${API_BASE}/api/admin/stats`, { headers: authHeaders() });
   check401(res);
