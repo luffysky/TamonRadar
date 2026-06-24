@@ -1,10 +1,8 @@
 "use client";
 
-import {
-  BarChart as RBarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid,
-} from "recharts";
 import { BAR_COLORS } from "@/lib/format";
 
+// 純 CSS 水平長條圖:不依賴 recharts 的容器量測,任何版面都畫得出來。
 export default function BarChart({
   title,
   data,
@@ -13,10 +11,10 @@ export default function BarChart({
   data: Record<string, number>;
 }) {
   const entries = Object.entries(data ?? {})
+    .filter(([, v]) => typeof v === "number")
     .sort((a, b) => b[1] - a[1])
-    .map(([name, value]) => ({ name, value }));
-
-  const height = Math.min(420, Math.max(160, entries.length * 34));
+    .slice(0, 15);
+  const max = entries.reduce((m, [, v]) => Math.max(m, v), 0) || 1;
 
   return (
     <div className="w-full min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -24,24 +22,19 @@ export default function BarChart({
       {entries.length === 0 ? (
         <p className="text-sm text-slate-400">沒有資料</p>
       ) : (
-        <div style={{ width: "100%", height }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <RBarChart data={entries} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 4 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" horizontal={false} />
-            <XAxis type="number" stroke="#94a3b8" fontSize={11} allowDecimals={false} />
-            <YAxis type="category" dataKey="name" width={96} stroke="#94a3b8" fontSize={11} tickLine={false} />
-            <Tooltip
-              cursor={{ fill: "rgba(148,163,184,0.12)" }}
-              contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #cbd5e1", background: "rgba(255,255,255,0.96)" }}
-              formatter={((v: number) => [`${v} 筆`, "數量"]) as never}
-            />
-            <Bar dataKey="value" radius={[0, 6, 6, 0]} animationDuration={700}>
-              {entries.map((_, i) => (
-                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
-              ))}
-            </Bar>
-          </RBarChart>
-        </ResponsiveContainer>
+        <div className="space-y-1.5">
+          {entries.map(([name, value], i) => (
+            <div key={name} className="flex items-center gap-2 text-xs">
+              <span className="w-24 shrink-0 truncate text-right text-slate-500 dark:text-slate-400" title={name}>{name}</span>
+              <div className="relative h-5 flex-1 overflow-hidden rounded bg-slate-100 dark:bg-slate-700">
+                <div
+                  className="h-full rounded"
+                  style={{ width: `${Math.max(4, (value / max) * 100)}%`, background: BAR_COLORS[i % BAR_COLORS.length] }}
+                />
+              </div>
+              <span className="w-10 shrink-0 text-right font-medium text-slate-600 dark:text-slate-300">{value}</span>
+            </div>
+          ))}
         </div>
       )}
     </div>
