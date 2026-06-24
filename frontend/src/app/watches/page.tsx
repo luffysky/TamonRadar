@@ -86,8 +86,11 @@ export default function WatchesPage() {
       <div>
         <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">監看 · 到貨/開賣通知</h1>
         <p className="text-sm text-slate-500 dark:text-slate-400">
-          貼上商品/票券網址,系統定時檢查,從「未開賣/售完」變成「可購買」時,立刻推播到你的 Discord / Telegram。
+          貼上商品/票券網址,系統定時檢查,**售完→補貨**、未開賣→開賣、或**降到目標價**時,立刻推播到你的 Discord / Telegram。
           (記得先到「設定」設好通知管道)
+        </p>
+        <p className="mt-1 text-xs text-slate-400">
+          內建判斷「售完/缺貨/補貨中 ↔ 現貨/加入購物車」字眼,免設定就會用;也會讀頁面內嵌 JSON(動態庫存)。最快每 1 分鐘檢查。
         </p>
       </div>
 

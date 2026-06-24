@@ -19,12 +19,13 @@ _HEADERS = {
 
 # 預設判斷字眼(使用者可自訂覆蓋)
 DEFAULT_AVAILABLE = [
-    "立即購買", "加入購物車", "立即購票", "購票", "我要購買", "現在購買",
-    "buy now", "add to cart", "add-to-cart", "in stock", "available",
+    "立即購買", "加入購物車", "立即購票", "購票", "我要購買", "現在購買", "現貨",
+    "buy now", "add to cart", "add-to-cart", "in stock", "available", "instock",  # schema.org InStock
 ]
 DEFAULT_UNAVAILABLE = [
     "售完", "已售完", "已售罄", "完售", "缺貨", "暫無庫存", "補貨中",
     "sold out", "sold-out", "out of stock", "unavailable", "coming soon", "敬請期待",
+    "outofstock", "soldout",  # schema.org OutOfStock / SoldOut
 ]
 
 
@@ -53,7 +54,10 @@ def check_watch(watch_id: int) -> dict:
     except Exception as e:
         return {"ok": False, "reason": f"抓取失敗:{e}"[:200]}
 
-    status = _evaluate(text, w["available_keywords"], w["unavailable_keywords"])
+    # 動態頁:庫存狀態常藏在 <script> 的 JSON(schema.org availability / 前端狀態),
+    # 所以連同原始 HTML(含 script)一起比對,免瀏覽器也能抓到動態狀態。
+    searchable = text + " " + resp.text
+    status = _evaluate(searchable, w["available_keywords"], w["unavailable_keywords"])
     prev = w["last_status"]
     name = w["name"] or w["url"]
 
