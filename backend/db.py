@@ -146,6 +146,31 @@ class Post(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class Thread(Base):
+    __tablename__ = "tr_threads"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    category: Mapped[str] = mapped_column(String(50), index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    content: Mapped[str] = mapped_column(Text, default="")
+    author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    author_email: Mapped[str] = mapped_column(String(255), default="")
+    reply_count: Mapped[int] = mapped_column(default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_reply_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Reply(Base):
+    __tablename__ = "tr_replies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    thread_id: Mapped[int] = mapped_column(ForeignKey("tr_threads.id"), index=True)
+    content: Mapped[str] = mapped_column(Text, default="")
+    author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
+    author_email: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     _ensure_columns()
@@ -625,5 +650,106 @@ def delete_post(post_id: int) -> bool:
         if p is None:
             return False
         s.delete(p)
+        s.commit()
+        return True
+
+
+# ---------- 討論區 ----------
+
+def _display_name(email: str) -> str:
+    return (email or "匿名").split("@")[0]
+
+
+def _thread_dict(t: "Thread", full: bool = False) -> dict:
+    d = {
+        "id": t.id,
+        "category": t.category,
+        "title": t.title,
+        "author": _display_name(t.author_email),
+        "author_id": t.author_id,
+        "reply_count": t.reply_count,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+        "last_reply_at": t.last_reply_at.isoformat() if t.last_reply_at else None,
+    }
+    if full:
+        d["content"] = t.content or ""
+    return d
+
+
+def _reply_dict(r: "Reply") -> dict:
+    return {
+        "id": r.id,
+        "content": r.content or "",
+        "author": _display_name(r.author_email),
+        "author_id": r.author_id,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
+
+
+def list_threads(category: str | None = None, limit: int = 100) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(Thread)
+        if category:
+            q = q.where(Thread.category == category)
+        rows = s.scalars(q.order_by(Thread.last_reply_at.desc()).limit(limit)).all()
+        return [_thread_dict(t) for t in rows]
+
+
+def get_thread(thread_id: int) -> dict | None:
+    with SessionLocal() as s:
+        t = s.get(Thread, thread_id)
+        if t is None:
+            return None
+        d = _thread_dict(t, full=True)
+        replies = s.scalars(select(Reply).where(Reply.thread_id == thread_id).order_by(Reply.created_at.asc())).all()
+        d["replies"] = [_reply_dict(r) for r in replies]
+        return d
+
+
+def create_thread(author_id: int, author_email: str, category: str, title: str, content: str) -> dict:
+    with SessionLocal() as s:
+        t = Thread(category=category, title=title[:300], content=content,
+                   author_id=author_id, author_email=author_email)
+        s.add(t)
+        s.commit()
+        s.refresh(t)
+        return _thread_dict(t, full=True)
+
+
+def create_reply(thread_id: int, author_id: int, author_email: str, content: str) -> dict | None:
+    with SessionLocal() as s:
+        t = s.get(Thread, thread_id)
+        if t is None:
+            return None
+        r = Reply(thread_id=thread_id, content=content, author_id=author_id, author_email=author_email)
+        s.add(r)
+        t.reply_count = (t.reply_count or 0) + 1
+        t.last_reply_at = _now()
+        s.commit()
+        s.refresh(r)
+        return _reply_dict(r)
+
+
+def delete_thread(thread_id: int, user_id: int, is_admin: bool = False) -> bool:
+    with SessionLocal() as s:
+        t = s.get(Thread, thread_id)
+        if t is None or (t.author_id != user_id and not is_admin):
+            return False
+        for r in s.scalars(select(Reply).where(Reply.thread_id == thread_id)).all():
+            s.delete(r)
+        s.delete(t)
+        s.commit()
+        return True
+
+
+def delete_reply(reply_id: int, user_id: int, is_admin: bool = False) -> bool:
+    with SessionLocal() as s:
+        r = s.get(Reply, reply_id)
+        if r is None or (r.author_id != user_id and not is_admin):
+            return False
+        t = s.get(Thread, r.thread_id)
+        if t and t.reply_count:
+            t.reply_count -= 1
+        s.delete(r)
         s.commit()
         return True

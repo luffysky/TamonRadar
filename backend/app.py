@@ -711,3 +711,89 @@ def admin_blog_delete(post_id: int, admin=Depends(auth.get_admin)):
     if not db.delete_post(post_id):
         raise HTTPException(404, "找不到文章")
     return {"ok": True}
+
+
+# ---------- 討論區 ----------
+
+FORUM_CATEGORIES = [
+    {"slug": "events", "label": "演唱會/活動", "emoji": "🎫"},
+    {"slug": "merch", "label": "周邊", "emoji": "🧸"},
+    {"slug": "anime", "label": "動漫", "emoji": "🎌"},
+    {"slug": "game", "label": "遊戲", "emoji": "🎮"},
+    {"slug": "tech", "label": "3C 科技", "emoji": "💻"},
+    {"slug": "travel", "label": "旅遊", "emoji": "✈️"},
+    {"slug": "photo", "label": "攝影", "emoji": "📷"},
+    {"slug": "cooking", "label": "烹飪", "emoji": "🍳"},
+    {"slug": "food", "label": "美食", "emoji": "🍜"},
+    {"slug": "sport", "label": "運動", "emoji": "⚽"},
+    {"slug": "pet", "label": "寵物", "emoji": "🐾"},
+    {"slug": "fashion", "label": "時尚美妝", "emoji": "💄"},
+    {"slug": "finance", "label": "理財投資", "emoji": "💰"},
+    {"slug": "auto", "label": "汽機車", "emoji": "🚗"},
+    {"slug": "media", "label": "影視音樂", "emoji": "🎬"},
+    {"slug": "books", "label": "書籍", "emoji": "📚"},
+    {"slug": "health", "label": "健康", "emoji": "🏥"},
+    {"slug": "life", "label": "生活雜談", "emoji": "💬"},
+]
+_FORUM_SLUGS = {c["slug"] for c in FORUM_CATEGORIES}
+
+
+class ThreadRequest(BaseModel):
+    category: str
+    title: str
+    content: str = ""
+
+
+class ReplyRequest(BaseModel):
+    content: str
+
+
+@app.get("/api/forum/categories")
+def forum_categories():
+    return {"categories": FORUM_CATEGORIES}
+
+
+@app.get("/api/forum/threads")
+def forum_threads(category: str | None = None):
+    return {"threads": db.list_threads(category)}
+
+
+@app.get("/api/forum/threads/{thread_id}")
+def forum_thread(thread_id: int):
+    t = db.get_thread(thread_id)
+    if not t:
+        raise HTTPException(404, "找不到主題")
+    return t
+
+
+@app.post("/api/forum/threads")
+def forum_create_thread(req: ThreadRequest, user=Depends(auth.get_current_user)):
+    if req.category not in _FORUM_SLUGS:
+        raise HTTPException(400, "分類不存在")
+    if not req.title.strip():
+        raise HTTPException(400, "請輸入標題")
+    return db.create_thread(user.id, user.email, req.category, req.title.strip(), req.content)
+
+
+@app.post("/api/forum/threads/{thread_id}/replies")
+def forum_reply(thread_id: int, req: ReplyRequest, user=Depends(auth.get_current_user)):
+    if not req.content.strip():
+        raise HTTPException(400, "請輸入內容")
+    r = db.create_reply(thread_id, user.id, user.email, req.content.strip())
+    if not r:
+        raise HTTPException(404, "找不到主題")
+    return r
+
+
+@app.delete("/api/forum/threads/{thread_id}")
+def forum_delete_thread(thread_id: int, user=Depends(auth.get_current_user)):
+    if not db.delete_thread(thread_id, user.id, auth.is_admin(user.email)):
+        raise HTTPException(404, "找不到主題或沒有權限")
+    return {"ok": True}
+
+
+@app.delete("/api/forum/replies/{reply_id}")
+def forum_delete_reply(reply_id: int, user=Depends(auth.get_current_user)):
+    if not db.delete_reply(reply_id, user.id, auth.is_admin(user.email)):
+        raise HTTPException(404, "找不到回覆或沒有權限")
+    return {"ok": True}

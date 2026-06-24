@@ -483,3 +483,62 @@ export async function deletePost(id: number): Promise<void> {
   check401(res);
   if (!res.ok) throw new Error("刪除文章失敗");
 }
+
+// ---------- 討論區 ----------
+
+export interface ForumCategory { slug: string; label: string; emoji: string; }
+export interface ForumThread {
+  id: number; category: string; title: string; author: string; author_id: number;
+  reply_count: number; created_at: string | null; last_reply_at: string | null;
+  content?: string; replies?: ForumReply[];
+}
+export interface ForumReply { id: number; content: string; author: string; author_id: number; created_at: string | null; }
+
+export async function getForumCategories(): Promise<{ categories: ForumCategory[] }> {
+  const res = await fetch(`${API_BASE}/api/forum/categories`);
+  if (!res.ok) throw new Error("讀取分類失敗");
+  return res.json();
+}
+
+export async function getForumThreads(category?: string): Promise<{ threads: ForumThread[] }> {
+  const q = category ? `?category=${encodeURIComponent(category)}` : "";
+  const res = await fetch(`${API_BASE}/api/forum/threads${q}`);
+  if (!res.ok) throw new Error("讀取主題失敗");
+  return res.json();
+}
+
+export async function getForumThread(id: number): Promise<ForumThread> {
+  const res = await fetch(`${API_BASE}/api/forum/threads/${id}`);
+  if (!res.ok) throw new Error("讀取主題失敗");
+  return res.json();
+}
+
+export async function createThread(category: string, title: string, content: string): Promise<ForumThread> {
+  const res = await fetch(`${API_BASE}/api/forum/threads`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ category, title, content }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "發表失敗");
+  return res.json();
+}
+
+export async function createReply(threadId: number, content: string): Promise<ForumReply> {
+  const res = await fetch(`${API_BASE}/api/forum/threads/${threadId}/replies`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ content }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("回覆失敗");
+  return res.json();
+}
+
+export async function deleteThread(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/forum/threads/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("刪除失敗");
+}
+
+export async function deleteReply(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/forum/replies/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("刪除失敗");
+}
