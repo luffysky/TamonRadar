@@ -147,6 +147,15 @@ class WatchRequest(BaseModel):
     notify_on: list[str] = Field(default_factory=lambda: ["new", "removed", "price", "restock"])
 
 
+# ---------- helpers ----------
+
+def _ip(request: Request) -> str:
+    """取用戶端 IP(優先 Cloudflare/反代標頭)。"""
+    return (request.headers.get("cf-connecting-ip")
+            or (request.headers.get("x-forwarded-for", "").split(",")[0].strip())
+            or (request.client.host if request.client else "")) or ""
+
+
 # ---------- auth ----------
 
 def _public_user(user) -> dict:
@@ -1125,15 +1134,21 @@ class AiConfigRequest(BaseModel):
 
 
 @app.post("/api/admin/ai-config")
-def admin_ai_config_save(req: AiConfigRequest, admin=Depends(auth.get_admin)):
+def admin_ai_config_save(req: AiConfigRequest, request: Request, admin=Depends(auth.get_admin)):
     data = {}
+    changed = []
     if req.key is not None:
         data["key"] = req.key
+        changed.append("key" if req.key.strip() else "key(清除)")
     if req.model is not None:
         data["model"] = req.model
+        changed.append(f"model={req.model}")
     if req.enabled is not None:
         data["enabled"] = req.enabled
+        changed.append(f"enabled={req.enabled}")
     db.save_ai_config(req.provider, data)
+    db.log_audit(admin.email, "ai_config", req.provider, "、".join(changed),
+                 target_type="ai_key", changes={"fields": changed}, ip=_ip(request))  # 不記錄金鑰明文
     return {"ok": True}
 
 
@@ -1200,10 +1215,11 @@ class PrivilegeRequest(BaseModel):
 
 
 @app.post("/api/admin/users/{user_id}/privilege")
-def admin_set_privilege(user_id: int, req: PrivilegeRequest, admin=Depends(auth.get_owner)):
+def admin_set_privilege(user_id: int, req: PrivilegeRequest, request: Request, admin=Depends(auth.get_owner)):
     if not db.set_privilege(user_id, req.privileged):
         raise HTTPException(404, "找不到使用者")
-    db.log_audit(admin.email, "privilege" if req.privileged else "unprivilege", str(user_id))
+    db.log_audit(admin.email, "privilege" if req.privileged else "unprivilege", str(user_id),
+                 target_type="user", changes={"privileged": req.privileged}, ip=_ip(request))
     return {"ok": True}
 
 
@@ -1212,10 +1228,11 @@ class BanRequest(BaseModel):
 
 
 @app.post("/api/admin/users/{user_id}/ban")
-def admin_ban(user_id: int, req: BanRequest, admin=Depends(auth.get_owner)):
+def admin_ban(user_id: int, req: BanRequest, request: Request, admin=Depends(auth.get_owner)):
     if not db.set_banned(user_id, req.banned):
         raise HTTPException(404, "找不到使用者")
-    db.log_audit(admin.email, "ban" if req.banned else "unban", str(user_id))
+    db.log_audit(admin.email, "ban" if req.banned else "unban", str(user_id),
+                 target_type="user", changes={"banned": req.banned}, ip=_ip(request))
     return {"ok": True}
 
 
@@ -1235,8 +1252,30 @@ def admin_export_users(admin=Depends(auth.get_admin)):
 
 
 @app.get("/api/admin/audit")
-def admin_audit(admin=Depends(auth.get_admin)):
-    return {"logs": db.list_audit()}
+def admin_audit(page: int = 1, action: str = "", actor: str = "",
+                date_from: str = "", date_to: str = "", admin=Depends(auth.get_admin)):
+    per = 50
+    page = max(1, page)
+    res = db.list_audit(limit=per, offset=(page - 1) * per, action=action, actor=actor,
+                        date_from=date_from, date_to=date_to)
+    res["page"] = page
+    res["per"] = per
+    return res
+
+
+@app.get("/api/admin/audit/export")
+def admin_audit_export(action: str = "", actor: str = "", date_from: str = "", date_to: str = "",
+                       admin=Depends(auth.get_admin)):
+    import csv as _csv
+    rows = db.audit_rows_for_export(action=action, actor=actor, date_from=date_from, date_to=date_to)
+    buf = io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["時間", "操作者", "動作", "對象類型", "對象", "IP", "明細"])
+    for r in rows:
+        w.writerow([r["created_at"], r["admin_email"], r["action"], r["target_type"], r["target"], r["ip"], r["detail"]])
+    data = "﻿" + buf.getvalue()  # BOM 讓 Excel 正確顯示中文
+    return Response(content=data, media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=audit.csv"})
 
 
 @app.get("/api/admin/app-settings")
@@ -1558,9 +1597,11 @@ class CommentStatusRequest(BaseModel):
 
 
 @app.post("/api/admin/comments/{comment_id}/status")
-def admin_comment_status(comment_id: int, req: CommentStatusRequest, admin=Depends(auth.get_admin)):
+def admin_comment_status(comment_id: int, req: CommentStatusRequest, request: Request, admin=Depends(auth.get_admin)):
     if not db.set_comment_status(comment_id, req.status):
         raise HTTPException(404, "找不到留言")
+    db.log_audit(admin.email, f"comment_{req.status}", str(comment_id),
+                 target_type="comment", ip=_ip(request))
     return {"ok": True}
 
 
@@ -1569,9 +1610,11 @@ class FeaturedRequest(BaseModel):
 
 
 @app.post("/api/admin/blog/{post_id}/featured")
-def admin_blog_featured(post_id: int, req: FeaturedRequest, admin=Depends(auth.get_admin)):
+def admin_blog_featured(post_id: int, req: FeaturedRequest, request: Request, admin=Depends(auth.get_admin)):
     if not db.set_post_featured(post_id, req.featured):
         raise HTTPException(404, "找不到文章")
+    db.log_audit(admin.email, "post_featured" if req.featured else "post_unfeatured", str(post_id),
+                 target_type="post", changes={"featured": req.featured}, ip=_ip(request))
     return {"ok": True}
 
 

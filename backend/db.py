@@ -238,8 +238,11 @@ class AuditLog(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     admin_email: Mapped[str] = mapped_column(String(255), default="")
     action: Mapped[str] = mapped_column(String(80), default="")
+    target_type: Mapped[str] = mapped_column(String(40), default="")  # user / post / comment / ai_key / setting…
     target: Mapped[str] = mapped_column(String(255), default="")
     detail: Mapped[str] = mapped_column(Text, default="")
+    changes: Mapped[dict] = mapped_column(JSON, default=dict)  # {before:{}, after:{}}
+    ip: Mapped[str] = mapped_column(String(64), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
@@ -379,6 +382,22 @@ def _ensure_columns() -> None:
         if "likes" not in cols:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE tr_threads ADD COLUMN likes INTEGER DEFAULT 0"))
+
+    if "tr_audit" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_audit")}
+        is_pg = engine.dialect.name == "postgresql"
+        json_type = "JSONB" if is_pg else "JSON"
+        for col, ddl in (
+            ("target_type", "ALTER TABLE tr_audit ADD COLUMN target_type VARCHAR(40) DEFAULT ''"),
+            ("changes", f"ALTER TABLE tr_audit ADD COLUMN changes {json_type}"),
+            ("ip", "ALTER TABLE tr_audit ADD COLUMN ip VARCHAR(64) DEFAULT ''"),
+        ):
+            if col not in cols:
+                try:
+                    with engine.begin() as conn:
+                        conn.execute(text(ddl))
+                except Exception:
+                    pass
 
     if "tr_posts" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_posts")}
@@ -1218,23 +1237,60 @@ def all_user_emails() -> list[str]:
 
 
 # ---------- 稽核日誌 ----------
-def log_audit(admin_email: str, action: str, target: str = "", detail: str = "") -> None:
+def log_audit(admin_email: str, action: str, target: str = "", detail: str = "",
+              target_type: str = "", changes: dict | None = None, ip: str = "") -> None:
     try:
         with SessionLocal() as s:
-            s.add(AuditLog(admin_email=admin_email, action=action, target=str(target)[:255], detail=str(detail)[:2000]))
+            s.add(AuditLog(admin_email=admin_email, action=action, target=str(target)[:255],
+                           detail=str(detail)[:2000], target_type=target_type[:40],
+                           changes=changes or {}, ip=(ip or "")[:64]))
             s.commit()
     except Exception:
         pass
 
 
-def list_audit(limit: int = 200) -> list[dict]:
+def _audit_dict(a) -> dict:
+    return {
+        "id": a.id, "admin_email": a.admin_email, "action": a.action,
+        "target_type": getattr(a, "target_type", "") or "", "target": a.target, "detail": a.detail,
+        "changes": getattr(a, "changes", None) or {}, "ip": getattr(a, "ip", "") or "",
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    }
+
+
+def list_audit(limit: int = 100, offset: int = 0, action: str = "", actor: str = "",
+               date_from: str = "", date_to: str = "") -> dict:
+    from datetime import datetime as _dt
     with SessionLocal() as s:
-        rows = s.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
-        return [{
-            "id": a.id, "admin_email": a.admin_email, "action": a.action,
-            "target": a.target, "detail": a.detail,
-            "created_at": a.created_at.isoformat() if a.created_at else None,
-        } for a in rows]
+        q = select(AuditLog)
+        cq = select(func.count()).select_from(AuditLog)
+        conds = []
+        if action:
+            conds.append(AuditLog.action == action)
+        if actor:
+            conds.append(AuditLog.admin_email.ilike(f"%{actor}%"))
+        if date_from:
+            try:
+                conds.append(AuditLog.created_at >= _dt.fromisoformat(date_from))
+            except Exception:
+                pass
+        if date_to:
+            try:
+                conds.append(AuditLog.created_at <= _dt.fromisoformat(date_to + "T23:59:59"))
+            except Exception:
+                pass
+        for c in conds:
+            q = q.where(c)
+            cq = cq.where(c)
+        total = s.scalar(cq) or 0
+        rows = s.scalars(q.order_by(AuditLog.created_at.desc()).limit(limit).offset(offset)).all()
+        actions = [r[0] for r in s.execute(select(AuditLog.action).distinct()).all() if r[0]]
+        return {"logs": [_audit_dict(a) for a in rows], "total": int(total), "actions": sorted(actions)}
+
+
+def audit_rows_for_export(action: str = "", actor: str = "", date_from: str = "", date_to: str = "") -> list[dict]:
+    return list_audit(limit=10000, offset=0, action=action, actor=actor,
+                      date_from=date_from, date_to=date_to)["logs"]
 
 
 # ---------- 站內公告 ----------

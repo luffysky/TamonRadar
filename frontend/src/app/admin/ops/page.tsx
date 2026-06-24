@@ -7,7 +7,7 @@ import { useToast } from "@/components/Toast";
 import { ADMIN_BASE } from "@/lib/admin";
 import {
   adminListAnnouncements, adminCreateAnnouncement, adminDeleteAnnouncement,
-  getAuditLogs, getReports, resolveReport, adminEmailBlast, getSeo, saveSeo, exportUsersUrl,
+  getAuditLogs, auditExportUrl, getReports, resolveReport, adminEmailBlast, getSeo, saveSeo, exportUsersUrl,
   listPageSeo, savePageSeo, getAppSettings, saveAppSetting, getAiCosts, getBotChats,
   adminListComments, setCommentStatus,
   type Announcement, type AuditLog, type ReportItem, type PageSeo, type AiCosts, type BotChat, type BlogComment,
@@ -21,6 +21,9 @@ export default function AdminOpsPage() {
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [annForm, setAnnForm] = useState({ title: "", body: "", level: "info", active: true });
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [auditTotal, setAuditTotal] = useState(0);
+  const [auditActions, setAuditActions] = useState<string[]>([]);
+  const [auditF, setAuditF] = useState<{ page: number; action: string; actor: string; date_from: string; date_to: string }>({ page: 1, action: "", actor: "", date_from: "", date_to: "" });
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
   const [seo, setSeo] = useState<Record<string, string>>({});
@@ -38,7 +41,7 @@ export default function AdminOpsPage() {
   useEffect(() => {
     if (!user) return;
     adminListAnnouncements().then((d) => setAnns(d.announcements)).catch(() => {});
-    getAuditLogs().then((d) => setLogs(d.logs)).catch(() => {});
+    getAuditLogs(auditF).then((d) => { setLogs(d.logs); setAuditTotal(d.total); setAuditActions(d.actions); }).catch(() => {});
     getReports().then((d) => setReports(d.reports)).catch(() => {});
     getSeo().then(setSeo).catch(() => {});
     listPageSeo().then((d) => setPages(d.pages)).catch(() => {});
@@ -100,15 +103,38 @@ export default function AdminOpsPage() {
       )}
 
       {tab === "audit" && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          {logs.length === 0 ? <p className="p-4 text-slate-400">尚無紀錄</p> : logs.map((l) => (
-            <div key={l.id} className="flex flex-wrap items-center gap-x-3 border-b border-slate-100 px-3 py-2 dark:border-slate-700">
-              <span className="text-xs text-slate-400">{l.created_at ? new Date(l.created_at).toLocaleString("zh-TW") : ""}</span>
-              <span className="font-medium text-brand-600 dark:text-brand-300">{l.action}</span>
-              <span className="text-slate-600 dark:text-slate-300">{l.target} {l.detail}</span>
-              <span className="ml-auto text-xs text-slate-400">{l.admin_email}</span>
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-end gap-2">
+            <select value={auditF.action} onChange={(e) => setAuditF({ ...auditF, action: e.target.value, page: 1 })} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900">
+              <option value="">全部動作</option>
+              {auditActions.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+            <input value={auditF.actor} onChange={(e) => setAuditF({ ...auditF, actor: e.target.value, page: 1 })} placeholder="操作者 email" className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" />
+            <input type="date" value={auditF.date_from} onChange={(e) => setAuditF({ ...auditF, date_from: e.target.value, page: 1 })} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" />
+            <input type="date" value={auditF.date_to} onChange={(e) => setAuditF({ ...auditF, date_to: e.target.value, page: 1 })} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" />
+            <button onClick={() => getAuditLogs(auditF).then((d) => { setLogs(d.logs); setAuditTotal(d.total); setAuditActions(d.actions); })} className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">查詢</button>
+            <a href={auditExportUrl(auditF)} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">匯出 CSV</a>
+            <span className="ml-auto text-xs text-slate-400">共 {auditTotal} 筆</span>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            {logs.length === 0 ? <p className="p-4 text-slate-400">尚無紀錄</p> : logs.map((l) => (
+              <div key={l.id} className="flex flex-wrap items-center gap-x-3 border-b border-slate-100 px-3 py-2 dark:border-slate-700">
+                <span className="text-xs text-slate-400">{l.created_at ? new Date(l.created_at).toLocaleString("zh-TW") : ""}</span>
+                <span className="font-medium text-brand-600 dark:text-brand-300">{l.action}</span>
+                {l.target_type && <span className="rounded bg-slate-100 px-1.5 text-[10px] text-slate-500 dark:bg-slate-700">{l.target_type}</span>}
+                <span className="text-slate-600 dark:text-slate-300">{l.target} {l.detail}</span>
+                {l.ip && <span className="text-[10px] text-slate-400">IP {l.ip}</span>}
+                <span className="ml-auto text-xs text-slate-400">{l.admin_email}</span>
+              </div>
+            ))}
+          </div>
+          {auditTotal > 50 && (
+            <div className="flex items-center justify-center gap-3 text-sm">
+              <button disabled={auditF.page <= 1} onClick={() => { const p = auditF.page - 1; setAuditF({ ...auditF, page: p }); getAuditLogs({ ...auditF, page: p }).then((d) => { setLogs(d.logs); setAuditTotal(d.total); }); }} className="rounded-lg border border-slate-300 px-3 py-1.5 disabled:opacity-40 dark:border-slate-600">← 上一頁</button>
+              <span className="text-slate-500">{auditF.page} / {Math.ceil(auditTotal / 50)}</span>
+              <button disabled={auditF.page >= Math.ceil(auditTotal / 50)} onClick={() => { const p = auditF.page + 1; setAuditF({ ...auditF, page: p }); getAuditLogs({ ...auditF, page: p }).then((d) => { setLogs(d.logs); setAuditTotal(d.total); }); }} className="rounded-lg border border-slate-300 px-3 py-1.5 disabled:opacity-40 dark:border-slate-600">下一頁 →</button>
             </div>
-          ))}
+          )}
         </div>
       )}
 

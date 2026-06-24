@@ -625,12 +625,27 @@ export function exportUsersUrl(): string {
   return `${API_BASE}/api/admin/users/export`;
 }
 
-export interface AuditLog { id: number; admin_email: string; action: string; target: string; detail: string; created_at: string | null; }
-export async function getAuditLogs(): Promise<{ logs: AuditLog[] }> {
-  const res = await fetch(`${API_BASE}/api/admin/audit`, { headers: authHeaders() });
+export interface AuditLog { id: number; admin_email: string; action: string; target_type?: string; target: string; detail: string; ip?: string; changes?: Record<string, unknown>; created_at: string | null; }
+export interface AuditFilter { page?: number; action?: string; actor?: string; date_from?: string; date_to?: string; }
+export async function getAuditLogs(f: AuditFilter = {}): Promise<{ logs: AuditLog[]; total: number; page: number; per: number; actions: string[] }> {
+  const p = new URLSearchParams();
+  if (f.page) p.set("page", String(f.page));
+  if (f.action) p.set("action", f.action);
+  if (f.actor) p.set("actor", f.actor);
+  if (f.date_from) p.set("date_from", f.date_from);
+  if (f.date_to) p.set("date_to", f.date_to);
+  const res = await fetch(`${API_BASE}/api/admin/audit?${p.toString()}`, { headers: authHeaders() });
   check401(res);
   if (!res.ok) throw new Error("讀取稽核失敗");
   return res.json();
+}
+export function auditExportUrl(f: AuditFilter = {}): string {
+  const p = new URLSearchParams();
+  if (f.action) p.set("action", f.action);
+  if (f.actor) p.set("actor", f.actor);
+  if (f.date_from) p.set("date_from", f.date_from);
+  if (f.date_to) p.set("date_to", f.date_to);
+  return `${API_BASE}/api/admin/audit/export?${p.toString()}`;
 }
 
 export interface Announcement { id: number; title: string; body: string; level: string; active: boolean; created_at: string | null; }
