@@ -267,6 +267,13 @@ class AiChatLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
+class BindCode(Base):
+    __tablename__ = "tr_bind_codes"
+    code: Mapped[str] = mapped_column(String(12), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class BotChatLog(Base):
     __tablename__ = "tr_bot_chat_log"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -903,6 +910,46 @@ def mark_notifications_read(user_id: int) -> None:
         for n in s.scalars(select(Notification).where(Notification.user_id == user_id, Notification.read == False)).all():  # noqa: E712
             n.read = True
         s.commit()
+
+
+def create_bind_code(user_id: int) -> str:
+    import secrets
+    from datetime import timedelta
+    code = secrets.token_hex(3).upper()  # 6 碼
+    with SessionLocal() as s:
+        # 清掉該使用者舊碼
+        for old in s.scalars(select(BindCode).where(BindCode.user_id == user_id)).all():
+            s.delete(old)
+        # 清掉過期碼(>15 分)
+        cutoff = _now() - timedelta(minutes=15)
+        for ex in s.scalars(select(BindCode).where(BindCode.created_at < cutoff)).all():
+            s.delete(ex)
+        s.add(BindCode(code=code, user_id=user_id))
+        s.commit()
+    return code
+
+
+def consume_bind_code(code: str, platform: str, value: str) -> tuple[bool, str]:
+    """用綁定碼把平台帳號綁到使用者。platform: discord(填 user id)/ telegram(填 chat id)。"""
+    from datetime import timedelta
+    with SessionLocal() as s:
+        row = s.get(BindCode, (code or "").strip().upper())
+        if row is None:
+            return False, "綁定碼無效"
+        from datetime import timezone
+        ts = row.created_at
+        if ts is not None and ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        if ts and ts < _now() - timedelta(minutes=15):
+            s.delete(row)
+            s.commit()
+            return False, "綁定碼已過期,請到網站重新產生"
+        uid = row.user_id
+        s.delete(row)
+        s.commit()
+    field = "discord_user_id" if platform == "discord" else "telegram_chat_id"
+    save_settings(uid, {field: str(value)})
+    return True, "綁定成功!之後通知會傳給你。"
 
 
 def add_bot_chat_log(platform: str, platform_user: str, question: str, answer: str) -> None:

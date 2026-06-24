@@ -349,10 +349,15 @@ async def discord_interactions(request: Request):
     if data.get("type") == 1:
         return {"type": 1}  # PING
     if data.get("type") == 2:  # 斜線指令
+        cmd = data.get("data", {}).get("name", "")
         opts = data.get("data", {}).get("options", [])
-        q = next((o.get("value", "") for o in opts if o.get("name") == "question"), "")
         u = (data.get("member") or {}).get("user") or data.get("user") or {}
         uname = u.get("username") or u.get("global_name") or str(u.get("id", ""))
+        if cmd == "bind":  # /bind 綁定碼 → 立即(ephemeral)回覆
+            code = next((o.get("value", "") for o in opts if o.get("name") == "code"), "")
+            msg = bots.discord_bind(code, str(u.get("id", "")))
+            return {"type": 4, "data": {"content": msg, "flags": 64}}
+        q = next((o.get("value", "") for o in opts if o.get("name") == "question"), "")
         bots.handle_discord_command_async(data.get("application_id"), data.get("token"), q, uname)
         return {"type": 5}  # 先 defer,背景算完再 followup 編輯回覆
     return {"type": 4, "data": {"content": "?"}}
@@ -883,6 +888,11 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
 @app.get("/api/settings")
 def get_settings(user=Depends(auth.get_current_user)):
     return db.get_settings(user.id)
+
+
+@app.post("/api/bind/code")
+def bind_code(user=Depends(auth.get_current_user)):
+    return {"code": db.create_bind_code(user.id)}
 
 
 @app.put("/api/settings")

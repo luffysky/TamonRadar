@@ -38,9 +38,19 @@
 - **瀏覽器擴充**(Chrome/Edge MV3)。
 - **RWD 修正**:全域 overflow-x clip、儀表板/價格雷達/Tiptap 手機版面。
 
-## 資料庫(已建,共 14 表,皆 tr_ 前綴)
+## 後續批次 2(通知 / 監看 / 後台深化)
+- **通知三路**:站內鈴鐺(tr_notifications)+ Discord/Telegram + **Web Push(VAPID,關站也收)**;沒設個人管道也有站內。
+- **共用 bot**:Telegram 只填 chat_id、Discord 填 user id(中央 bot DM),沒填走 DISCORD_WEBHOOK 共用頻道。
+- **自動綁定**:網站產生綁定碼 → `/bind 碼`(Discord/Telegram)自動綁帳號,設定頁顯示已綁定。
+- **監看升級**:單一監看全包(補貨/新增/下架/改價勾選)、CTA 動態偵測(行動路徑)、Shopify 商品卡抽取、可編輯、每 20 秒自動更新、遵守 robots、內嵌 JSON/SPA/RSS/API 多格式抽取。
+- **後台**:側欄殼、recharts 圖表牆、爬取檢核(全站)、AI 成本明細、應用設定、Owner 權限、使用者詳情(監看/排程/搜尋結果可看/AI 對話完整內容)、Bot 對話紀錄。
+- **修復**:整站爬存檔 NaN、設定 500(密文超過 VARCHAR→改 TEXT)、圖表空白、Discord 驗簽防呆。
+
+## 資料庫(已建,共 21 表,皆 tr_ 前綴)
 tr_users / tr_runs / tr_user_settings / tr_schedules / tr_watches / tr_favorites /
-tr_posts / tr_threads / tr_replies / tr_audit / tr_announcements / tr_reports / tr_app_settings / tr_usage
+tr_posts / tr_threads / tr_replies / tr_subscriptions / tr_audit / tr_announcements / tr_reports /
+tr_app_settings / tr_usage / tr_ai_cost / tr_notifications / tr_push_subs / tr_ai_chat_log /
+tr_bot_chat_log / tr_bind_codes
 
 ## 待辦
 見 [0624_todo.md](0624_todo.md) 與 [roadmap.md](roadmap.md)。

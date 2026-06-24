@@ -15,6 +15,13 @@ GOOGLE_CLIENT_ID/SECRET、OAUTH_REDIRECT_BASE、FRONTEND_URL、RESEND_API_KEY/RE
 **VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT(Web Push 系統通知)**
 **前端**:NEXT_PUBLIC_API_BASE、NEXT_PUBLIC_SITE_URL、NEXT_PUBLIC_ADMIN_SLUG(後台祕密路徑)、**NEXT_PUBLIC_GIPHY_API_KEY(GIF/貼圖)**
 
+### 0624 後續完成(通知 / 監看 / 後台)— 資料表共 21 張
+- ~~通知三路:站內鈴鐺 + Discord/Telegram + Web Push(VAPID);共用 bot 發送;/bind 自動綁定~~
+- ~~監看:多條件(補貨/新增/下架/改價)、CTA 動態偵測、Shopify 抽取、可編輯、自動更新、多格式抓取(JSON/SPA/RSS/API)、遵守 robots~~
+- ~~後台:側欄殼、recharts 圖表牆、爬取檢核、AI 成本明細、應用設定、Owner 權限、使用者詳情(監看/排程/搜尋結果/AI 對話)、Bot 對話~~
+- ~~Email 驗證、改密碼/刪帳號、分享 OG 卡、多領域分頁、商品卡分頁排序、領域感知分類~~
+- [ ] 待:GitHub 登入、金流、部落格抄 insight-engine、後台抄 ai_island、JS 監看(Selenium)
+
 ### 近期完成(追加)
 - ~~UI 全面換 lucide icon、AI 對話重做、UX 動畫(slide/scale/按鈕微互動)~~
 - ~~手機側邊抽屜(右→左滑入、滿視口高)~~

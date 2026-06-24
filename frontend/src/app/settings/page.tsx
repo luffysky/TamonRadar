@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, updateProfile, type NotifySettings } from "@/lib/api";
+import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, updateProfile, createBindCode, type NotifySettings } from "@/lib/api";
 import { useRequireAuth, useAuth } from "@/components/AuthProvider";
 import PasswordInput from "@/components/PasswordInput";
 import PushToggle from "@/components/PushToggle";
@@ -13,6 +13,7 @@ export default function SettingsPage() {
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
+  const [bindCode, setBindCode] = useState("");
   const [form, setForm] = useState<NotifySettings>({
     discord_webhook: "", discord_user_id: "", telegram_token: "", telegram_chat_id: "",
     openai_key: "", anthropic_key: "", gemini_key: "", groq_key: "", openrouter_key: "", ai_provider: "",
@@ -104,6 +105,25 @@ export default function SettingsPage() {
           <p className="mt-1 text-xs text-slate-400">
             最簡單:**只填 Chat ID**,先到平台的 Telegram bot 按一次「開始」,通知就由共用 bot 發給你;要用自己的 bot 才填 token。
           </p>
+        </div>
+
+        <div className="border-t border-slate-100 pt-4 dark:border-slate-700">
+          <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-200">一鍵綁定 bot(免填 ID)</label>
+          <p className="mb-2 text-xs text-slate-400">
+            狀態:Discord {form.discord_user_id ? "✅ 已綁定" : "未綁定"} · Telegram {form.telegram_chat_id ? "✅ 已綁定" : "未綁定"}
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={async () => { try { setBindCode((await createBindCode()).code); } catch { setBindCode(""); } }}
+              className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+            >產生綁定碼</button>
+            {bindCode && <span className="rounded-lg bg-slate-100 px-3 py-2 font-mono text-lg tracking-widest text-brand-700 dark:bg-slate-700 dark:text-brand-300">{bindCode}</span>}
+          </div>
+          {bindCode && (
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              到 <b>Discord</b> 打 <code>/bind {bindCode}</code>,或在 <b>Telegram</b> 傳 <code>/bind {bindCode}</code> 給 bot → 自動綁定(15 分鐘內有效)。綁定後重新整理本頁即顯示已綁定。
+            </p>
+          )}
         </div>
 
         <div className="border-t border-slate-100 pt-4 dark:border-slate-700">

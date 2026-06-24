@@ -597,6 +597,13 @@ export async function setUserPrivilege(userId: number, privileged: boolean): Pro
   if (!res.ok) throw new Error("更新特權失敗");
 }
 
+export async function createBindCode(): Promise<{ code: string }> {
+  const res = await fetch(`${API_BASE}/api/bind/code`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("產生綁定碼失敗");
+  return res.json();
+}
+
 export async function updateProfile(username: string): Promise<{ username: string }> {
   const res = await fetch(`${API_BASE}/api/auth/profile`, {
     method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify({ username }),

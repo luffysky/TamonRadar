@@ -50,7 +50,15 @@ def _handle_telegram(update: dict) -> None:
     if not chat_id or not text:
         return
     if text.startswith("/start"):
-        telegram_send(chat_id, "嗨!我是 TamonRadar 小幫手 🦊\n直接問我任何關於這個網站怎麼用的問題吧。")
+        telegram_send(chat_id, "嗨!我是 TamonRadar 小幫手 🦊\n直接問我問題;或輸入 /bind 綁定碼 來綁定帳號收通知。")
+        return
+    if text.startswith("/bind"):
+        code = text.replace("/bind", "", 1).strip()
+        if not code:
+            telegram_send(chat_id, "用法:/bind 你的綁定碼(到網站「設定」產生)")
+            return
+        _ok, msg = db.consume_bind_code(code, "telegram", str(chat_id))
+        telegram_send(chat_id, msg)
         return
     ans = answer(text)
     uname = (msg.get("from", {}).get("username") or msg.get("from", {}).get("first_name") or str(chat_id))
@@ -112,22 +120,30 @@ def handle_discord_command_async(app_id: str, token: str, question: str, user: s
 
 
 def discord_register_command() -> dict:
-    """註冊 /ask 斜線指令(需 DISCORD_BOT_TOKEN + DISCORD_APP_ID)。"""
+    """註冊 /ask 與 /bind 斜線指令(需 DISCORD_BOT_TOKEN + DISCORD_APP_ID)。"""
     bot = os.environ.get("DISCORD_BOT_TOKEN")
     app_id = os.environ.get("DISCORD_APP_ID")
     if not bot or not app_id:
         return {"ok": False, "error": "未設定 DISCORD_BOT_TOKEN / DISCORD_APP_ID"}
-    cmd = {
-        "name": "ask",
-        "description": "問 TamonRadar 助手任何問題",
-        "options": [{"type": 3, "name": "question", "description": "你的問題", "required": True}],
-    }
+    cmds = [
+        {"name": "ask", "description": "問 TamonRadar 助手任何問題",
+         "options": [{"type": 3, "name": "question", "description": "你的問題", "required": True}]},
+        {"name": "bind", "description": "綁定 TamonRadar 帳號(到網站設定產生綁定碼)",
+         "options": [{"type": 3, "name": "code", "description": "網站給的綁定碼", "required": True}]},
+    ]
+    results = []
     try:
-        r = requests.post(
-            f"https://discord.com/api/v10/applications/{app_id}/commands",
-            headers={"Authorization": f"Bot {bot}"},
-            json=cmd, timeout=20,
-        )
-        return {"ok": r.status_code < 300, "discord": r.json()}
+        for cmd in cmds:
+            r = requests.post(
+                f"https://discord.com/api/v10/applications/{app_id}/commands",
+                headers={"Authorization": f"Bot {bot}"}, json=cmd, timeout=20,
+            )
+            results.append({cmd["name"]: r.status_code})
+        return {"ok": True, "registered": results}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
+
+
+def discord_bind(code: str, discord_user_id: str) -> str:
+    ok, msg = db.consume_bind_code(code, "discord", discord_user_id)
+    return msg
