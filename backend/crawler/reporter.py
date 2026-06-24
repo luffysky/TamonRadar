@@ -36,7 +36,9 @@ def to_dataframe(records: list[dict]) -> pd.DataFrame:
             df[col] = pd.Series(dtype="object")
     existing = [c for c in COLUMN_ORDER if c in df.columns]
     remaining = [c for c in df.columns if c not in existing]
-    return df[existing + remaining]
+    df = df[existing + remaining]
+    # 缺值會變 NaN,而 Postgres 的 JSON 欄位不接受 NaN(存檔會炸)→ 全部清成空字串
+    return df.where(pd.notnull(df), "")
 
 
 def ensure_output_dirs(output_dir: str) -> tuple[Path, Path]:
