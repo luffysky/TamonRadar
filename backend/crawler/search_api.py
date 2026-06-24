@@ -7,6 +7,7 @@
 金鑰從環境變數讀:BRAVE_API_KEY / SERPAPI_KEY。
 """
 import os
+import time
 from urllib.parse import urlparse
 
 import requests
@@ -49,6 +50,19 @@ def _normalize(keyword: str, title: str, url: str, snippet: str, page: int) -> d
     }
 
 
+# Brave 免費版限每秒 1 次請求,用模組層時間戳節流避免 429
+_brave_last_call = 0.0
+_BRAVE_MIN_INTERVAL = 1.1
+
+
+def _brave_throttle() -> None:
+    global _brave_last_call
+    wait = _BRAVE_MIN_INTERVAL - (time.monotonic() - _brave_last_call)
+    if wait > 0:
+        time.sleep(wait)
+    _brave_last_call = time.monotonic()
+
+
 def _search_brave(keyword: str, pages: int, api_key: str) -> list[dict]:
     results: list[dict] = []
     headers = {"Accept": "application/json", "X-Subscription-Token": api_key}
@@ -60,14 +74,15 @@ def _search_brave(keyword: str, pages: int, api_key: str) -> list[dict]:
             "country": "tw",
             "search_lang": "zh-hant",
         }
+        _brave_throttle()
         resp = requests.get(
             "https://api.search.brave.com/res/v1/web/search",
             headers=headers, params=params, timeout=20,
         )
         if resp.status_code == 401:
-            raise SearchApiError("Brave API 金鑰無效或未設定")
+            raise SearchApiError("Brave API 金鑰無效或未授權(請確認已在 Brave 開通免費方案)")
         if resp.status_code == 429:
-            raise SearchApiError("Brave API 額度已用完或太頻繁")
+            raise SearchApiError("Brave 請求太頻繁(免費版限每秒 1 次),請稍後再試")
         resp.raise_for_status()
         web = (resp.json() or {}).get("web", {})
         for item in web.get("results", []):
