@@ -24,23 +24,56 @@ CTA_KEYWORDS = [
 ]
 
 
-def _find_cta(soup, base_url: str, avail_kws: list) -> tuple[str, str]:
-    """找對方頁面的 CTA 連結(立即購買/加入購物車/結帳/預購/到貨通知…),回傳 (文字, 連結)。"""
-    kws = CTA_KEYWORDS + [k.lower() for k in (avail_kws or [])]
-    # 優先找帶 href 的連結;表單 action 也算
+_CART_HINTS = ("/cart", "/checkout", "add-to-cart", "add_to_cart", "?add-to-cart", "addtocart", "/buy", "/dp/", "/products/", "/product/")
+_ATTR_HINTS = ("add-to-cart", "addtocart", "add_to_cart", "buy", "checkout", "purchase", "btn-cart", "product-form", "add-cart", "cta")
+
+
+def _find_cta(soup, base_url: str, avail_kws: list | None = None) -> tuple[str, str]:
+    """動態偵測對方頁面的「行動路徑」(購買/結帳)而非寫死字眼。
+
+    依結構訊號評分:表單 action(/cart/add)、連結 href(/cart、/checkout、?add-to-cart=)、
+    元素 class/id(add-to-cart、buy、checkout)。文字關鍵字只當最弱的輔助。
+    """
+    from urllib.parse import urlparse
+    home = urlparse(base_url).path.rstrip("/")
+
+    def ok(full: str) -> bool:
+        p = urlparse(full).path.rstrip("/")
+        return p not in ("", "/", home)
+
+    best = None  # (score, text, url)
+
+    # 1) 加入購物車 / 結帳 表單(Shopify / WooCommerce 最可靠)
+    for f in soup.find_all("form", action=True):
+        act = (f["action"] or "").lower()
+        if any(h in act for h in ("cart", "checkout", "add")):
+            full = urljoin(base_url, f["action"])
+            if ok(full):
+                best = (4, "前往購買", full)
+                break
+
+    # 2) 連結:看 href / class / id 的結構訊號
     for a in soup.find_all("a", href=True):
+        href = (a["href"] or "").strip()
+        if not href or href.startswith(("#", "javascript:", "mailto:", "tel:")):
+            continue
+        full = urljoin(base_url, href)
+        if not ok(full):
+            continue
+        low = full.lower()
+        attrs = (" ".join(a.get("class", [])) + " " + (a.get("id") or "") + " " + (a.get("data-action") or "")).lower()
         t = a.get_text(" ", strip=True)
-        if t and any(k in t.lower() for k in kws):
-            return t[:60], urljoin(base_url, a["href"])
-    for btn in soup.find_all("button"):
-        t = btn.get_text(" ", strip=True)
-        if t and any(k in t.lower() for k in kws):
-            # 按鈕沒連結 → 退回商品頁本身(至少帶到該頁)
-            form = btn.find_parent("form")
-            if form and form.get("action"):
-                return t[:60], urljoin(base_url, form["action"])
-            return t[:60], base_url
-    return "", ""
+        score = 0
+        if any(h in low for h in _CART_HINTS):
+            score = 3
+        if any(h in attrs for h in _ATTR_HINTS):
+            score = max(score, 3)
+        if score == 0 and t and any(k in t.lower() for k in CTA_KEYWORDS + [k.lower() for k in (avail_kws or [])]):
+            score = 1  # 純文字最弱
+        if score and (best is None or score > best[0]):
+            best = (score, (t[:60] or "前往購買"), full)
+
+    return (best[1], best[2]) if best else ("", "")
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -121,8 +154,7 @@ def check_watch(watch_id: int) -> dict:
 
     # CTA:抓對方頁面的「立即購買/加入購物車」連結存起來
     cta_t, cta_u = _find_cta(soup, w["url"], w["available_keywords"])
-    if cta_u:
-        db.set_watch_cta(watch_id, cta_t, cta_u)
+    db.set_watch_cta(watch_id, cta_t, cta_u)  # 找不到就清空(避免留下舊的壞連結)
 
     # 列表頁(抓到多個品項、頁面層級無單一庫存狀態)→ 顯示「監看內容中」而非「尚未判斷」
     if status == "unknown" and len(cur) >= 2:

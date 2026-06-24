@@ -685,9 +685,9 @@ def update_watch(watch_id: int, user_id: int, data: dict) -> dict | None:
 def set_watch_cta(watch_id: int, text: str, url: str) -> None:
     with SessionLocal() as s:
         w = s.get(Watch, watch_id)
-        if w and url:
+        if w:
             w.cta_text = (text or "")[:60]
-            w.cta_url = url[:1000]
+            w.cta_url = (url or "")[:1000]
             s.commit()
 
 
