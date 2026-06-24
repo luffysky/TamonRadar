@@ -45,6 +45,11 @@ export default function HomePage() {
         setProvider(h.default_provider);
       })
       .catch(() => {});
+    // 瀏覽器擴充 / 外部連結帶 ?q= 進來時預填關鍵字
+    try {
+      const q = new URLSearchParams(window.location.search).get("q");
+      if (q) setKeywords(q);
+    } catch { /* ignore */ }
   }, []);
 
   async function handleStart() {

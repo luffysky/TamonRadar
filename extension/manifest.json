@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "TamonRadar 快搜",
+  "version": "1.0.0",
+  "description": "在任何網頁選取文字,一鍵到 TamonRadar 搜尋多聞周邊比價。",
+  "permissions": ["contextMenus", "storage"],
+  "action": { "default_popup": "popup.html", "default_title": "TamonRadar 快搜" },
+  "background": { "service_worker": "background.js" }
+}
