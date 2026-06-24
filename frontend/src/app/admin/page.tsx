@@ -85,7 +85,13 @@ export default function AdminPage() {
             <Stat label="總使用者" value={stats.total_users} />
             <Stat label="AI 總呼叫次數" value={stats.total_ai_calls} />
             <Stat label="搜尋次數" value={stats.total_runs} />
+            <Stat label="近 7 天新註冊" value={stats.new_users_7d} />
+          </div>
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
             <Stat label="監看數" value={stats.total_watches} />
+            <Stat label="排程數" value={stats.total_schedules} />
+            <Stat label="文章數" value={stats.total_posts} />
+            <Stat label="討論主題/回覆" value={`${stats.total_threads}/${stats.total_replies}`} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -101,6 +107,17 @@ export default function AdminPage() {
               ))}
             </div>
           </div>
+
+          {stats.top_ai_users.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">AI 用量排行</p>
+              {stats.top_ai_users.map((u) => (
+                <div key={u.email} className="flex justify-between text-slate-600 dark:text-slate-300">
+                  <span className="truncate">{u.email}</span><span>{u.ai_used}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </>
       )}
 

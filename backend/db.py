@@ -530,24 +530,37 @@ def set_user_plan(user_id: int, plan: str) -> bool:
 
 
 def admin_stats() -> dict:
+    from datetime import timedelta
+    week_ago = _now() - timedelta(days=7)
     with SessionLocal() as s:
         total_users = s.scalar(select(func.count()).select_from(User)) or 0
         total_ai = s.scalar(select(func.coalesce(func.sum(User.ai_used), 0))) or 0
         total_runs = s.scalar(select(func.count()).select_from(Run)) or 0
         total_watches = s.scalar(select(func.count()).select_from(Watch)) or 0
         total_schedules = s.scalar(select(func.count()).select_from(Schedule)) or 0
+        total_posts = s.scalar(select(func.count()).select_from(Post)) or 0
+        total_threads = s.scalar(select(func.count()).select_from(Thread)) or 0
+        total_replies = s.scalar(select(func.count()).select_from(Reply)) or 0
+        new_users_7d = s.scalar(select(func.count()).select_from(User).where(User.created_at >= week_ago)) or 0
         by_provider = {str(k): int(v) for k, v in s.execute(
             select(User.provider, func.count()).group_by(User.provider)).all()}
         by_plan = {str(k): int(v) for k, v in s.execute(
             select(User.plan, func.count()).group_by(User.plan)).all()}
+        top_ai = [{"email": e, "ai_used": int(n)} for e, n in s.execute(
+            select(User.email, User.ai_used).order_by(User.ai_used.desc()).limit(5)).all() if n]
     return {
         "total_users": int(total_users),
         "total_ai_calls": int(total_ai),
         "total_runs": int(total_runs),
         "total_watches": int(total_watches),
         "total_schedules": int(total_schedules),
+        "total_posts": int(total_posts),
+        "total_threads": int(total_threads),
+        "total_replies": int(total_replies),
+        "new_users_7d": int(new_users_7d),
         "by_provider": by_provider,
         "by_plan": by_plan,
+        "top_ai_users": top_ai,
     }
 
 

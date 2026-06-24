@@ -432,8 +432,13 @@ export interface AdminStats {
   total_runs: number;
   total_watches: number;
   total_schedules: number;
+  total_posts: number;
+  total_threads: number;
+  total_replies: number;
+  new_users_7d: number;
   by_provider: Record<string, number>;
   by_plan: Record<string, number>;
+  top_ai_users: { email: string; ai_used: number }[];
 }
 
 export interface AdminUser {
