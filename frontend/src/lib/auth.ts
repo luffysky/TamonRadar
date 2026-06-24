@@ -1,7 +1,9 @@
 export interface AuthUser {
   id: number;
   email: string;
+  username?: string;
   plan?: string;
+  privileged?: boolean;
   is_admin?: boolean;
 }
 

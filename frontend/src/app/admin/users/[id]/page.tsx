@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getAdminUserDetail, setUserNote, setUserPlan, type AdminUserDetail } from "@/lib/api";
+import { getAdminUserDetail, setUserNote, setUserPlan, setUserPrivilege, type AdminUserDetail } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 import { ADMIN_BASE } from "@/lib/admin";
@@ -38,6 +38,11 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
     toast("方案已更新", "success");
     load();
   }
+  async function togglePriv() {
+    await setUserPrivilege(id, !u!.privileged);
+    toast(u!.privileged ? "已取消特權" : "已給予特權", "success");
+    load();
+  }
 
   const Stat = ({ label, value }: { label: string; value: number }) => (
     <div className="rounded-lg border border-slate-200 bg-white p-3 text-center dark:border-slate-700 dark:bg-slate-800">
@@ -51,24 +56,64 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
       <Link href={ADMIN_BASE} className="text-sm text-brand-600 hover:underline dark:text-brand-300">← 回管理後台</Link>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-        <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">{u.email}</h1>
+        <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          {u.username || u.email.split("@")[0]}
+          {u.privileged && <span className="ml-2 rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">特權</span>}
+        </h1>
         <p className="mt-1 text-xs text-slate-400">
-          #{u.id} · {u.provider} · 註冊 {u.created_at ? new Date(u.created_at).toLocaleString("zh-TW") : "-"}
+          {u.email} · #{u.id} · {u.provider} · 註冊 {u.created_at ? new Date(u.created_at).toLocaleString("zh-TW") : "-"}
         </p>
-        <div className="mt-3 flex items-center gap-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
           <span className={`rounded-full px-2 py-0.5 text-xs ${u.plan === "pro" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}>{u.plan}</span>
           <button onClick={togglePlan} className="rounded-md border border-slate-300 px-3 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
             {u.plan === "pro" ? "降為 free" : "升為 pro"}
           </button>
+          <button onClick={togglePriv} className={`rounded-md border px-3 py-1 text-xs ${u.privileged ? "border-violet-300 text-violet-600 hover:bg-violet-50" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"}`}>
+            {u.privileged ? "取消特權" : "給予特權(全功能免費)"}
+          </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <Stat label="搜尋" value={u.counts.runs} />
+        <Stat label="收藏" value={u.counts.favorites} />
         <Stat label="監看" value={u.counts.watches} />
         <Stat label="排程" value={u.counts.schedules} />
-        <Stat label="發文" value={u.counts.threads} />
+        <Stat label="主題" value={u.counts.threads} />
+        <Stat label="回覆" value={u.counts.replies} />
         <Stat label="AI 用量" value={u.ai_used} />
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">已啟用功能</h2>
+        <div className="flex flex-wrap gap-2 text-xs">
+          {[
+            ["Discord 通知", u.channels.discord],
+            ["Telegram 通知", u.channels.telegram],
+            ["自備 AI 金鑰", u.channels.own_ai_keys],
+            ["每日彙整", u.channels.daily_digest],
+          ].map(([label, on]) => (
+            <span key={label as string} className={`rounded-full px-2 py-0.5 ${on ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-400 dark:bg-slate-700"}`}>
+              {on ? "✓" : "✗"} {label}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <h2 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">最近搜尋紀錄</h2>
+        {u.recent_runs.length === 0 ? (
+          <p className="text-xs text-slate-400">沒有紀錄</p>
+        ) : (
+          <div className="divide-y divide-slate-100 text-sm dark:divide-slate-700">
+            {u.recent_runs.map((r) => (
+              <div key={r.id} className="flex items-center justify-between py-1.5">
+                <span className="truncate text-slate-700 dark:text-slate-200">{r.keywords.join("、") || "(無關鍵字)"}</span>
+                <span className="shrink-0 text-xs text-slate-400">{r.total} 筆 · {r.finished_at ? new Date(r.finished_at).toLocaleDateString("zh-TW") : "-"}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">

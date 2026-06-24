@@ -60,7 +60,7 @@ class CrawlConfig:
         provider = self.search_provider if self.search_provider in VALID_PROVIDERS else _default_provider()
         return CrawlConfig(
             keywords=keywords,
-            google_pages_per_keyword=max(1, min(self.google_pages_per_keyword, 5)),
+            google_pages_per_keyword=max(1, min(self.google_pages_per_keyword, 20)),
             max_detail_pages=max(0, min(self.max_detail_pages, 100)),
             min_sleep=max(0.5, float(self.min_sleep)),
             max_sleep=max(float(self.min_sleep), float(self.max_sleep)),

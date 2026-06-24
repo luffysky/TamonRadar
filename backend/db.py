@@ -63,9 +63,11 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(60), default="")        # 顯示名稱
     password_hash: Mapped[str] = mapped_column(String(255), default="")  # OAuth 使用者為空
     provider: Mapped[str] = mapped_column(String(32), default="local")   # local | google
     plan: Mapped[str] = mapped_column(String(20), default="free")        # free | pro
+    privileged: Mapped[bool] = mapped_column(default=False)              # 特權:全功能/全 AI 免費、跳過所有額度
     ai_used: Mapped[int] = mapped_column(default=0)                      # AI 累計呼叫次數
     admin_note: Mapped[str] = mapped_column(Text, default="")           # 後台備註(CRM)
     tags: Mapped[list] = mapped_column(JSON, default=list)              # 後台標籤(CRM)
@@ -215,6 +217,8 @@ def _ensure_columns() -> None:
             ("ai_used", "ALTER TABLE tr_users ADD COLUMN ai_used INTEGER DEFAULT 0"),
             ("admin_note", "ALTER TABLE tr_users ADD COLUMN admin_note TEXT DEFAULT ''"),
             ("tags", "ALTER TABLE tr_users ADD COLUMN tags JSON"),
+            ("username", "ALTER TABLE tr_users ADD COLUMN username VARCHAR(60) DEFAULT ''"),
+            ("privileged", "ALTER TABLE tr_users ADD COLUMN privileged BOOLEAN DEFAULT false"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -643,8 +647,10 @@ def admin_users(limit: int = 500) -> list[dict]:
         return [{
             "id": u.id,
             "email": u.email,
+            "username": u.username or "",
             "provider": u.provider,
             "plan": u.plan,
+            "privileged": bool(u.privileged),
             "ai_used": u.ai_used or 0,
             "tags": u.tags or [],
             "created_at": u.created_at.isoformat() if u.created_at else None,
@@ -660,12 +666,59 @@ def get_user_detail(user_id: int) -> dict | None:
         watches = s.scalar(select(func.count()).select_from(Watch).where(Watch.user_id == user_id)) or 0
         schedules = s.scalar(select(func.count()).select_from(Schedule).where(Schedule.user_id == user_id)) or 0
         threads = s.scalar(select(func.count()).select_from(Thread).where(Thread.author_id == user_id)) or 0
+        favorites = s.scalar(select(func.count()).select_from(Favorite).where(Favorite.user_id == user_id)) or 0
+        posts = s.scalar(select(func.count()).select_from(Post).where(Post.author_id == user_id)) or 0
+        replies = s.scalar(select(func.count()).select_from(Reply).where(Reply.author_id == user_id)) or 0
+        # 最近搜尋紀錄
+        recent_rows = s.scalars(select(Run).where(Run.user_id == user_id).order_by(Run.finished_at.desc()).limit(10)).all()
+        recent_runs = [{
+            "id": r.id, "keywords": r.keywords or [],
+            "total": (r.summary or {}).get("total", 0) if isinstance(r.summary, dict) else 0,
+            "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+        } for r in recent_rows]
+        st = s.get(Settings, user_id)
+        channels = {
+            "discord": bool(st and st.discord_webhook),
+            "telegram": bool(st and st.telegram_token and st.telegram_chat_id),
+            "own_ai_keys": bool(st and (st.openai_key or st.anthropic_key or st.gemini_key or st.groq_key or st.openrouter_key)),
+            "daily_digest": bool(st and st.daily_digest),
+        }
         return {
-            "id": u.id, "email": u.email, "provider": u.provider, "plan": u.plan,
+            "id": u.id, "email": u.email, "username": u.username or "", "provider": u.provider, "plan": u.plan,
+            "privileged": bool(u.privileged),
             "ai_used": u.ai_used or 0, "admin_note": u.admin_note or "", "tags": u.tags or [],
             "created_at": u.created_at.isoformat() if u.created_at else None,
-            "counts": {"runs": int(runs), "watches": int(watches), "schedules": int(schedules), "threads": int(threads)},
+            "counts": {"runs": int(runs), "watches": int(watches), "schedules": int(schedules),
+                       "threads": int(threads), "favorites": int(favorites), "posts": int(posts), "replies": int(replies)},
+            "recent_runs": recent_runs,
+            "channels": channels,
         }
+
+
+def set_privilege(user_id: int, privileged: bool) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return False
+        u.privileged = bool(privileged)
+        s.commit()
+        return True
+
+
+def set_username(user_id: int, username: str) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return False
+        u.username = (username or "")[:60]
+        s.commit()
+        return True
+
+
+def is_privileged(user_id: int) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        return bool(u and u.privileged)
 
 
 def _fav_dict(f: "Favorite") -> dict:

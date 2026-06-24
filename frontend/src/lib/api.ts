@@ -479,9 +479,12 @@ export interface AdminStats {
 export interface AdminUser {
   id: number;
   email: string;
+  username?: string;
   provider: string;
   plan: string;
+  privileged?: boolean;
   ai_used: number;
+  tags?: string[];
   created_at: string | null;
 }
 
@@ -502,7 +505,9 @@ export async function getAdminUsers(): Promise<{ users: AdminUser[] }> {
 export interface AdminUserDetail extends AdminUser {
   admin_note: string;
   tags: string[];
-  counts: { runs: number; watches: number; schedules: number; threads: number };
+  counts: { runs: number; watches: number; schedules: number; threads: number; favorites: number; posts: number; replies: number };
+  recent_runs: { id: string; keywords: string[]; total: number; finished_at: string | null }[];
+  channels: { discord: boolean; telegram: boolean; own_ai_keys: boolean; daily_digest: boolean };
 }
 
 export async function getAdminUserDetail(id: number): Promise<AdminUserDetail> {
@@ -526,6 +531,23 @@ export async function setUserPlan(userId: number, plan: string): Promise<void> {
   });
   check401(res);
   if (!res.ok) throw new Error("更新方案失敗");
+}
+
+export async function setUserPrivilege(userId: number, privileged: boolean): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/privilege`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ privileged }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("更新特權失敗");
+}
+
+export async function updateProfile(username: string): Promise<{ username: string }> {
+  const res = await fetch(`${API_BASE}/api/auth/profile`, {
+    method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify({ username }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("更新名稱失敗");
+  return res.json();
 }
 
 export async function setupTelegramBot(): Promise<{ ok: boolean; error?: string }> {

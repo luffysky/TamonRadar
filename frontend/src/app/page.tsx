@@ -157,7 +157,7 @@ export default function HomePage() {
             <label className="flex flex-col gap-1">
               <span className="text-slate-600 dark:text-slate-300">每個關鍵字頁數</span>
               <input
-                type="number" min={1} max={5} value={pages} disabled={running}
+                type="number" min={1} max={20} value={pages} disabled={running}
                 onChange={(e) => setPages(Number(e.target.value))}
                 className="rounded-lg border border-slate-300 dark:border-slate-600 px-2 py-1.5"
               />

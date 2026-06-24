@@ -145,10 +145,13 @@ class WatchRequest(BaseModel):
 # ---------- auth ----------
 
 def _public_user(user) -> dict:
+    priv = bool(getattr(user, "privileged", False))
     return {
         "id": user.id,
         "email": user.email,
-        "plan": getattr(user, "plan", "free"),
+        "username": getattr(user, "username", "") or user.email.split("@")[0],
+        "plan": "max" if priv else getattr(user, "plan", "free"),
+        "privileged": priv,
         "is_admin": auth.is_admin(user.email),
     }
 
@@ -164,7 +167,7 @@ def register(req: AuthRequest):
         exists = s.scalar(select(db.User).where(db.User.email == email))
         if exists:
             raise HTTPException(409, "這個 email 已經註冊過了")
-        user = db.User(email=email, password_hash=auth.hash_password(req.password))
+        user = db.User(email=email, password_hash=auth.hash_password(req.password), username=email.split("@")[0])
         s.add(user)
         s.commit()
         s.refresh(user)
@@ -894,6 +897,28 @@ def admin_set_plan(user_id: int, req: PlanRequest, admin=Depends(auth.get_admin)
     if not db.set_user_plan(user_id, req.plan):
         raise HTTPException(404, "找不到使用者")
     return {"ok": True}
+
+
+class PrivilegeRequest(BaseModel):
+    privileged: bool
+
+
+@app.post("/api/admin/users/{user_id}/privilege")
+def admin_set_privilege(user_id: int, req: PrivilegeRequest, admin=Depends(auth.get_admin)):
+    if not db.set_privilege(user_id, req.privileged):
+        raise HTTPException(404, "找不到使用者")
+    return {"ok": True}
+
+
+class ProfileRequest(BaseModel):
+    username: str
+
+
+@app.patch("/api/auth/profile")
+def update_profile(req: ProfileRequest, user=Depends(auth.get_current_user)):
+    db.set_username(user.id, req.username.strip())
+    fresh = db.get_user_detail(user.id)
+    return {"ok": True, "username": fresh["username"] if fresh else req.username.strip()}
 
 
 # ---------- 部落格 ----------

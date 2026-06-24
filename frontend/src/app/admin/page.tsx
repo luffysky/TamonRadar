@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
-  getAdminStats, getAdminUsers, setUserPlan, setupTelegramBot, setupDiscordBot,
+  getAdminStats, getAdminUsers, setUserPlan, setUserPrivilege, setupTelegramBot, setupDiscordBot,
   type AdminStats, type AdminUser,
 } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
@@ -53,6 +53,16 @@ export default function AdminPage() {
     try {
       await setUserPlan(u.id, next);
       toast(`${u.email} → ${next}`, "success");
+      load();
+    } catch {
+      toast("更新失敗", "error");
+    }
+  }
+
+  async function togglePriv(u: AdminUser) {
+    try {
+      await setUserPrivilege(u.id, !u.privileged);
+      toast(u.privileged ? "已取消特權" : "已給予特權", "success");
       load();
     } catch {
       toast("更新失敗", "error");
@@ -134,6 +144,7 @@ export default function AdminPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600 dark:bg-slate-900 dark:text-slate-300">
               <tr>
+                <th className="px-3 py-2 text-left">名稱</th>
                 <th className="px-3 py-2 text-left">Email</th>
                 <th className="px-3 py-2 text-left">登入</th>
                 <th className="px-3 py-2 text-left">方案</th>
@@ -143,8 +154,12 @@ export default function AdminPage() {
               </tr>
             </thead>
             <tbody>
-              {users.filter((u) => u.email.toLowerCase().includes(q.toLowerCase())).map((u) => (
+              {users.filter((u) => u.email.toLowerCase().includes(q.toLowerCase()) || (u.username ?? "").toLowerCase().includes(q.toLowerCase())).map((u) => (
                 <tr key={u.id} className="border-t border-slate-100 dark:border-slate-700">
+                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-200">
+                    {u.username || "—"}
+                    {u.privileged && <span className="ml-1.5 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-700">特權</span>}
+                  </td>
                   <td className="px-3 py-2">
                     <Link href={`${ADMIN_BASE}/users/${u.id}`} className="text-brand-600 hover:underline dark:text-brand-300">{u.email}</Link>
                   </td>
@@ -155,9 +170,14 @@ export default function AdminPage() {
                   <td className="px-3 py-2 text-right text-slate-600 dark:text-slate-300">{u.ai_used}</td>
                   <td className="px-3 py-2 text-xs text-slate-400">{u.created_at ? new Date(u.created_at).toLocaleDateString("zh-TW") : "-"}</td>
                   <td className="px-3 py-2 text-right">
-                    <button onClick={() => togglePlan(u)} className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
-                      {u.plan === "pro" ? "降為 free" : "升為 pro"}
-                    </button>
+                    <div className="flex justify-end gap-1">
+                      <button onClick={() => togglePlan(u)} className="rounded-md border border-slate-300 px-2 py-1 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">
+                        {u.plan === "pro" ? "降 free" : "升 pro"}
+                      </button>
+                      <button onClick={() => togglePriv(u)} className={`rounded-md border px-2 py-1 text-xs ${u.privileged ? "border-violet-300 text-violet-600 hover:bg-violet-50" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"}`}>
+                        {u.privileged ? "取消特權" : "給特權"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

@@ -98,7 +98,8 @@ def google_callback(request: Request, code: str = "", state: str = ""):
     with db.SessionLocal() as s:
         user = s.scalar(select(db.User).where(db.User.email == email))
         if user is None:
-            user = db.User(email=email, password_hash="", provider="google")
+            uname = (info.get("name") or info.get("given_name") or email.split("@")[0])[:60]
+            user = db.User(email=email, password_hash="", provider="google", username=uname)
             s.add(user)
             s.commit()
             s.refresh(user)

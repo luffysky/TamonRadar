@@ -38,7 +38,7 @@ export default function Nav() {
   );
 
   const linkCls = (href: string) =>
-    `rounded-md px-3 py-1.5 ${
+    `shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 ${
       pathname === href
         ? "bg-brand-50 text-brand-700 dark:bg-slate-700 dark:text-brand-300"
         : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
@@ -53,20 +53,24 @@ export default function Nav() {
           <span>TamonRadar</span>
         </Link>
 
-        {/* 桌機:橫排 */}
-        <nav className="hidden items-center gap-1 text-sm md:flex">
-          {visible.map((l) => (
-            <Link key={l.href} href={l.href} className={linkCls(l.href)}>{l.label}</Link>
-          ))}
-          <ThemeToggle />
-          {user ? (
-            <div className="ml-1 flex items-center gap-2 border-l border-slate-200 pl-2 dark:border-slate-700">
-              <span className="hidden text-xs text-slate-400 lg:inline">{user.email}</span>
-              <button onClick={signOut} className="rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">登出</button>
-            </div>
-          ) : (
-            <Link href="/login" className="ml-1 rounded-md bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700">登入</Link>
-          )}
+        {/* 桌機:可橫向滑動的連結列 + 固定的右側 */}
+        <nav className="hidden min-w-0 flex-1 items-center md:flex">
+          <div className="scroll-thin flex items-center gap-1 overflow-x-auto text-sm">
+            {visible.map((l) => (
+              <Link key={l.href} href={l.href} className={linkCls(l.href)}>{l.label}</Link>
+            ))}
+          </div>
+          <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
+            <ThemeToggle />
+            {user ? (
+              <div className="flex items-center gap-2 border-l border-slate-200 pl-2 dark:border-slate-700">
+                <span className="hidden max-w-[140px] truncate text-xs text-slate-400 lg:inline">{user.username || user.email}</span>
+                <button onClick={signOut} className="shrink-0 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">登出</button>
+              </div>
+            ) : (
+              <Link href="/login" className="shrink-0 rounded-md bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700">登入</Link>
+            )}
+          </div>
         </nav>
 
         {/* 手機:主題鈕 + 漢堡 */}

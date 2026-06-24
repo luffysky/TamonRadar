@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, type NotifySettings } from "@/lib/api";
+import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, updateProfile, type NotifySettings } from "@/lib/api";
 import { useRequireAuth, useAuth } from "@/components/AuthProvider";
 import PasswordInput from "@/components/PasswordInput";
 
 export default function SettingsPage() {
   const { user, ready } = useRequireAuth();
   const { signOut } = useAuth();
+  const [uname, setUname] = useState("");
   const [curPw, setCurPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [pwMsg, setPwMsg] = useState<string | null>(null);
@@ -22,6 +23,7 @@ export default function SettingsPage() {
   useEffect(() => {
     if (!user) return;
     getSettings().then(setForm).catch(() => {});
+    setUname(user.username || "");
   }, [user]);
 
   if (!ready || !user) {
@@ -155,7 +157,16 @@ export default function SettingsPage() {
 
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <h2 className="font-semibold text-slate-700 dark:text-slate-200">帳號</h2>
-        <p className="text-xs text-slate-400">{user.email}{user.is_admin ? " · 管理員" : ""}</p>
+        <p className="text-xs text-slate-400">{user.email}{user.is_admin ? " · 管理員" : ""}{user.privileged ? " · 特權" : ""}</p>
+
+        <label className="block pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">顯示名稱</label>
+        <div className="flex gap-2">
+          <input value={uname} onChange={(e) => setUname(e.target.value)} placeholder="你的名稱" className={field} />
+          <button
+            onClick={async () => { try { await updateProfile(uname); setPwMsg("✅ 名稱已更新(重新整理後生效)"); } catch { setPwMsg("❌ 更新失敗"); } }}
+            className="shrink-0 rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >更新</button>
+        </div>
 
         <label className="block pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">變更密碼</label>
         <PasswordInput value={curPw} onChange={setCurPw} placeholder="目前密碼" className={field} autoComplete="current-password" />
