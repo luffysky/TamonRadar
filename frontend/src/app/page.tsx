@@ -51,6 +51,7 @@ export default function HomePage() {
   const [sitePages, setSitePages] = useState(40);
   const [siteDepth, setSiteDepth] = useState(2);
   const [pageKeywords, setPageKeywords] = useState("");
+  const [sitePaths, setSitePaths] = useState("");
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
   const [result, setResult] = useState<CrawlResult | null>(null);
@@ -135,7 +136,8 @@ export default function HomePage() {
     setError(null); setResult(null); setEvents([]); setRunning(true);
     try {
       const kws = pageKeywords.split(/[,,\s]+/).map((k) => k.trim()).filter(Boolean);
-      const { job_id } = await startSiteCrawl(url, Math.max(1, sitePages || 40), Math.max(1, siteDepth || 2), kws);
+      const paths = sitePaths.split(/[,,\s]+/).map((k) => k.trim()).filter(Boolean);
+      const { job_id } = await startSiteCrawl(url, Math.max(1, sitePages || 40), Math.max(1, siteDepth || 2), kws, paths);
       setJobId(job_id);
       closeRef.current = streamCrawl(
         job_id,
@@ -324,6 +326,13 @@ export default function HomePage() {
               </label>
               <span>頁數可自訂(預設 40,上限 5000);頁數越多越久越吃資源,請斟酌。</span>
             </div>
+            <input
+              value={sitePaths}
+              onChange={(e) => setSitePaths(e.target.value)}
+              placeholder="整站爬:只抓特定路徑(選填,例 /products/, /item;逗號分隔;留空=整站)"
+              disabled={running}
+              className="mt-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900"
+            />
           </div>
         </div>
 

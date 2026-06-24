@@ -73,6 +73,10 @@
 - 修相關性過濾過兇:中英分開斷詞 + 中文 2-gram(「Python線上課程」→ python/線上/課程)。
 - 後台總覽新增「環境變數檢查」面板(只回布林,看哪些 env 沒填)。
 
+## 後續批次 6(圖表鑽取 + 路徑過濾)
+- 圖表鑽取:點分類統計/來源網站長條 → 篩選下方商品/列表/表格(再點或清除取消、未選長條淡化)。
+- 整站爬:選填「只抓特定路徑」(path 含 /products/ 等才收;仍遞迴找連結)。
+
 ## 資料庫(已建,共 26 表,皆 tr_ 前綴)
 tr_users / tr_runs / tr_user_settings / tr_schedules / tr_watches / tr_favorites /
 tr_posts / tr_post_comments / tr_post_likes / tr_post_comment_likes / tr_post_reactions /

@@ -42,6 +42,15 @@ export default function ResultsView({
   }
   const catData = summary?.categories && Object.keys(summary.categories).length ? summary.categories : countBy("category");
   const domData = summary?.domains && Object.keys(summary.domains).length ? summary.domains : countBy("domain", 10);
+
+  const [drill, setDrill] = useState<{ field: "category" | "domain"; value: string } | null>(null);
+  function clickBar(field: "category" | "domain", name: string) {
+    setDrill((d) => (d && d.field === field && d.value === name ? null : { field, value: name }));
+  }
+  function passDrill(r: CrawlRecord): boolean {
+    if (!drill) return true;
+    return (r[drill.field] || (drill.field === "category" ? "未分類" : "")).toString() === drill.value;
+  }
   const candTitle = v.kind === "product" ? "商品候選" : `${v.label}精選`;
   const showPrice = v.kind === "product";
   const { user } = useAuth();
@@ -142,9 +151,16 @@ export default function ResultsView({
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <BarChart title="分類統計" data={catData} />
-        <BarChart title="來源網站 Top 10" data={domData} />
+        <BarChart title="分類統計(點長條看明細)" data={catData} onBarClick={(n) => clickBar("category", n)} activeName={drill?.field === "category" ? drill.value : undefined} />
+        <BarChart title="來源網站 Top 10(點長條看明細)" data={domData} onBarClick={(n) => clickBar("domain", n)} activeName={drill?.field === "domain" ? drill.value : undefined} />
       </div>
+
+      {drill && (
+        <div className="flex items-center gap-2 rounded-lg bg-brand-50 px-3 py-2 text-sm dark:bg-brand-950/30">
+          <span className="text-slate-600 dark:text-slate-300">已篩選 {drill.field === "category" ? "分類" : "來源"}:<b className="text-brand-700 dark:text-brand-300">{drill.value}</b>({records.filter((r) => !hiddenUrls.has(r.url) && passDrill(r)).length} 筆)</span>
+          <button onClick={() => setDrill(null)} className="rounded-md border border-slate-300 px-2 py-0.5 text-xs hover:bg-white dark:border-slate-600">清除篩選 ✕</button>
+        </div>
+      )}
 
       {showAi && (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -155,14 +171,14 @@ export default function ResultsView({
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">{candTitle}</h2>
-        <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url))} favUrls={favUrls} onToggleFav={user ? toggleFav : undefined} showPrice={showPrice} />
+        <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url) && passDrill(r))} favUrls={favUrls} onToggleFav={user ? toggleFav : undefined} showPrice={showPrice} />
       </section>
 
       {records.some((r) => r.is_listing) && (
         <section>
           <h2 className="mb-1 text-lg font-semibold text-slate-700 dark:text-slate-200">各網站搜尋結果</h2>
           <p className="mb-3 text-xs text-slate-400">點進去是該網站的搜尋/列表頁,可看到更多同類商品。</p>
-          <ListingCards records={records.filter((r) => !hiddenUrls.has(r.url))} />
+          <ListingCards records={records.filter((r) => !hiddenUrls.has(r.url) && passDrill(r))} />
         </section>
       )}
 
@@ -184,7 +200,7 @@ export default function ResultsView({
             <Markdown>{compareMd}</Markdown>
           </div>
         )}
-        <ResultsTable records={records} hiddenUrls={hiddenUrls} selectedUrls={selected} onToggleSelect={user ? toggleSelect : undefined} showPrice={showPrice} />
+        <ResultsTable records={drill ? records.filter(passDrill) : records} hiddenUrls={hiddenUrls} selectedUrls={selected} onToggleSelect={user ? toggleSelect : undefined} showPrice={showPrice} />
       </section>
     </div>
   );

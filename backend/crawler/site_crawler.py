@@ -31,9 +31,18 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
 
     # 選填關鍵字過濾:只收標題/摘要/網址含關鍵字的項目
     from .utils import keyword_tokens, is_relevant
+    from urllib.parse import urlparse
     f_tokens = keyword_tokens(getattr(config, "filter_keywords", []) or [])
+    path_inc = [p.lower() for p in (getattr(config, "path_includes", []) or [])]
+
+    def _path_ok(u: str) -> bool:
+        if not path_inc:
+            return True
+        p = urlparse(u).path.lower()
+        return any(inc in p for inc in path_inc)
 
     kw_msg = f"、只收含「{'、'.join(config.filter_keywords)}」" if f_tokens else ""
+    kw_msg += f"、只抓路徑含「{'、'.join(path_inc)}」" if path_inc else ""
     on_event({"type": "phase", "phase": "starting",
               "message": f"整站爬:{start}(最多 {max_pages} 頁、深度 {max_depth}{kw_msg})"})
 
@@ -57,6 +66,8 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
 
         pages += 1
         items = items_from_soup(soup, url)
+        if not _path_ok(url):   # 不在指定路徑的頁面:照樣遞迴找連結,但不收它的項目
+            items = []
         if f_tokens:
             items = [it for it in items if is_relevant(it, f_tokens)]
         records.extend(items)

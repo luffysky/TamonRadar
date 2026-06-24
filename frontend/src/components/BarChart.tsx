@@ -10,9 +10,13 @@ import { BAR_COLORS } from "@/lib/format";
 export default function BarChart({
   title,
   data,
+  onBarClick,
+  activeName,
 }: {
   title: string;
   data: Record<string, number>;
+  onBarClick?: (name: string) => void;
+  activeName?: string;
 }) {
   const entries = Object.entries(data ?? {})
     .filter(([, v]) => typeof v === "number")
@@ -42,9 +46,12 @@ export default function BarChart({
               contentStyle={{ borderRadius: 8, fontSize: 12, border: "1px solid #cbd5e1", background: "rgba(255,255,255,0.96)" }}
               formatter={((v: number) => [`${v} 筆`, "數量"]) as never}
             />
-            <Bar dataKey="value" radius={[0, 6, 6, 0]} animationDuration={700}>
-              {entries.map((_, i) => (
-                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]} />
+            <Bar dataKey="value" radius={[0, 6, 6, 0]} animationDuration={700}
+              cursor={onBarClick ? "pointer" : undefined}
+              onClick={onBarClick ? ((d: { name?: string }) => d?.name && onBarClick(d.name)) as never : undefined}>
+              {entries.map((e, i) => (
+                <Cell key={i} fill={BAR_COLORS[i % BAR_COLORS.length]}
+                  fillOpacity={activeName && activeName !== e.name ? 0.35 : 1} />
               ))}
             </Bar>
           </RBarChart>

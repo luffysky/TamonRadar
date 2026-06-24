@@ -543,6 +543,7 @@ class SiteCrawlRequest(BaseModel):
     max_pages: int = 30
     max_depth: int = 2
     keywords: list[str] = Field(default_factory=list)   # 選填:只收含關鍵字的項目
+    path_includes: list[str] = Field(default_factory=list)   # 選填:只抓網址 path 含這些字串的頁
 
 
 @app.post("/api/crawl-site")
@@ -557,6 +558,7 @@ def start_site_crawl(req: SiteCrawlRequest, user=Depends(auth.get_current_user))
         site_max_pages=req.max_pages,
         site_max_depth=req.max_depth,
         filter_keywords=req.keywords,
+        path_includes=req.path_includes,
     )
     job = manager.create(config, user.id)
     return {"job_id": job.id, "status": job.status}

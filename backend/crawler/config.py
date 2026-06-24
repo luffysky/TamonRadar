@@ -64,6 +64,7 @@ class CrawlConfig:
     site_max_pages: int = 30
     site_max_depth: int = 2
     filter_keywords: list = field(default_factory=list)  # 整站爬/抓整頁:只收含這些關鍵字的項目(空=全收)
+    path_includes: list = field(default_factory=list)     # 整站爬:只收/只跟進網址 path 含這些字串的頁(空=不限)
     output_dir: str = "output"
 
     def normalized(self) -> "CrawlConfig":
@@ -86,5 +87,6 @@ class CrawlConfig:
             site_max_pages=self.site_max_pages,
             site_max_depth=self.site_max_depth,
             filter_keywords=[k.strip() for k in (self.filter_keywords or []) if k and k.strip()],
+            path_includes=[p.strip() for p in (self.path_includes or []) if p and p.strip()],
             output_dir=self.output_dir,
         )
