@@ -1129,6 +1129,32 @@ def admin_save_seo(req: dict, admin=Depends(auth.get_admin)):
     return {"ok": True}
 
 
+@app.get("/api/seo/page")
+def public_page_seo(path: str):
+    return db.get_page_seo(path)
+
+
+@app.get("/api/admin/seo/pages")
+def admin_list_page_seo(admin=Depends(auth.get_admin)):
+    return {"pages": db.list_page_seo()}
+
+
+class PageSeoRequest(BaseModel):
+    path: str
+    title: str = ""
+    description: str = ""
+    keywords: str = ""
+
+
+@app.post("/api/admin/seo/page")
+def admin_save_page_seo(req: PageSeoRequest, admin=Depends(auth.get_admin)):
+    if not req.path.startswith("/"):
+        raise HTTPException(400, "路徑要以 / 開頭")
+    db.save_page_seo(req.path, req.model_dump())
+    db.log_audit(admin.email, "save_page_seo", req.path)
+    return {"ok": True}
+
+
 class ProfileRequest(BaseModel):
     username: str
 

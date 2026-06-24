@@ -119,3 +119,7 @@ body {
 .animate-marquee:hover {
   animation-play-state: paused;
 }
+
+/* 視口邊界保護:任何媒體 / 圖表不超出容器 */
+img, svg, video, canvas { max-width: 100%; }
+.recharts-responsive-container, .recharts-wrapper { max-width: 100% !important; }

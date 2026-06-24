@@ -1,3 +1,13 @@
+import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMeta("/about", {
+    title: "關於 / 運作原理",
+    description: "TamonRadar 怎麼運作:多來源搜尋、價格雷達、AI 助手與完整功能說明。",
+  });
+}
+
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
     <div className="flex gap-4">

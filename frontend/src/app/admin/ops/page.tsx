@@ -8,7 +8,8 @@ import { ADMIN_BASE } from "@/lib/admin";
 import {
   adminListAnnouncements, adminCreateAnnouncement, adminDeleteAnnouncement,
   getAuditLogs, getReports, resolveReport, adminEmailBlast, getSeo, saveSeo, exportUsersUrl,
-  type Announcement, type AuditLog, type ReportItem,
+  listPageSeo, savePageSeo,
+  type Announcement, type AuditLog, type ReportItem, type PageSeo,
 } from "@/lib/api";
 
 export default function AdminOpsPage() {
@@ -22,6 +23,8 @@ export default function AdminOpsPage() {
   const [reports, setReports] = useState<ReportItem[]>([]);
   const [emailForm, setEmailForm] = useState({ subject: "", body: "" });
   const [seo, setSeo] = useState<Record<string, string>>({});
+  const [pages, setPages] = useState<PageSeo[]>([]);
+  const [pageForm, setPageForm] = useState<PageSeo>({ path: "/", title: "", description: "", keywords: "" });
 
   useEffect(() => {
     if (!user) return;
@@ -29,6 +32,7 @@ export default function AdminOpsPage() {
     getAuditLogs().then((d) => setLogs(d.logs)).catch(() => {});
     getReports().then((d) => setReports(d.reports)).catch(() => {});
     getSeo().then(setSeo).catch(() => {});
+    listPageSeo().then((d) => setPages(d.pages)).catch(() => {});
   }, [user]);
 
   if (!ready || !user) return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
@@ -120,7 +124,27 @@ export default function AdminOpsPage() {
           <input value={seo.keywords ?? ""} onChange={(e) => setSeo({ ...seo, keywords: e.target.value })} className={field} />
           <label className="block text-sm text-slate-600 dark:text-slate-300">預設 OG 圖網址</label>
           <input value={seo.og_image ?? ""} onChange={(e) => setSeo({ ...seo, og_image: e.target.value })} className={field} />
-          <button onClick={async () => { await saveSeo(seo); toast("已儲存 SEO", "success"); }} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">儲存</button>
+          <button onClick={async () => { await saveSeo(seo); toast("已儲存 SEO", "success"); }} className="rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">儲存全站預設</button>
+
+          <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-700">
+            <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">各頁 SEO(覆寫該頁)</h3>
+            <select value={pageForm.path} onChange={(e) => setPageForm({ ...pageForm, path: e.target.value })} className={field}>
+              {["/", "/about", "/blog", "/forum"].map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            <input value={pageForm.title ?? ""} onChange={(e) => setPageForm({ ...pageForm, title: e.target.value })} placeholder="頁面 title" className={`${field} mt-2`} />
+            <textarea value={pageForm.description ?? ""} onChange={(e) => setPageForm({ ...pageForm, description: e.target.value })} placeholder="頁面 description" rows={2} className={`${field} mt-2`} />
+            <input value={pageForm.keywords ?? ""} onChange={(e) => setPageForm({ ...pageForm, keywords: e.target.value })} placeholder="關鍵字(逗號分隔)" className={`${field} mt-2`} />
+            <button onClick={async () => { await savePageSeo(pageForm); toast(`已儲存 ${pageForm.path} 的 SEO`, "success"); listPageSeo().then((d) => setPages(d.pages)); }} className="mt-2 rounded-lg bg-brand-600 px-4 py-2 text-sm text-white hover:bg-brand-700">儲存此頁</button>
+            {pages.length > 0 && (
+              <div className="mt-3 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+                {pages.map((p) => (
+                  <button key={p.path} onClick={() => setPageForm({ path: p.path, title: p.title ?? "", description: p.description ?? "", keywords: p.keywords ?? "" })} className="block w-full truncate text-left hover:text-brand-600">
+                    {p.path}:{p.title || "(無 title)"}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

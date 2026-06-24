@@ -932,6 +932,41 @@ def save_app_settings(data: dict) -> None:
         s.commit()
 
 
+def save_page_seo(path: str, data: dict) -> None:
+    import json as _json
+    save_app_settings({f"page:{path}": _json.dumps({
+        "title": data.get("title", ""), "description": data.get("description", ""),
+        "keywords": data.get("keywords", ""),
+    }, ensure_ascii=False)})
+
+
+def get_page_seo(path: str) -> dict:
+    import json as _json
+    with SessionLocal() as s:
+        row = s.get(AppSetting, f"page:{path}")
+        if not row or not row.value:
+            return {}
+        try:
+            return _json.loads(row.value)
+        except Exception:
+            return {}
+
+
+def list_page_seo() -> list[dict]:
+    import json as _json
+    with SessionLocal() as s:
+        rows = s.execute(select(AppSetting.key, AppSetting.value)).all()
+    out = []
+    for k, v in rows:
+        if k.startswith("page:"):
+            try:
+                d = _json.loads(v)
+            except Exception:
+                d = {}
+            out.append({"path": k[5:], **d})
+    return out
+
+
 def set_privilege(user_id: int, privileged: bool) -> bool:
     with SessionLocal() as s:
         u = s.get(User, user_id)

@@ -19,7 +19,7 @@ export default function BarChart({
   const height = Math.min(420, Math.max(160, entries.length * 34));
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+    <div className="w-full min-w-0 overflow-hidden rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
       <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">{title}</h3>
       {entries.length === 0 ? (
         <p className="text-sm text-slate-400">沒有資料</p>

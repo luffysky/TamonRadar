@@ -3,10 +3,14 @@ import Link from "next/link";
 import { API_BASE, type BlogPost } from "@/lib/api";
 import BlogActions from "@/components/BlogActions";
 
-export const metadata: Metadata = {
-  title: "部落格",
-  description: "TamonRadar 部落格:搶購攻略、比價技巧、情報整理與站務公告。",
-};
+import { pageMeta } from "@/lib/seo";
+
+export async function generateMetadata(): Promise<Metadata> {
+  return pageMeta("/blog", {
+    title: "部落格",
+    description: "TamonRadar 部落格:搶購攻略、比價技巧、情報整理與站務公告。",
+  });
+}
 
 async function getPosts(): Promise<BlogPost[]> {
   try {
