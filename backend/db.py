@@ -69,6 +69,7 @@ class User(Base):
     plan: Mapped[str] = mapped_column(String(20), default="free")        # free | pro
     privileged: Mapped[bool] = mapped_column(default=False)              # 特權:全功能/全 AI 免費、跳過所有額度
     banned: Mapped[bool] = mapped_column(default=False)                  # 停權:無法登入/使用
+    email_verified: Mapped[bool] = mapped_column(default=False)          # Email 是否已驗證
     ai_used: Mapped[int] = mapped_column(default=0)                      # AI 累計呼叫次數
     admin_note: Mapped[str] = mapped_column(Text, default="")           # 後台備註(CRM)
     tags: Mapped[list] = mapped_column(JSON, default=list)              # 後台標籤(CRM)
@@ -268,6 +269,7 @@ def _ensure_columns() -> None:
             ("username", "ALTER TABLE tr_users ADD COLUMN username VARCHAR(60) DEFAULT ''"),
             ("privileged", "ALTER TABLE tr_users ADD COLUMN privileged BOOLEAN DEFAULT false"),
             ("banned", "ALTER TABLE tr_users ADD COLUMN banned BOOLEAN DEFAULT false"),
+            ("email_verified", "ALTER TABLE tr_users ADD COLUMN email_verified BOOLEAN DEFAULT false"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -780,6 +782,16 @@ def get_user_detail(user_id: int) -> dict | None:
             "recent_runs": recent_runs,
             "channels": channels,
         }
+
+
+def mark_email_verified(user_id: int) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return False
+        u.email_verified = True
+        s.commit()
+        return True
 
 
 def set_banned(user_id: int, banned: bool) -> bool:

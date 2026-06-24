@@ -152,8 +152,26 @@ def _public_user(user) -> dict:
         "username": getattr(user, "username", "") or user.email.split("@")[0],
         "plan": "max" if priv else getattr(user, "plan", "free"),
         "privileged": priv,
+        "email_verified": bool(getattr(user, "email_verified", False)) or getattr(user, "provider", "local") != "local",
         "is_admin": auth.is_admin(user.email),
     }
+
+
+def _send_verify_email(user) -> None:
+    import mailer
+    if not mailer.mail_available() or getattr(user, "provider", "local") != "local":
+        return
+    try:
+        from oauth_google import _frontend as _fe
+        token = auth.create_verify_token(user.id)
+        link = f"{_fe()}/auth/verify?token={token}"
+        html = (f"<p>哈囉 {user.username or user.email},</p>"
+                f"<p>感謝註冊 TamonRadar!請點下面連結驗證你的 Email:</p>"
+                f'<p><a href="{link}">驗證我的 Email</a></p>'
+                f"<p>若不是你本人操作,請忽略這封信。</p>")
+        mailer.send_email(user.email, "驗證你的 TamonRadar 帳號", html)
+    except Exception:
+        pass
 
 
 @app.post("/api/auth/register")
@@ -171,7 +189,30 @@ def register(req: AuthRequest):
         s.add(user)
         s.commit()
         s.refresh(user)
+        _send_verify_email(user)
         return {"token": auth.create_token(user.id), "user": _public_user(user)}
+
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
+
+@app.post("/api/auth/verify-email")
+def verify_email(req: VerifyEmailRequest):
+    uid = auth.verify_email_token(req.token)
+    if uid is None:
+        raise HTTPException(400, "驗證連結無效或已過期")
+    db.mark_email_verified(uid)
+    return {"ok": True}
+
+
+@app.post("/api/auth/resend-verify")
+def resend_verify(user=Depends(auth.get_current_user)):
+    import mailer
+    if not mailer.mail_available():
+        raise HTTPException(400, "後端尚未設定寄信")
+    _send_verify_email(user)
+    return {"ok": True}
 
 
 @app.post("/api/auth/login")

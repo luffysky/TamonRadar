@@ -6,6 +6,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { ToastProvider } from "@/components/Toast";
 import Nav from "@/components/Nav";
 import AnnouncementBanner from "@/components/AnnouncementBanner";
+import VerifyBanner from "@/components/VerifyBanner";
 import PWARegister from "@/components/PWARegister";
 import AssistantWidget from "@/components/AssistantWidget";
 import CookieConsent from "@/components/CookieConsent";
@@ -82,6 +83,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <AuthProvider>
             <AnnouncementBanner />
             <Nav />
+            <VerifyBanner />
             <main className="mx-auto max-w-6xl px-4 py-6 animate-fade-in">{children}</main>
             <footer className="mt-10 border-t border-slate-200 dark:border-slate-700">
               <div className="mx-auto max-w-6xl space-y-2 px-4 py-8 text-center text-xs text-slate-400">

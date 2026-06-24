@@ -94,6 +94,25 @@ def verify_reset_token(token: str) -> int | None:
         return None
 
 
+def create_verify_token(user_id: int) -> str:
+    payload = {
+        "sub": str(user_id),
+        "typ": "emailverify",
+        "exp": datetime.now(timezone.utc) + timedelta(days=3),
+    }
+    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
+
+
+def verify_email_token(token: str) -> int | None:
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGO])
+        if payload.get("typ") != "emailverify":
+            return None
+        return int(payload["sub"])
+    except Exception:
+        return None
+
+
 # ---------- FastAPI 依賴 ----------
 
 def is_admin(email: str) -> bool:

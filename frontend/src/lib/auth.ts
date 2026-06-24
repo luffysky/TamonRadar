@@ -4,6 +4,7 @@ export interface AuthUser {
   username?: string;
   plan?: string;
   privileged?: boolean;
+  email_verified?: boolean;
   is_admin?: boolean;
 }
 

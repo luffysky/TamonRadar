@@ -706,6 +706,20 @@ export async function deletePost(id: number): Promise<void> {
   if (!res.ok) throw new Error("刪除文章失敗");
 }
 
+// ---- Email 驗證 ----
+export async function verifyEmail(token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/verify-email`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token }),
+  });
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "驗證失敗");
+}
+
+export async function resendVerify(): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/resend-verify`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "重寄失敗");
+}
+
 // ---- 額度 ----
 export interface Quota { unlimited: boolean; ai_used: number; search_used: number; ai_limit: number; search_limit: number; }
 export async function getQuota(): Promise<Quota> {
