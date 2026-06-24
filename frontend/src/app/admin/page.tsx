@@ -157,12 +157,15 @@ export default function AdminPage() {
             <tbody>
               {users.filter((u) => u.email.toLowerCase().includes(q.toLowerCase()) || (u.username ?? "").toLowerCase().includes(q.toLowerCase())).map((u) => (
                 <tr key={u.id} className="border-t border-slate-100 dark:border-slate-700">
-                  <td className="px-3 py-2 font-medium text-slate-700 dark:text-slate-200">
-                    {u.username || "—"}
+                  <td className="px-3 py-2 font-medium">
+                    <Link href={`${ADMIN_BASE}/users/${u.id}`} className="text-brand-600 hover:underline dark:text-brand-300">
+                      {u.username || u.email.split("@")[0]}
+                    </Link>
                     {u.privileged && <span className="ml-1.5 rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] text-violet-700">特權</span>}
+                    {u.banned && <span className="ml-1.5 rounded-full bg-rose-100 px-1.5 py-0.5 text-[10px] text-rose-700">停權</span>}
                   </td>
                   <td className="px-3 py-2">
-                    <Link href={`${ADMIN_BASE}/users/${u.id}`} className="text-brand-600 hover:underline dark:text-brand-300">{u.email}</Link>
+                    <Link href={`${ADMIN_BASE}/users/${u.id}`} className="text-slate-500 hover:underline dark:text-slate-400">{u.email}</Link>
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-500">{u.provider}</td>
                   <td className="px-3 py-2">
