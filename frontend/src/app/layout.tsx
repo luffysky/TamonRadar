@@ -30,7 +30,7 @@ export const metadata: Metadata = {
   keywords: ["TamonRadar", "價格雷達", "到貨通知", "開賣通知", "搶票提醒", "AI 搜尋", "比價", "監看"],
   manifest: "/manifest.webmanifest",
   appleWebApp: { capable: true, title: "TamonRadar", statusBarStyle: "default" },
-  icons: { icon: "/favicon.ico", shortcut: "/favicon.ico", apple: "/icon-192.png" },
+  icons: { apple: "/icon-192.png" },
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",

@@ -67,7 +67,7 @@ export default function ProductCards({ records }: { records: CrawlRecord[] }) {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 animate-fade-in"
           onClick={() => setLightbox(null)}
         >
-          <div className="max-h-[90vh] max-w-2xl overflow-hidden rounded-2xl bg-white dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
+          <div className="animate-scale-in max-h-[90vh] max-w-2xl overflow-hidden rounded-2xl bg-white dark:bg-slate-800" onClick={(e) => e.stopPropagation()}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={lightbox.image_url} alt={lightbox.title} className="max-h-[70vh] w-full object-contain bg-slate-100 dark:bg-slate-900" />
             <div className="flex items-center justify-between gap-3 p-4">

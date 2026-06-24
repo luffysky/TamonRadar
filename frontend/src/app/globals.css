@@ -24,10 +24,27 @@ body {
   input:not([type="checkbox"]):not([type="radio"]),
   textarea,
   select {
-    @apply bg-white text-slate-900 placeholder:text-slate-400 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500;
+    @apply bg-white text-slate-900 placeholder:text-slate-400 transition-colors dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500;
   }
   option {
     @apply bg-white text-slate-900 dark:bg-slate-800 dark:text-slate-100;
+  }
+  /* 全域按鈕/連結微互動:平滑過場 + 按下回彈 */
+  button:not(:disabled),
+  a {
+    @apply transition duration-150 ease-out;
+  }
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+}
+
+/* 尊重使用者的減動偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

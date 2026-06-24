@@ -3,7 +3,6 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Radar } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import ThemeToggle from "./ThemeToggle";
 
@@ -45,7 +44,8 @@ export default function Nav() {
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/70 backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/70">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
         <Link href="/" onClick={() => setOpen(false)} className="flex shrink-0 items-center gap-2 font-bold text-brand-600 dark:text-brand-300">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm"><Radar className="h-[18px] w-[18px]" /></span>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo-mark.png" alt="TamonRadar" className="h-9 w-9 rounded-lg object-cover shadow-sm ring-1 ring-slate-200 dark:ring-slate-700" />
           <span>TamonRadar</span>
         </Link>
 
@@ -79,24 +79,34 @@ export default function Nav() {
         </div>
       </div>
 
-      {/* 手機展開選單 */}
-      {open && (
-        <nav className="border-t border-slate-200 bg-white px-4 py-2 text-sm md:hidden dark:border-slate-700 dark:bg-slate-900">
-          <div className="flex flex-col gap-0.5">
-            {visible.map((l) => (
-              <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className={linkCls(l.href)}>{l.label}</Link>
-            ))}
-            <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
-            {user ? (
-              <button onClick={() => { setOpen(false); signOut(); }} className="rounded-md px-3 py-1.5 text-left text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
-                登出({user.email})
-              </button>
-            ) : (
-              <Link href="/login" onClick={() => setOpen(false)} className="rounded-md bg-brand-600 px-3 py-1.5 text-center text-white hover:bg-brand-700">登入</Link>
-            )}
-          </div>
-        </nav>
-      )}
+      {/* 手機展開選單 — 平滑展開(grid-rows 0fr→1fr) */}
+      <div className={`grid overflow-hidden transition-all duration-300 ease-out md:hidden ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
+        <div className="overflow-hidden">
+          <nav className="border-t border-slate-200 bg-white px-4 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
+            <div className="flex flex-col gap-0.5">
+              {visible.map((l, i) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setOpen(false)}
+                  style={{ transitionDelay: open ? `${i * 25}ms` : "0ms" }}
+                  className={`${linkCls(l.href)} transition-all ${open ? "translate-x-0 opacity-100" : "-translate-x-2 opacity-0"}`}
+                >
+                  {l.label}
+                </Link>
+              ))}
+              <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
+              {user ? (
+                <button onClick={() => { setOpen(false); signOut(); }} className="rounded-md px-3 py-1.5 text-left text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
+                  登出({user.email})
+                </button>
+              ) : (
+                <Link href="/login" onClick={() => setOpen(false)} className="rounded-md bg-brand-600 px-3 py-1.5 text-center text-white hover:bg-brand-700">登入</Link>
+              )}
+            </div>
+          </nav>
+        </div>
+      </div>
     </header>
   );
 }

@@ -45,7 +45,7 @@ export default function AssistantWidget() {
       </button>
 
       {open && (
-        <div className="fixed bottom-24 left-5 z-40 flex h-[30rem] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+        <div className="animate-slide-up fixed bottom-24 left-5 z-40 flex h-[30rem] w-[min(23rem,calc(100vw-2.5rem))] flex-col overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-800">
           {/* header */}
           <div className="flex items-center gap-3 bg-gradient-to-r from-brand-600 to-brand-500 px-4 py-3 text-white">
             <div className="grid h-9 w-9 place-items-center rounded-full bg-white/20">

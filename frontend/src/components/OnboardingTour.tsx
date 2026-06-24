@@ -59,7 +59,7 @@ export default function OnboardingTour() {
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4">
-      <div className="w-[min(26rem,100%)] rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+      <div className="animate-scale-in w-[min(26rem,100%)] rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
         <div className="flex justify-end">
           <button onClick={done} className="rounded-full p-1 text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">
             <X className="h-4 w-4" />
