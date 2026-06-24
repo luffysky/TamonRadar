@@ -143,7 +143,8 @@ class Watch(Base):
     target_price: Mapped[int | None] = mapped_column(nullable=True)      # 低於此台幣價就通知
     last_price_twd: Mapped[int | None] = mapped_column(nullable=True)
     mode: Mapped[str] = mapped_column(String(20), default="stock")        # stock=到貨/補貨;content=內容新增減少
-    snapshot: Mapped[list] = mapped_column(JSON, default=list)            # content 模式:上次該頁的品項清單
+    snapshot: Mapped[list] = mapped_column(JSON, default=list)            # content 模式:上次該頁品項 [[標題,價格],...]
+    notify_on: Mapped[list] = mapped_column(JSON, default=list)           # content 要通知的事件:new/removed/price
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -324,6 +325,7 @@ def _ensure_columns() -> None:
             ("last_price_twd", "ALTER TABLE tr_watches ADD COLUMN last_price_twd INTEGER"),
             ("mode", "ALTER TABLE tr_watches ADD COLUMN mode VARCHAR(20) DEFAULT 'stock'"),
             ("snapshot", "ALTER TABLE tr_watches ADD COLUMN snapshot JSON"),
+            ("notify_on", "ALTER TABLE tr_watches ADD COLUMN notify_on JSON"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -606,6 +608,7 @@ def _watch_dict(w: "Watch") -> dict:
         "last_price_twd": w.last_price_twd,
         "mode": w.mode or "stock",
         "snapshot": w.snapshot or [],
+        "notify_on": w.notify_on or ["new", "removed", "price"],
     }
 
 
@@ -641,6 +644,7 @@ def create_watch(user_id: int, data: dict) -> dict:
             enabled=data.get("enabled", True),
             target_price=data.get("target_price"),
             mode=data.get("mode", "stock"),
+            notify_on=data.get("notify_on") or ["new", "removed", "price"],
         )
         s.add(w)
         s.commit()
@@ -653,7 +657,7 @@ def update_watch(watch_id: int, user_id: int, data: dict) -> dict | None:
         w = s.get(Watch, watch_id)
         if w is None or w.user_id != user_id:
             return None
-        for key in ("name", "url", "available_keywords", "unavailable_keywords", "interval_minutes", "enabled", "target_price", "mode"):
+        for key in ("name", "url", "available_keywords", "unavailable_keywords", "interval_minutes", "enabled", "target_price", "mode", "notify_on"):
             if key in data:
                 setattr(w, key, data[key])
         s.commit()

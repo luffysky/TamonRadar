@@ -438,6 +438,7 @@ export interface Watch {
   target_price: number | null;
   last_price_twd?: number | null;
   mode?: string;
+  notify_on?: string[];
 }
 
 export type WatchInput = Omit<Watch, "id" | "last_status" | "last_checked" | "last_price_twd">;

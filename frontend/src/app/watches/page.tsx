@@ -23,7 +23,12 @@ export default function WatchesPage() {
   const [interval, setIntervalMin] = useState(5);
   const [targetPrice, setTargetPrice] = useState("");
   const [mode, setMode] = useState("stock");
+  const [notifyOn, setNotifyOn] = useState<string[]>(["new", "removed", "price"]);
   const [busy, setBusy] = useState(false);
+
+  function toggleNotify(k: string) {
+    setNotifyOn((s) => (s.includes(k) ? s.filter((x) => x !== k) : [...s, k]));
+  }
 
   async function reload() {
     try {
@@ -54,6 +59,7 @@ export default function WatchesPage() {
         interval_minutes: interval, enabled: true,
         target_price: targetPrice.trim() ? Number(targetPrice.replace(/[^0-9]/g, "")) : null,
         mode,
+        notify_on: notifyOn,
       };
       await createWatch(data);
       setName(""); setUrl(""); setTargetPrice("");
@@ -104,9 +110,21 @@ export default function WatchesPage() {
             <span className="text-slate-600 dark:text-slate-300">監看模式</span>
             <select value={mode} onChange={(e) => setMode(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600 dark:bg-slate-900">
               <option value="stock">到貨/補貨(售完↔可購買)</option>
-              <option value="content">內容變動(新上架/下架)</option>
+              <option value="content">內容變動(新上架/下架/改價)</option>
             </select>
           </label>
+          {mode === "content" && (
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-600 dark:text-slate-300">通知條件</span>
+              <div className="flex flex-wrap gap-3 pt-1.5">
+                {[["new", "新增商品"], ["removed", "下架"], ["price", "價格變動"]].map(([k, label]) => (
+                  <label key={k} className="flex items-center gap-1.5">
+                    <input type="checkbox" checked={notifyOn.includes(k)} onChange={() => toggleNotify(k)} /> {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">每隔幾分鐘檢查</span>
             <input type="number" min={1} max={1440} value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600" />
