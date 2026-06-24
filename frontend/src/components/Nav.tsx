@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import ThemeToggle from "./ThemeToggle";
+import UserMenu from "./UserMenu";
 import { ADMIN_BASE } from "@/lib/admin";
 
 interface NavLink {
@@ -63,10 +64,7 @@ export default function Nav() {
           <div className="ml-auto flex shrink-0 items-center gap-2 pl-2">
             <ThemeToggle />
             {user ? (
-              <div className="flex items-center gap-2 border-l border-slate-200 pl-2 dark:border-slate-700">
-                <span className="hidden max-w-[140px] truncate text-xs text-slate-400 lg:inline">{user.username || user.email}</span>
-                <button onClick={signOut} className="shrink-0 rounded-md px-3 py-1.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">登出</button>
-              </div>
+              <UserMenu />
             ) : (
               <Link href="/login" className="shrink-0 rounded-md bg-brand-600 px-3 py-1.5 text-white hover:bg-brand-700">登入</Link>
             )}
