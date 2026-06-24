@@ -78,6 +78,11 @@ class ChatRequest(BaseModel):
     question: str
 
 
+class AssistantRequest(BaseModel):
+    question: str
+    history: list[dict] | None = None
+
+
 class AuthRequest(BaseModel):
     email: str
     password: str
@@ -209,6 +214,27 @@ def root():
         "status": "ok",
         "hint": "這是後端 API,請從前端網站使用。健康檢查:/api/health,文件:/docs",
     }
+
+
+@app.post("/api/assistant")
+def assistant(req: AssistantRequest):
+    """前台 AI 助手:回答關於本網站的問題(公開,用網站金鑰)。"""
+    from knowledge import KNOWLEDGE
+    if not ai.ai_available():
+        return {"available": False, "answer": "AI 助手暫時無法使用(後端尚未設定 AI 金鑰)。"}
+    hist = ""
+    for h in (req.history or [])[-6:]:
+        who = "使用者" if h.get("role") == "user" else "助手"
+        hist += f"{who}:{h.get('content', '')}\n"
+    prompt = (
+        KNOWLEDGE
+        + "\n\n你是 TamonRadar 的網站客服助手。只根據上面的網站說明,用繁體中文、友善簡潔地回答。"
+        "若問題與本站無關或說明沒提到,就禮貌說明你主要回答 TamonRadar 相關問題。\n\n"
+        + (f"先前對話:\n{hist}\n" if hist else "")
+        + f"使用者問題:{req.question}"
+    )
+    answer, _ = ai.ai_complete(prompt, max_tokens=700)
+    return {"available": True, "answer": answer}
 
 
 @app.get("/api/health")

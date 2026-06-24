@@ -90,6 +90,21 @@ export async function getHealth(): Promise<HealthInfo> {
   return res.json();
 }
 
+export interface ChatTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export async function askAssistant(question: string, history: ChatTurn[]): Promise<{ available: boolean; answer: string }> {
+  const res = await fetch(`${API_BASE}/api/assistant`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, history }),
+  });
+  if (!res.ok) throw new Error("助手回應失敗");
+  return res.json();
+}
+
 export async function startCrawl(params: CrawlParams): Promise<{ job_id: string }> {
   const res = await fetch(`${API_BASE}/api/crawl`, {
     method: "POST",

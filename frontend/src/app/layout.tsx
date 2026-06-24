@@ -5,6 +5,7 @@ import { AuthProvider } from "@/components/AuthProvider";
 import { ToastProvider } from "@/components/Toast";
 import Nav from "@/components/Nav";
 import PWARegister from "@/components/PWARegister";
+import AssistantWidget from "@/components/AssistantWidget";
 
 const sans = Noto_Sans_TC({
   subsets: ["latin"],
@@ -43,6 +44,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <footer className="mx-auto max-w-6xl px-4 py-10 text-center text-xs text-slate-400">
               TamonRadar · 多聞情報雷達 · 教學用途 · 請控制爬取頻率,勿繞過網站限制
             </footer>
+            <AssistantWidget />
           </AuthProvider>
         </ToastProvider>
       </body>
