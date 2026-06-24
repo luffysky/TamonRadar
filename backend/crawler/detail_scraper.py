@@ -1,11 +1,61 @@
+import concurrent.futures
 import json
 import re
 from urllib.parse import urljoin
 
+import requests
 from bs4 import BeautifulSoup
 
 from .utils import clean_text, extract_price, classify_item, sleep_random, looks_like_block_page, is_listing_url, get_domain
 from .characters import detect_character
+
+_LIGHT_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept-Language": "zh-TW,zh;q=0.9,en;q=0.8",
+}
+
+
+def _light_fetch_one(url: str) -> dict:
+    """用 requests(免瀏覽器)抓單一商品頁的 og:image 與結構化價格。"""
+    try:
+        r = requests.get(url, headers=_LIGHT_HEADERS, timeout=8)
+        if r.status_code >= 400 or not r.text:
+            return {}
+        soup = BeautifulSoup(r.text, "lxml")
+        out: dict = {}
+        og = (soup.find("meta", property="og:image")
+              or soup.find("meta", attrs={"name": "og:image"})
+              or soup.find("meta", property="twitter:image")
+              or soup.find("meta", attrs={"name": "twitter:image"}))
+        if og and og.get("content"):
+            out["image_url"] = urljoin(url, og["content"].strip())
+        # 價格只取可靠的結構化資料(不從整頁文字猜,避免亂價)
+        price = _structured_price(soup)
+        if price:
+            out["price"] = price
+        return out
+    except Exception:
+        return {}
+
+
+def light_enrich(records: list[dict], max_items: int = 24) -> int:
+    """為沒有圖片的商品頁(非列表頁)並行補上 og:image(免瀏覽器,雲端可用)。回傳補到幾張。"""
+    targets = [r for r in records if not r.get("is_listing") and not r.get("image_url") and r.get("url", "").startswith("http")][:max_items]
+    if not targets:
+        return 0
+    got = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
+        futs = {ex.submit(_light_fetch_one, r["url"]): r for r in targets}
+        for fut in concurrent.futures.as_completed(futs):
+            data = fut.result()
+            r = futs[fut]
+            if data.get("image_url"):
+                r["image_url"] = data["image_url"]
+                got += 1
+            if data.get("price") and not (r.get("price") or "").strip():
+                r["price"] = data["price"]
+    return got
 
 
 def _structured_price(soup: BeautifulSoup) -> str:

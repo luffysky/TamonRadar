@@ -18,7 +18,7 @@ from webdriver_manager.chrome import ChromeDriverManager
 from .config import CrawlConfig, SKIP_EXTENSIONS
 from .google_search import search_google, BlockedError
 from .search_api import search_api, SearchApiError, resolve_order, API_PROVIDERS
-from .detail_scraper import scrape_detail_page, classify_search_only
+from .detail_scraper import scrape_detail_page, classify_search_only, light_enrich
 from .reporter import to_dataframe, build_summary
 from .utils import is_valid_url
 
@@ -80,10 +80,18 @@ def run_crawl(
     """執行一次完整爬蟲。回傳 {records, summary}。"""
     config = config.normalized()
     use_api = config.search_provider in API_PROVIDERS
+    # 雲端輕量映像沒有 Chrome:設 DISABLE_BROWSER=1 就完全不嘗試開瀏覽器(避免 chromedriver 127 錯誤與等待)
+    browser_disabled = os.environ.get("DISABLE_BROWSER") == "1"
+    if browser_disabled and config.scrape_details:
+        on_event({"type": "warning", "message": "此環境未安裝瀏覽器(DISABLE_BROWSER=1),已自動關閉「進詳細頁」,只用搜尋結果。"})
+        config = replace(config, scrape_details=False)
     need_driver = (not use_api) or config.scrape_details
 
     driver = None
     try:
+        if browser_disabled and need_driver and not use_api:
+            on_event({"type": "error", "message": "此環境未安裝瀏覽器,無法使用 Selenium 搜尋,請改用搜尋 API(如 DuckDuckGo)。"})
+            return {"records": [], "summary": build_summary(to_dataframe([]))}
         # 只有需要時才開 Chrome:用 API 搜尋又不抓詳細頁,就完全不需要瀏覽器(雲端友善)
         if need_driver:
             on_event({"type": "phase", "phase": "starting", "message": "啟動瀏覽器中..."})
@@ -181,6 +189,14 @@ def run_crawl(
 
         if not config.scrape_details or config.max_detail_pages == 0:
             records = [classify_search_only(item) for item in deduped]
+            # 沒進詳細頁(雲端/API 模式)→ 用 requests 並行補商品圖(og:image),免瀏覽器
+            on_event({"type": "phase", "phase": "enrich", "message": "補商品圖片中..."})
+            try:
+                got = light_enrich(records, max_items=24)
+                if got:
+                    on_event({"type": "info", "message": f"補到 {got} 張商品圖"})
+            except Exception:
+                pass
         else:
             targets = deduped[: config.max_detail_pages]
             records = []
