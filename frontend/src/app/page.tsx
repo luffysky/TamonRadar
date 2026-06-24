@@ -48,6 +48,8 @@ export default function HomePage() {
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [pageUrl, setPageUrl] = useState("");
+  const [sitePages, setSitePages] = useState(40);
+  const [siteDepth, setSiteDepth] = useState(2);
   const [running, setRunning] = useState(false);
   const [events, setEvents] = useState<ProgressEvent[]>([]);
   const [result, setResult] = useState<CrawlResult | null>(null);
@@ -130,7 +132,7 @@ export default function HomePage() {
     if (!url.startsWith("http") || running) return;
     setError(null); setResult(null); setEvents([]); setRunning(true);
     try {
-      const { job_id } = await startSiteCrawl(url, 40, 2);
+      const { job_id } = await startSiteCrawl(url, Math.max(1, sitePages || 40), Math.max(1, siteDepth || 2));
       setJobId(job_id);
       closeRef.current = streamCrawl(
         job_id,
@@ -299,11 +301,19 @@ export default function HomePage() {
               <button onClick={handleScrapePage} disabled={running || !pageUrl.trim().startsWith("http")} className="shrink-0 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
                 抓整頁
               </button>
-              <button onClick={handleSiteCrawl} disabled={running || !pageUrl.trim().startsWith("http")} title="跟著同網域連結遞迴抓(背景,最多 40 頁)" className="shrink-0 rounded-lg border border-slate-400 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-700">
+              <button onClick={handleSiteCrawl} disabled={running || !pageUrl.trim().startsWith("http")} title="跟著同網域連結遞迴抓(背景)" className="shrink-0 rounded-lg border border-slate-400 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-700">
                 整站爬
               </button>
             </div>
-            <p className="mt-1 text-xs text-slate-400">「整站爬」會跟著該網站連結遞迴抓取(背景執行,最多 40 頁,進度即時顯示)。</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+              <label className="flex items-center gap-1.5">頁數上限
+                <input type="number" min={1} max={5000} value={sitePages} onChange={(e) => setSitePages(Number(e.target.value))} className="w-20 rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-600 dark:bg-slate-900" />
+              </label>
+              <label className="flex items-center gap-1.5">深度
+                <input type="number" min={1} max={10} value={siteDepth} onChange={(e) => setSiteDepth(Number(e.target.value))} className="w-16 rounded-lg border border-slate-300 px-2 py-1 dark:border-slate-600 dark:bg-slate-900" />
+              </label>
+              <span>頁數可自訂(預設 40,上限 5000);頁數越多越久越吃資源,請斟酌。</span>
+            </div>
           </div>
         </div>
 

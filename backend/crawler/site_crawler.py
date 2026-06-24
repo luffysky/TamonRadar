@@ -2,6 +2,7 @@
 
 節流 + 頁數/深度上限,避免大量請求被擋。輸出格式與 run_crawl 相同({records, summary})。
 """
+import os
 import time
 from urllib.parse import urljoin
 
@@ -16,8 +17,10 @@ from . import robots
 
 def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -> dict:
     start = (config.site_url or "").strip()
-    max_pages = max(1, min(getattr(config, "site_max_pages", 30), 200))
-    max_depth = max(0, min(getattr(config, "site_max_depth", 2), 5))
+    # 安全上限(避免 OOM/逾時);可用 env SITE_MAX_PAGES_CAP 調整,預設 5000
+    cap = int(os.environ.get("SITE_MAX_PAGES_CAP", "5000"))
+    max_pages = max(1, min(getattr(config, "site_max_pages", 30), cap))
+    max_depth = max(0, min(getattr(config, "site_max_depth", 2), 12))
     throttle = max(0.3, float(getattr(config, "min_sleep", 2.0)) * 0.3)
 
     root = get_domain(start)
