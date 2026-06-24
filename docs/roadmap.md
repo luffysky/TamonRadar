@@ -15,6 +15,11 @@ GOOGLE_CLIENT_ID/SECRET、OAUTH_REDIRECT_BASE、FRONTEND_URL、RESEND_API_KEY/RE
 **VAPID_PUBLIC_KEY/VAPID_PRIVATE_KEY/VAPID_SUBJECT(Web Push 系統通知)**
 **前端**:NEXT_PUBLIC_API_BASE、NEXT_PUBLIC_SITE_URL、NEXT_PUBLIC_ADMIN_SLUG(後台祕密路徑)、**NEXT_PUBLIC_GIPHY_API_KEY(GIF/貼圖)**
 
+### 0624 批次3(後台/部落格深化 + 各 tab 分析)— 資料表共 25 張
+- ~~後台:稽核日誌(篩選/CSV)、KPI(DAU/WAU/MAU/漏斗)、AI 成本趨勢、推播中心(多管道)、AI 模型金鑰設定~~
+- ~~部落格:閱讀進度/瀏覽數/上下篇/相關、巢狀留言+讚+emoji、AI 寫作助手、密碼文章~~
+- ~~深度情報引擎:商品比價/划算分/狀態/離群 + 各 tab 量身 facets~~
+
 ### 0624 後續完成(通知 / 監看 / 後台)— 資料表共 21 張
 - ~~通知三路:站內鈴鐺 + Discord/Telegram + Web Push(VAPID);共用 bot 發送;/bind 自動綁定~~
 - ~~監看:多條件(補貨/新增/下架/改價)、CTA 動態偵測、Shopify 抽取、可編輯、自動更新、多格式抓取(JSON/SPA/RSS/API)、遵守 robots~~

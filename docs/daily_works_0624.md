@@ -46,9 +46,21 @@
 - **後台**:側欄殼、recharts 圖表牆、爬取檢核(全站)、AI 成本明細、應用設定、Owner 權限、使用者詳情(監看/排程/搜尋結果可看/AI 對話完整內容)、Bot 對話紀錄。
 - **修復**:整站爬存檔 NaN、設定 500(密文超過 VARCHAR→改 TEXT)、圖表空白、Discord 驗簽防呆。
 
-## 資料庫(已建,共 21 表,皆 tr_ 前綴)
+## 後續批次 3(後台/部落格深化 + 各 tab 量身分析)
+- **R1 稽核**:tr_audit 擴充(target_type/changes/ip)、篩選/分頁/CSV、敏感動作(AI金鑰/停權/特權/審核/精選/推播)記錄。
+- **R2 KPI**:/admin/kpi — DAU/WAU/MAU/新註冊/搜尋、活躍漏斗、每日趨勢圖、CSV。
+- **R3 AI 成本**:近 30 天成本趨勢圖。
+- **R4 推播中心**:/admin/broadcasts — 站內(含 Web Push)/Email/TG/Discord 多管道一次發全體。(備註:分群/排程未做)
+- **R5 閱讀體驗**:閱讀進度條、瀏覽數、上一篇/下一篇、相關文章。
+- **R6 留言進階**:巢狀回覆、留言讚、emoji 反應 + tr_post_comment_likes / tr_post_reactions。
+- **R7 AI 寫作助手**:編輯器「寫整篇/大綱/潤飾」(走後台 AI 金鑰)。(備註:AI 封面/SEO 未做)
+- **R8 密碼文章**:密碼保護 + 前台解鎖。(備註:預覽 token 未做)
+- **深度情報**:insights.py + /api/insights;商品比價/划算分 + 各 tab 專屬 facets,全 vertical 顯示。
+
+## 資料庫(已建,共 25 表,皆 tr_ 前綴)
 tr_users / tr_runs / tr_user_settings / tr_schedules / tr_watches / tr_favorites /
-tr_posts / tr_threads / tr_replies / tr_subscriptions / tr_audit / tr_announcements / tr_reports /
+tr_posts / tr_post_comments / tr_post_likes / tr_post_comment_likes / tr_post_reactions /
+tr_threads / tr_replies / tr_subscriptions / tr_audit / tr_announcements / tr_reports /
 tr_app_settings / tr_usage / tr_ai_cost / tr_notifications / tr_push_subs / tr_ai_chat_log /
 tr_bot_chat_log / tr_bind_codes
 
