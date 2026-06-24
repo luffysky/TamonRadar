@@ -19,11 +19,13 @@ const PROVIDER_ORDER = ["serpapi", "serper", "googlecse", "tavily", "brave", "se
 import ProgressPanel from "@/components/ProgressPanel";
 import ResultsView from "@/components/ResultsView";
 import { useRequireAuth } from "@/components/AuthProvider";
+import { VERTICALS, getVertical } from "@/lib/verticals";
 
 const DEFAULT_KEYWORDS = "多聞 週邊\n多聞 公仔\n多聞 壓克力\n現在的是哪一個多聞";
 
 export default function HomePage() {
   const { user, ready } = useRequireAuth();
+  const [vertical, setVertical] = useState("merch");
   const [keywords, setKeywords] = useState(DEFAULT_KEYWORDS);
   const [pages, setPages] = useState(2);
   const [maxDetail, setMaxDetail] = useState(20);
@@ -67,6 +69,7 @@ export default function HomePage() {
         headless: true,
         scrape_details: scrapeDetails,
         search_provider: provider || undefined,
+        vertical,
       });
       setJobId(job_id);
 
@@ -91,6 +94,12 @@ export default function HomePage() {
 
   function handleStop() {
     if (jobId) stopCrawl(jobId);
+  }
+
+  function pickVertical(key: string) {
+    setVertical(key);
+    const v = getVertical(key);
+    setKeywords(v.examples.join("\n"));
   }
 
   async function aiSuggest() {
@@ -121,6 +130,22 @@ export default function HomePage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
+          <div className="scroll-thin -mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-1">
+            {VERTICALS.map((v) => (
+              <button
+                key={v.key}
+                onClick={() => pickVertical(v.key)}
+                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
+                  vertical === v.key
+                    ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200"
+                    : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                }`}
+              >
+                <span>{v.icon}</span> {v.label}
+              </button>
+            ))}
+          </div>
+          <p className="mb-2 text-xs text-slate-400">{getVertical(vertical).tagline}</p>
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-700 dark:text-slate-200">搜尋關鍵字(一行一個)</label>
             <button onClick={aiSuggest} disabled={running} className="text-xs text-brand-600 hover:underline disabled:opacity-50 dark:text-brand-300">✨ AI 想關鍵字</button>
@@ -131,6 +156,7 @@ export default function HomePage() {
             onChange={(e) => setKeywords(e.target.value)}
             rows={5}
             disabled={running}
+            placeholder={getVertical(vertical).placeholder}
             className="mt-2 w-full rounded-lg border border-slate-300 dark:border-slate-600 p-3 text-sm focus:border-brand-500 focus:outline-none disabled:bg-slate-50 dark:bg-slate-900"
           />
 

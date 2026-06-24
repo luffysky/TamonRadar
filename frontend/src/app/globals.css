@@ -11,12 +11,17 @@
   --page-bg-accent: #0f1a33;
 }
 
+html {
+  overflow-x: clip; /* 防止手機水平跑版,且不影響 sticky header */
+}
 body {
   @apply text-slate-800 antialiased dark:text-slate-100;
   background:
     radial-gradient(1200px 600px at 100% -10%, var(--page-bg-accent), transparent),
     var(--page-bg);
   min-height: 100vh;
+  overflow-x: clip;
+  max-width: 100%;
 }
 
 @layer base {

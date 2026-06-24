@@ -89,6 +89,7 @@ export interface CrawlParams {
   headless: boolean;
   scrape_details: boolean;
   search_provider?: string;
+  vertical?: string;
 }
 
 export interface HealthInfo {
