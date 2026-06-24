@@ -20,11 +20,13 @@ import ProgressPanel from "@/components/ProgressPanel";
 import ResultsView from "@/components/ResultsView";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { VERTICALS, getVertical } from "@/lib/verticals";
+import { useDragScroll } from "@/lib/useDragScroll";
 
 const DEFAULT_KEYWORDS = "多聞 週邊\n多聞 公仔\n多聞 壓克力\n現在的是哪一個多聞";
 
 export default function HomePage() {
   const { user, ready } = useRequireAuth();
+  const tabDrag = useDragScroll();
   const [vertical, setVertical] = useState("merch");
   const [keywords, setKeywords] = useState(DEFAULT_KEYWORDS);
   const [pages, setPages] = useState(2);
@@ -165,7 +167,7 @@ export default function HomePage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
-          <div className="scroll-thin mb-3 flex w-full gap-1.5 overflow-x-auto pb-1">
+          <div {...tabDrag} className="scroll-thin mb-3 flex w-full gap-1.5 overflow-x-auto pb-1 select-none">
             {VERTICALS.map((v) => (
               <button
                 key={v.key}

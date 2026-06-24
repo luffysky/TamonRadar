@@ -8,6 +8,7 @@ import { useAuth } from "./AuthProvider";
 import ThemeToggle from "./ThemeToggle";
 import UserMenu from "./UserMenu";
 import { ADMIN_BASE } from "@/lib/admin";
+import { useDragScroll } from "@/lib/useDragScroll";
 
 interface NavLink {
   href: string;
@@ -33,6 +34,7 @@ export default function Nav() {
   const { user, signOut } = useAuth();
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const navDrag = useDragScroll();
 
   const visible = LINKS.filter((l) =>
     l.show === "all" ? true : l.show === "auth" ? !!user : !!user?.is_admin
@@ -56,7 +58,7 @@ export default function Nav() {
 
         {/* 桌機:可橫向滑動的連結列 + 固定的右側 */}
         <nav className="hidden min-w-0 flex-1 items-center md:flex">
-          <div className="scroll-thin flex items-center gap-1 overflow-x-auto text-sm">
+          <div {...navDrag} className="scroll-thin flex select-none items-center gap-1 overflow-x-auto text-sm">
             {visible.map((l) => (
               <Link key={l.href} href={l.href} className={linkCls(l.href)}>{l.label}</Link>
             ))}
