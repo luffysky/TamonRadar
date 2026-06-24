@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { MessageCircle, X, Send, Sparkles } from "lucide-react";
 import { askAssistant, type ChatTurn } from "@/lib/api";
+import { useAuth } from "./AuthProvider";
 
 export default function AssistantWidget() {
+  const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<ChatTurn[]>([
     { role: "assistant", content: "嗨!我是 TamonRadar 小幫手 🦊\n網站怎麼用、或你剛搜尋的結果(哪個最便宜、哪裡有代購)都可以問我。" },
@@ -33,6 +35,8 @@ export default function AssistantWidget() {
       setLoading(false);
     }
   }
+
+  if (!user) return null; // 只有登入後才顯示 AI 小幫手
 
   return (
     <>

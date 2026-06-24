@@ -37,13 +37,16 @@ export default function AboutPage() {
           <div>🔍 多來源搜尋(SerpAPI / Serper / Google CSE / Tavily / Brave / SearXNG / DuckDuckGo)</div>
           <div>📡 價格雷達:新品 / 降價 / 補貨(自動換算台幣)</div>
           <div>⏰ 排程自動搜尋 + Discord / Telegram 推播</div>
-          <div>🎫 監看到貨 / 開賣即時通知</div>
-          <div>❤️ 收藏 / 追蹤 + 目標價通知 + 價格走勢圖</div>
-          <div>🤖 AI 摘要 / 對話 / 濾雜訊(GPT / Gemini / Groq / OpenRouter / Claude,可自備金鑰)</div>
-          <div>💬 AI 小幫手(看得懂你的搜尋結果,能比價、找代購)</div>
-          <div>📝 部落格 + 討論區(18 分類,Tiptap 編輯器 + emoji / GIF / 上傳)</div>
-          <div>👤 個人儀表板、Google 登入、深色模式、PWA 可安裝</div>
-          <div>🛠️ 管理後台:統計、CRM、營運報表</div>
+          <div>🗂️ 多領域分頁:周邊 / 美食 / 寵物 / 旅遊 / 股市 / 創業 等 14 種,各有專屬入口</div>
+          <div>🎫 監看到貨 / 開賣 / 降到目標價即時通知(Discord embed)</div>
+          <div>❤️ 收藏 / 追蹤 + 目標價通知 + 價格走勢圖、價格區間</div>
+          <div>🤖 AI 摘要 / 對話(記憶) / 濾雜訊 / 多商品比較 / 幫想關鍵字(GPT/Gemini/Groq/OpenRouter/Claude,可自備金鑰)</div>
+          <div>💬 AI 小幫手(讀你的搜尋結果,能比價、找代購;登入後出現)</div>
+          <div>📝 部落格(人人可寫)+ 討論區(18 分類 + 讚 / 檢舉,Tiptap + emoji / GIF / 上傳)</div>
+          <div>🔗 一鍵分享結果(產生 OG 分享卡)</div>
+          <div>👤 個人儀表板、Google 登入、Email 驗證、深色模式、PWA、瀏覽器擴充</div>
+          <div>🛠️ 管理後台:統計、CRM、營運報表、稽核、公告、Email 群發、SEO、檢舉、停權</div>
+          <div>📊 每日免費額度(特權 / 付費無限)</div>
         </div>
       </Card>
 
