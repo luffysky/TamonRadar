@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { API_BASE, type BlogPost } from "@/lib/api";
+import BlogActions from "@/components/BlogActions";
 
 export const metadata: Metadata = {
   title: "部落格",
@@ -21,7 +22,10 @@ export default async function BlogPage() {
   const posts = await getPosts();
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">部落格</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">部落格</h1>
+        <BlogActions />
+      </div>
       {posts.length === 0 ? (
         <p className="text-sm text-slate-400">還沒有文章。</p>
       ) : (
@@ -38,7 +42,7 @@ export default async function BlogPage() {
                 {p.category && <span className="mb-1 inline-block rounded-full bg-brand-100 px-2 py-0.5 text-[10px] text-brand-700">{p.category}</span>}
                 <h2 className="line-clamp-2 font-semibold text-slate-800 dark:text-slate-100">{p.title}</h2>
                 <p className="mt-1 line-clamp-2 text-sm text-slate-500 dark:text-slate-400">{p.excerpt}</p>
-                <p className="mt-2 text-xs text-slate-400">{p.created_at ? new Date(p.created_at).toLocaleDateString("zh-TW") : ""}</p>
+                <p className="mt-2 text-xs text-slate-400">{p.author ? `${p.author} · ` : ""}{p.created_at ? new Date(p.created_at).toLocaleDateString("zh-TW") : ""}</p>
               </div>
             </Link>
           ))}

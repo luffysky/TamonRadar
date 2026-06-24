@@ -939,6 +939,48 @@ def blog_list(category: str | None = None):
     return {"posts": db.list_published_posts(category)}
 
 
+# ---- 使用者自己的部落格(所有登入者都能寫)----
+@app.get("/api/blog/mine")
+def blog_mine(user=Depends(auth.get_current_user)):
+    return {"posts": db.list_user_posts(user.id)}
+
+
+@app.get("/api/blog/manage/{post_id}")
+def blog_manage_get(post_id: int, user=Depends(auth.get_current_user)):
+    owner = db.post_owner(post_id)
+    if owner is None:
+        raise HTTPException(404, "找不到文章")
+    if owner != user.id and not auth.is_admin(user.email):
+        raise HTTPException(403, "不是你的文章")
+    return db.get_post(post_id)
+
+
+@app.post("/api/blog")
+def blog_create(req: PostRequest, user=Depends(auth.get_current_user)):
+    return db.create_post(user.id, req.model_dump())
+
+
+@app.put("/api/blog/{post_id}")
+def blog_update(post_id: int, req: PostRequest, user=Depends(auth.get_current_user)):
+    owner = db.post_owner(post_id)
+    if owner is None:
+        raise HTTPException(404, "找不到文章")
+    if owner != user.id and not auth.is_admin(user.email):
+        raise HTTPException(403, "不是你的文章")
+    return db.update_post(post_id, req.model_dump())
+
+
+@app.delete("/api/blog/{post_id}")
+def blog_delete(post_id: int, user=Depends(auth.get_current_user)):
+    owner = db.post_owner(post_id)
+    if owner is None:
+        raise HTTPException(404, "找不到文章")
+    if owner != user.id and not auth.is_admin(user.email):
+        raise HTTPException(403, "不是你的文章")
+    db.delete_post(post_id)
+    return {"ok": True}
+
+
 @app.get("/api/blog/{slug}")
 def blog_get(slug: str):
     p = db.get_post_by_slug(slug)

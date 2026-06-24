@@ -814,7 +814,7 @@ def set_user_note(user_id: int, note: str, tags: list) -> bool:
 
 # ---------- 部落格 ----------
 
-def _post_dict(p: "Post", full: bool = False) -> dict:
+def _post_dict(p: "Post", full: bool = False, author_name: str = "") -> dict:
     d = {
         "id": p.id,
         "slug": p.slug,
@@ -824,12 +824,22 @@ def _post_dict(p: "Post", full: bool = False) -> dict:
         "category": p.category or "",
         "tags": p.tags or [],
         "published": p.published,
+        "author_id": p.author_id,
+        "author": author_name,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
     if full:
         d["content"] = p.content or ""
     return d
+
+
+def _author_map(s, posts: list) -> dict[int, str]:
+    ids = {p.author_id for p in posts}
+    if not ids:
+        return {}
+    rows = s.execute(select(User.id, User.username, User.email).where(User.id.in_(ids))).all()
+    return {uid: (uname or (email.split("@")[0] if email else "")) for uid, uname, email in rows}
 
 
 def _unique_slug(s, base: str) -> str:
@@ -848,13 +858,22 @@ def list_published_posts(category: str | None = None) -> list[dict]:
         if category:
             q = q.where(Post.category == category)
         rows = s.scalars(q.order_by(Post.created_at.desc())).all()
-        return [_post_dict(p) for p in rows]
+        names = _author_map(s, rows)
+        return [_post_dict(p, author_name=names.get(p.author_id, "")) for p in rows]
 
 
 def list_all_posts() -> list[dict]:
     with SessionLocal() as s:
         rows = s.scalars(select(Post).order_by(Post.created_at.desc())).all()
-        return [_post_dict(p) for p in rows]
+        names = _author_map(s, rows)
+        return [_post_dict(p, author_name=names.get(p.author_id, "")) for p in rows]
+
+
+def list_user_posts(author_id: int) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Post).where(Post.author_id == author_id).order_by(Post.created_at.desc())).all()
+        names = _author_map(s, rows)
+        return [_post_dict(p, author_name=names.get(p.author_id, "")) for p in rows]
 
 
 def get_post_by_slug(slug: str, only_published: bool = True) -> dict | None:
@@ -862,13 +881,23 @@ def get_post_by_slug(slug: str, only_published: bool = True) -> dict | None:
         p = s.scalar(select(Post).where(Post.slug == slug))
         if p is None or (only_published and not p.published):
             return None
-        return _post_dict(p, full=True)
+        names = _author_map(s, [p])
+        return _post_dict(p, full=True, author_name=names.get(p.author_id, ""))
 
 
 def get_post(post_id: int) -> dict | None:
     with SessionLocal() as s:
         p = s.get(Post, post_id)
-        return _post_dict(p, full=True) if p else None
+        if not p:
+            return None
+        names = _author_map(s, [p])
+        return _post_dict(p, full=True, author_name=names.get(p.author_id, ""))
+
+
+def post_owner(post_id: int) -> int | None:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        return p.author_id if p else None
 
 
 def create_post(author_id: int, data: dict) -> dict:
