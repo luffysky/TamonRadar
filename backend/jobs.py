@@ -74,11 +74,17 @@ class JobManager:
         try:
             job.status = "running"
             try:
-                result = run_crawl(
-                    job.config,
-                    on_event=job.add_event,
-                    should_stop=job.should_stop,
-                )
+                if job.config.site_url:
+                    from crawler.site_crawler import run_site_crawl
+                    result = run_site_crawl(
+                        job.config, on_event=job.add_event, should_stop=job.should_stop,
+                    )
+                else:
+                    result = run_crawl(
+                        job.config,
+                        on_event=job.add_event,
+                        should_stop=job.should_stop,
+                    )
                 job.result = result
                 job.status = "stopped" if job.should_stop() else "done"
                 try:

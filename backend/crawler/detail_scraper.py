@@ -39,13 +39,9 @@ def _light_fetch_one(url: str) -> dict:
         return {}
 
 
-def scrape_full_page(url: str) -> list[dict]:
-    """整頁抓取:給一個網址,抓出該頁所有表格列 + 內嵌商品(適合股票/排行/列表頁)。"""
-    r = requests.get(url, headers=_LIGHT_HEADERS, timeout=15)
-    r.raise_for_status()
-    soup = BeautifulSoup(r.text, "lxml")
+def items_from_soup(soup: BeautifulSoup, url: str) -> list[dict]:
+    """從已解析的頁面抽出所有表格列 + 內嵌商品(整頁/整站共用)。"""
     out: list[dict] = []
-    # 1) 所有表格的每一列
     for table in soup.find_all("table"):
         for tr in table.find_all("tr"):
             cells = [clean_text(td.get_text(" ", strip=True)) for td in tr.find_all(["td", "th"])]
@@ -61,9 +57,16 @@ def scrape_full_page(url: str) -> list[dict]:
                 "category": classify_item(title, "", ""), "character": "",
                 "is_listing": False, "image_url": "",
             })
-    # 2) 內嵌結構化商品
     out.extend(_extract_listing_products(soup, url, ""))
-    # 去重
+    return out
+
+
+def scrape_full_page(url: str) -> list[dict]:
+    """整頁抓取:給一個網址,抓出該頁所有表格列 + 內嵌商品(適合股票/排行/列表頁)。"""
+    r = requests.get(url, headers=_LIGHT_HEADERS, timeout=15)
+    r.raise_for_status()
+    soup = BeautifulSoup(r.text, "lxml")
+    out = items_from_soup(soup, url)
     seen: set = set()
     uniq: list[dict] = []
     for x in out:

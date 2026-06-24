@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords, scrapePage } from "@/lib/api";
+import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords, scrapePage, startSiteCrawl } from "@/lib/api";
 import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
 
@@ -109,6 +109,25 @@ export default function HomePage() {
       setError(e instanceof Error ? e.message : "整頁抓取失敗");
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function handleSiteCrawl() {
+    const url = pageUrl.trim();
+    if (!url.startsWith("http") || running) return;
+    setError(null); setResult(null); setEvents([]); setRunning(true);
+    try {
+      const { job_id } = await startSiteCrawl(url, 40, 2);
+      setJobId(job_id);
+      closeRef.current = streamCrawl(
+        job_id,
+        (e) => setEvents((prev) => [...prev, e]),
+        (payload) => { setRunning(false); if (payload.result) setResult(payload.result); if (payload.status === "error") setError(payload.error ?? "整站爬發生錯誤"); },
+        () => { setRunning(false); setError("連線中斷,已完成的會在「歷史」。"); }
+      );
+    } catch (e) {
+      setRunning(false);
+      setError(e instanceof Error ? e.message : "整站爬啟動失敗");
     }
   }
 
@@ -264,7 +283,11 @@ export default function HomePage() {
               <button onClick={handleScrapePage} disabled={running || !pageUrl.trim().startsWith("http")} className="shrink-0 rounded-lg bg-slate-700 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50">
                 抓整頁
               </button>
+              <button onClick={handleSiteCrawl} disabled={running || !pageUrl.trim().startsWith("http")} title="跟著同網域連結遞迴抓(背景,最多 40 頁)" className="shrink-0 rounded-lg border border-slate-400 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-500 dark:text-slate-200 dark:hover:bg-slate-700">
+                整站爬
+              </button>
             </div>
+            <p className="mt-1 text-xs text-slate-400">「整站爬」會跟著該網站連結遞迴抓取(背景執行,最多 40 頁,進度即時顯示)。</p>
           </div>
         </div>
 

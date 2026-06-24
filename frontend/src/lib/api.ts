@@ -101,6 +101,15 @@ export async function scrapePage(url: string): Promise<{ run_id: string; records
   return res.json();
 }
 
+export async function startSiteCrawl(url: string, max_pages = 40, max_depth = 2): Promise<{ job_id: string }> {
+  const res = await fetch(`${API_BASE}/api/crawl-site`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ url, max_pages, max_depth }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "整站爬啟動失敗");
+  return res.json();
+}
+
 export interface HealthInfo {
   ok: boolean;
   default_keywords: string[];

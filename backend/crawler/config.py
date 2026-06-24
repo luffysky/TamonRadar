@@ -51,6 +51,9 @@ class CrawlConfig:
     scrape_details: bool = True
     search_provider: str = field(default_factory=_default_provider)
     vertical: str = ""
+    site_url: str = ""          # 整站爬起始網址(設了就走整站模式)
+    site_max_pages: int = 30
+    site_max_depth: int = 2
     output_dir: str = "output"
 
     def normalized(self) -> "CrawlConfig":
@@ -69,5 +72,8 @@ class CrawlConfig:
             scrape_details=self.scrape_details,
             search_provider=provider,
             vertical=self.vertical,
+            site_url=self.site_url,
+            site_max_pages=self.site_max_pages,
+            site_max_depth=self.site_max_depth,
             output_dir=self.output_dir,
         )

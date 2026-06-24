@@ -442,6 +442,28 @@ def scrape_page(req: ScrapePageRequest, user=Depends(auth.get_current_user)):
     return {"run_id": rid, "records": records, "summary": summary}
 
 
+class SiteCrawlRequest(BaseModel):
+    url: str
+    max_pages: int = 30
+    max_depth: int = 2
+
+
+@app.post("/api/crawl-site")
+def start_site_crawl(req: SiteCrawlRequest, user=Depends(auth.get_current_user)):
+    """整站爬(背景任務):跟著同網域連結遞迴抓取,進度走同一套 SSE。"""
+    _enforce_quota(user, "search")
+    if not req.url.strip().startswith("http"):
+        raise HTTPException(400, "請貼有效的網址(http/https)")
+    config = CrawlConfig(
+        keywords=[req.url.strip()],
+        site_url=req.url.strip(),
+        site_max_pages=req.max_pages,
+        site_max_depth=req.max_depth,
+    )
+    job = manager.create(config, user.id)
+    return {"job_id": job.id, "status": job.status}
+
+
 @app.post("/api/crawl")
 def start_crawl(req: CrawlRequest, user=Depends(auth.get_current_user)):
     _enforce_quota(user, "search")
