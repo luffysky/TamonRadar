@@ -174,6 +174,29 @@ def me(user=Depends(auth.get_current_user)):
     return {"user": _public_user(user)}
 
 
+class ChangePwRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@app.post("/api/auth/change-password")
+def change_password(req: ChangePwRequest, user=Depends(auth.get_current_user)):
+    if user.provider != "local":
+        raise HTTPException(400, "第三方登入的帳號沒有密碼可改")
+    if not auth.verify_password(req.current_password, user.password_hash):
+        raise HTTPException(401, "目前密碼錯誤")
+    if len(req.new_password) < 6:
+        raise HTTPException(400, "新密碼至少 6 個字")
+    db.change_password(user.id, auth.hash_password(req.new_password))
+    return {"ok": True}
+
+
+@app.delete("/api/auth/me")
+def delete_account(user=Depends(auth.get_current_user)):
+    db.delete_user(user.id)
+    return {"ok": True}
+
+
 @app.post("/api/auth/forgot")
 def forgot_password(req: ForgotRequest):
     email = req.email.strip().lower()

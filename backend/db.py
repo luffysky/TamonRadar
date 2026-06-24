@@ -527,6 +527,34 @@ def delete_watch(watch_id: int, user_id: int) -> bool:
 
 # ---------- 使用量 / 管理員 ----------
 
+def delete_user(user_id: int) -> bool:
+    """刪除使用者與其所有資料。"""
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if u is None:
+            return False
+        for model, col in (
+            (Favorite, Favorite.user_id), (Watch, Watch.user_id), (Schedule, Schedule.user_id),
+            (Run, Run.user_id), (Settings, Settings.user_id), (Post, Post.author_id),
+            (Reply, Reply.author_id), (Thread, Thread.author_id),
+        ):
+            for row in s.scalars(select(model).where(col == user_id)).all():
+                s.delete(row)
+        s.delete(u)
+        s.commit()
+        return True
+
+
+def change_password(user_id: int, new_hash: str) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if u is None:
+            return False
+        u.password_hash = new_hash
+        s.commit()
+        return True
+
+
 def bump_ai_usage(user_id: int) -> None:
     with SessionLocal() as s:
         u = s.get(User, user_id)

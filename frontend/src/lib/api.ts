@@ -39,6 +39,20 @@ export function googleLoginUrl(): string {
   return `${API_BASE}/api/auth/google/login`;
 }
 
+export async function changePassword(current_password: string, new_password: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/change-password`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ current_password, new_password }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "改密碼失敗");
+}
+
+export async function deleteAccount(): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/auth/me`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("刪除帳號失敗");
+}
+
 export async function forgotPassword(email: string): Promise<{ ok: boolean; message: string }> {
   const res = await fetch(`${API_BASE}/api/auth/forgot`, {
     method: "POST",

@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSettings, saveSettings, testNotify, type NotifySettings } from "@/lib/api";
-import { useRequireAuth } from "@/components/AuthProvider";
+import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, type NotifySettings } from "@/lib/api";
+import { useRequireAuth, useAuth } from "@/components/AuthProvider";
 
 export default function SettingsPage() {
   const { user, ready } = useRequireAuth();
+  const { signOut } = useAuth();
+  const [curPw, setCurPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [pwMsg, setPwMsg] = useState<string | null>(null);
   const [form, setForm] = useState<NotifySettings>({
     discord_webhook: "", telegram_token: "", telegram_chat_id: "",
     openai_key: "", anthropic_key: "", gemini_key: "", groq_key: "", openrouter_key: "", ai_provider: "",
@@ -139,6 +143,39 @@ export default function SettingsPage() {
             儲存並測試發送
           </button>
           {msg && <span className="text-sm text-slate-500 dark:text-slate-400">{msg}</span>}
+        </div>
+      </div>
+
+      <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+        <h2 className="font-semibold text-slate-700 dark:text-slate-200">帳號</h2>
+        <p className="text-xs text-slate-400">{user.email}{user.is_admin ? " · 管理員" : ""}</p>
+
+        <label className="block pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">變更密碼</label>
+        <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="目前密碼" className={field} />
+        <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="新密碼(至少 6 字)" className={`${field} mt-2`} />
+        <div className="flex items-center gap-3">
+          <button
+            onClick={async () => {
+              try { await changePassword(curPw, newPw); setPwMsg("✅ 密碼已更新"); setCurPw(""); setNewPw(""); }
+              catch (e) { setPwMsg("❌ " + (e instanceof Error ? e.message : "失敗")); }
+            }}
+            className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
+          >
+            更新密碼
+          </button>
+          {pwMsg && <span className="text-sm text-slate-500 dark:text-slate-400">{pwMsg}</span>}
+        </div>
+
+        <div className="border-t border-slate-100 pt-3 dark:border-slate-700">
+          <button
+            onClick={async () => {
+              if (!confirm("確定要刪除帳號?你的所有資料(搜尋/收藏/監看/排程/發文)會永久刪除,無法復原。")) return;
+              try { await deleteAccount(); signOut(); } catch { alert("刪除失敗,請稍後再試"); }
+            }}
+            className="rounded-lg border border-rose-300 px-4 py-2 text-sm text-rose-600 hover:bg-rose-50"
+          >
+            刪除帳號
+          </button>
         </div>
       </div>
     </div>
