@@ -29,6 +29,19 @@ export default function ResultsView({
 }) {
   const { records, summary } = result;
   const v = getVertical(vertical);
+
+  // summary 若沒帶分類/來源,就直接從 records 重算(保證圖表有資料)
+  function countBy(field: "category" | "domain", topN = 0): Record<string, number> {
+    const m: Record<string, number> = {};
+    for (const r of records) {
+      const k = (r[field] || (field === "category" ? "未分類" : "")).toString().trim();
+      if (k) m[k] = (m[k] || 0) + 1;
+    }
+    if (!topN) return m;
+    return Object.fromEntries(Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, topN));
+  }
+  const catData = summary?.categories && Object.keys(summary.categories).length ? summary.categories : countBy("category");
+  const domData = summary?.domains && Object.keys(summary.domains).length ? summary.domains : countBy("domain", 10);
   const candTitle = v.kind === "product" ? "商品候選" : `${v.label}精選`;
   const showPrice = v.kind === "product";
   const { user } = useAuth();
@@ -129,8 +142,8 @@ export default function ResultsView({
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <BarChart title="分類統計" data={summary.categories} />
-        <BarChart title="來源網站 Top 10" data={summary.domains} />
+        <BarChart title="分類統計" data={catData} />
+        <BarChart title="來源網站 Top 10" data={domData} />
       </div>
 
       {showAi && (
