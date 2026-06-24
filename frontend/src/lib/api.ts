@@ -107,7 +107,7 @@ export interface ChatTurn {
 export async function askAssistant(question: string, history: ChatTurn[]): Promise<{ available: boolean; answer: string }> {
   const res = await fetch(`${API_BASE}/api/assistant`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: jsonAuthHeaders(), // 帶上登入身分,讓小幫手能讀你的搜尋結果
     body: JSON.stringify({ question, history }),
   });
   if (!res.ok) throw new Error("助手回應失敗");

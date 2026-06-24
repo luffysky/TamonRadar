@@ -116,6 +116,17 @@ def get_current_user(
     return user
 
 
+def get_optional_user(cred: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> User | None:
+    """有帶有效 token 就回使用者,否則回 None(不強制登入)。"""
+    if cred is None:
+        return None
+    user_id = _decode(cred.credentials)
+    if user_id is None:
+        return None
+    with SessionLocal() as s:
+        return s.get(User, user_id)
+
+
 def get_admin(user: User = Depends(get_current_user)) -> User:
     if not is_admin(user.email):
         raise HTTPException(403, "需要管理員權限")

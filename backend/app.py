@@ -278,23 +278,50 @@ def discord_setup(admin=Depends(auth.get_admin)):
 
 
 @app.post("/api/assistant")
-def assistant(req: AssistantRequest):
-    """前台 AI 助手:回答關於本網站的問題(公開,用網站金鑰)。"""
+def assistant(req: AssistantRequest, user=Depends(auth.get_optional_user)):
+    """前台 AI 助手:回答網站問題;若已登入,還會帶入使用者最近的搜尋結果以便比價/找代購。"""
     from knowledge import KNOWLEDGE
-    if not ai.ai_available():
-        return {"available": False, "answer": "AI 助手暫時無法使用(後端尚未設定 AI 金鑰)。"}
+    import money
+
+    args = _ai_args(user) if user else {}
+    if not ai.ai_available(**args):
+        return {"available": False, "answer": "AI 助手暫時無法使用(尚未設定 AI 金鑰)。"}
+
+    # 帶入該使用者最近一次的搜尋結果,讓小幫手能回答「哪個最便宜 / 哪裡有代購」
+    context = ""
+    if user:
+        try:
+            runs = db.list_runs(user.id)
+            if runs:
+                run = db.get_run(runs[0]["id"], user.id) or {}
+                slim = [{
+                    "title": r.get("title", ""), "url": r.get("url", ""), "domain": r.get("domain", ""),
+                    "price": r.get("price", ""), "price_twd": money.to_twd(r.get("price", "")),
+                    "category": r.get("category", ""), "is_listing": r.get("is_listing", False),
+                } for r in run.get("records", [])[:60]]
+                if slim:
+                    kw = "、".join(run.get("keywords", []))
+                    context = (
+                        f"\n\n【使用者最近一次搜尋「{kw}」的結果】(JSON;price_twd 是換算後台幣可用來比價;"
+                        f"is_listing=true 代表是搜尋/列表頁、不是單一商品):\n{json.dumps(slim, ensure_ascii=False)}"
+                    )
+        except Exception:
+            context = ""
+
     hist = ""
     for h in (req.history or [])[-6:]:
         who = "使用者" if h.get("role") == "user" else "助手"
         hist += f"{who}:{h.get('content', '')}\n"
+
     prompt = (
-        KNOWLEDGE
-        + "\n\n你是 TamonRadar 的網站客服助手。只根據上面的網站說明,用繁體中文、友善簡潔地回答。"
-        "若問題與本站無關或說明沒提到,就禮貌說明你主要回答 TamonRadar 相關問題。\n\n"
+        KNOWLEDGE + context
+        + "\n\n你是 TamonRadar 的助手,用繁體中文、友善簡潔回答。"
+        "若使用者問到比價/哪個最便宜/哪裡買/哪裡有代購,優先依據上面的搜尋結果回答"
+        "(用 price_twd 比較、附上連結);資料裡沒有就老實說,或建議去搜尋。\n\n"
         + (f"先前對話:\n{hist}\n" if hist else "")
         + f"使用者問題:{req.question}"
     )
-    answer, _ = ai.ai_complete(prompt, max_tokens=700)
+    answer, _ = ai.ai_complete(prompt, max_tokens=900, **args)
     return {"available": True, "answer": answer}
 
 
