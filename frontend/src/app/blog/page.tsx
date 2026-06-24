@@ -23,15 +23,28 @@ async function getPosts(): Promise<BlogPost[]> {
   }
 }
 
-export default async function BlogPage() {
-  const posts = await getPosts();
+const PER = 12;
+
+export default async function BlogPage({ searchParams }: { searchParams?: { page?: string } }) {
+  const all = await getPosts();
+  const cats = Array.from(new Set(all.map((p) => p.category).filter(Boolean)));
+  const pageCount = Math.max(1, Math.ceil(all.length / PER));
+  const page = Math.min(Math.max(1, Number(searchParams?.page) || 1), pageCount);
+  const posts = all.slice((page - 1) * PER, page * PER);
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">部落格</h1>
         <BlogActions />
       </div>
-      {posts.length === 0 ? (
+      {cats.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 text-xs">
+          {cats.map((c) => (
+            <span key={c} className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-600 dark:bg-slate-700 dark:text-slate-300">{c}</span>
+          ))}
+        </div>
+      )}
+      {all.length === 0 ? (
         <p className="text-sm text-slate-400">還沒有文章。</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -51,6 +64,13 @@ export default async function BlogPage() {
               </div>
             </Link>
           ))}
+        </div>
+      )}
+      {pageCount > 1 && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          {page > 1 ? <Link href={`/blog?page=${page - 1}`} className="rounded-lg border border-slate-300 px-3 py-1.5 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">← 上一頁</Link> : <span className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-300">← 上一頁</span>}
+          <span className="text-slate-500 dark:text-slate-400">{page} / {pageCount}</span>
+          {page < pageCount ? <Link href={`/blog?page=${page + 1}`} className="rounded-lg border border-slate-300 px-3 py-1.5 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">下一頁 →</Link> : <span className="rounded-lg border border-slate-200 px-3 py-1.5 text-slate-300">下一頁 →</span>}
         </div>
       )}
     </div>

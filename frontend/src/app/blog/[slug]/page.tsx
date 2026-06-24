@@ -33,9 +33,30 @@ export async function generateMetadata({ params }: { params: { slug: string } })
   };
 }
 
+function buildToc(html: string): { toc: { id: string; text: string; level: number }[]; withIds: string } {
+  const toc: { id: string; text: string; level: number }[] = [];
+  let i = 0;
+  const withIds = (html || "").replace(/<(h[23])([^>]*)>([\s\S]*?)<\/\1>/gi, (_m, tag, attrs, inner) => {
+    const text = inner.replace(/<[^>]+>/g, "").trim();
+    if (!text) return `<${tag}${attrs}>${inner}</${tag}>`;
+    const id = `sec-${i++}`;
+    toc.push({ id, text, level: tag.toLowerCase() === "h2" ? 2 : 3 });
+    return `<${tag}${attrs} id="${id}">${inner}</${tag}>`;
+  });
+  return { toc, withIds };
+}
+
+function readingMinutes(html: string): number {
+  const text = (html || "").replace(/<[^>]+>/g, "");
+  return Math.max(1, Math.ceil(text.length / 400));
+}
+
 export default async function ArticlePage({ params }: { params: { slug: string } }) {
   const post = await getPost(params.slug);
   if (!post) notFound();
+
+  const { toc, withIds } = buildToc(post.content ?? "");
+  const minutes = readingMinutes(post.content ?? "");
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -62,13 +83,28 @@ export default async function ArticlePage({ params }: { params: { slug: string }
           <>作者:<Link href={`/blogs/${post.author_id}`} className="text-brand-600 hover:underline dark:text-brand-300">{post.author}</Link> · </>
         ) : null}
         {post.created_at ? new Date(post.created_at).toLocaleDateString("zh-TW") : ""}
+        {" · 約 " + minutes + " 分鐘閱讀"}
       </p>
       {post.cover_image && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={post.cover_image} alt={post.title} className="mt-4 w-full rounded-xl object-cover" />
       )}
-      <div className="mt-6">
-        <RichContent html={post.content ?? ""} />
+
+      {toc.length >= 2 && (
+        <nav className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm dark:border-slate-700 dark:bg-slate-800/50">
+          <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">目錄</p>
+          <ul className="space-y-1">
+            {toc.map((t) => (
+              <li key={t.id} className={t.level === 3 ? "ml-4" : ""}>
+                <a href={`#${t.id}`} className="text-slate-600 hover:text-brand-600 hover:underline dark:text-slate-300">{t.text}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+
+      <div className="mt-6 scroll-mt-20">
+        <RichContent html={withIds} />
       </div>
     </article>
   );
