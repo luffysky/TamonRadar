@@ -625,6 +625,27 @@ export function exportUsersUrl(): string {
   return `${API_BASE}/api/admin/users/export`;
 }
 
+export async function sendBroadcast(data: { title: string; body: string; url: string; channels: string[] }): Promise<{ ok: boolean; recipients: number; inapp: number; tg: number; discord: number; email?: number }> {
+  const res = await fetch(`${API_BASE}/api/admin/broadcast`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data) });
+  check401(res);
+  if (!res.ok) throw new Error("發送失敗");
+  return res.json();
+}
+
+export interface KpiReport {
+  totals: { users: number; new_users: number; searches: number; dau: number; wau: number; mau: number };
+  funnel: { step: string; count: number }[];
+  daily: { date: string; signups: number; searches: number; active: number }[];
+  days: number;
+}
+export async function getKpi(days = 30): Promise<KpiReport> {
+  const res = await fetch(`${API_BASE}/api/admin/kpi?days=${days}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取 KPI 失敗");
+  return res.json();
+}
+export function kpiExportUrl(days = 30): string { return `${API_BASE}/api/admin/kpi/export?days=${days}`; }
+
 export interface AuditLog { id: number; admin_email: string; action: string; target_type?: string; target: string; detail: string; ip?: string; changes?: Record<string, unknown>; created_at: string | null; }
 export interface AuditFilter { page?: number; action?: string; actor?: string; date_from?: string; date_to?: string; }
 export async function getAuditLogs(f: AuditFilter = {}): Promise<{ logs: AuditLog[]; total: number; page: number; per: number; actions: string[] }> {

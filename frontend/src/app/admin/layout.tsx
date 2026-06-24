@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, FileText, Megaphone, Shield, ShieldCheck, Bot } from "lucide-react";
+import { LayoutDashboard, FileText, Megaphone, Shield, ShieldCheck, Bot, BarChart3, Send } from "lucide-react";
 import { ADMIN_BASE } from "@/lib/admin";
 
 const NAV = [
   { href: ADMIN_BASE, label: "總覽", icon: LayoutDashboard },
+  { href: `${ADMIN_BASE}/kpi`, label: "KPI", icon: BarChart3 },
   { href: `${ADMIN_BASE}/crawls`, label: "爬取檢核", icon: ShieldCheck },
   { href: `${ADMIN_BASE}/ops`, label: "營運管理", icon: Megaphone },
+  { href: `${ADMIN_BASE}/broadcasts`, label: "推播中心", icon: Send },
   { href: `${ADMIN_BASE}/blog`, label: "部落格管理", icon: FileText },
   { href: `${ADMIN_BASE}/ai-models`, label: "AI 模型", icon: Bot },
 ];

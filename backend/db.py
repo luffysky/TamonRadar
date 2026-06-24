@@ -1126,6 +1126,54 @@ def admin_charts() -> dict:
     }
 
 
+def kpi_report(days: int = 30) -> dict:
+    """KPI:DAU/WAU/MAU、新註冊、搜尋、活躍漏斗、每日表。"""
+    from datetime import timedelta
+    now = _now()
+    since = now - timedelta(days=days)
+    with SessionLocal() as s:
+        total_users = s.scalar(select(func.count()).select_from(User)) or 0
+        new_users = list(s.scalars(select(User.created_at).where(User.created_at >= since)).all())
+        run_rows = s.execute(select(Run.created_at, Run.user_id).where(Run.created_at >= since)).all()
+        # 活躍視窗(以有搜尋紀錄者為準)
+        def active_within(d):
+            cutoff = now - timedelta(days=d)
+            return len({uid for (dt, uid) in run_rows if uid and dt and dt >= cutoff})
+        dau, wau, mau = active_within(1), active_within(7), active_within(30)
+        # 漏斗:期間新註冊 → 有 ≥1 / ≥3 次搜尋
+        runs_by_user: dict = {}
+        for (dt, uid) in run_rows:
+            if uid:
+                runs_by_user[uid] = runs_by_user.get(uid, 0) + 1
+        new_ids = set(s.scalars(select(User.id).where(User.created_at >= since)).all())
+        f_reg = len(new_ids)
+        f_1 = len([u for u in new_ids if runs_by_user.get(u, 0) >= 1])
+        f_3 = len([u for u in new_ids if runs_by_user.get(u, 0) >= 3])
+
+    day_keys = [(since + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days + 1)]
+    su: dict = {}
+    for dt in new_users:
+        if dt:
+            su[dt.strftime("%Y-%m-%d")] = su.get(dt.strftime("%Y-%m-%d"), 0) + 1
+    rb: dict = {}
+    ab: dict = {}
+    for (dt, uid) in run_rows:
+        if dt:
+            k = dt.strftime("%Y-%m-%d")
+            rb[k] = rb.get(k, 0) + 1
+            ab.setdefault(k, set()).add(uid)
+    daily = [{"date": d, "signups": su.get(d, 0), "searches": rb.get(d, 0), "active": len(ab.get(d, set()))} for d in day_keys]
+    return {
+        "totals": {"users": int(total_users), "new_users": len(new_users),
+                   "searches": len(run_rows), "dau": dau, "wau": wau, "mau": mau},
+        "funnel": [{"step": "期間新註冊", "count": f_reg},
+                   {"step": "≥1 次搜尋", "count": f_1},
+                   {"step": "≥3 次搜尋", "count": f_3}],
+        "daily": daily,
+        "days": days,
+    }
+
+
 def admin_users(limit: int = 500) -> list[dict]:
     with SessionLocal() as s:
         rows = s.scalars(select(User).order_by(User.created_at.desc()).limit(limit)).all()
@@ -1228,6 +1276,41 @@ def all_users_for_export() -> list[dict]:
             "ai_used": u.ai_used or 0, "tags": ";".join(u.tags or []),
             "created_at": u.created_at.isoformat() if u.created_at else "",
         } for u in rows]
+
+
+def all_user_ids() -> list[int]:
+    with SessionLocal() as s:
+        return [r for r in s.scalars(select(User.id)).all()]
+
+
+def broadcast(title: str, body: str, url: str, channels: list[str]) -> dict:
+    """推播給全體使用者。channels 可含 inapp(含 web push)/ tg / discord。回傳各管道計數。"""
+    import notify as _notify
+    counts = {"inapp": 0, "tg": 0, "discord": 0}
+    ids = all_user_ids()
+    text = f"📣 {title}\n{body}" + (f"\n{url}" if url else "")
+    want_inapp = "inapp" in channels
+    want_tg = "tg" in channels
+    want_discord = "discord" in channels
+    for uid in ids:
+        if want_inapp:
+            add_notification(uid, title, body, url)  # 含 web push
+            counts["inapp"] += 1
+        if want_tg or want_discord:
+            st = get_settings(uid)
+            # 只送被勾選的管道
+            sub = dict(st)
+            if not want_tg:
+                sub["telegram_chat_id"] = ""
+            if not want_discord:
+                sub["discord_webhook"] = ""
+                sub["discord_user_id"] = ""
+            res = _notify.notify_all(sub, text)
+            if res.get("telegram", {}).get("ok"):
+                counts["tg"] += 1
+            if res.get("discord", {}).get("ok"):
+                counts["discord"] += 1
+    return {"recipients": len(ids), **counts}
 
 
 def all_user_emails() -> list[str]:

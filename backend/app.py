@@ -1120,6 +1120,24 @@ def admin_bot_chats(admin=Depends(auth.get_admin)):
     return {"chats": db.list_bot_chats()}
 
 
+@app.get("/api/admin/kpi")
+def admin_kpi(days: int = 30, admin=Depends(auth.get_admin)):
+    return db.kpi_report(days)
+
+
+@app.get("/api/admin/kpi/export")
+def admin_kpi_export(days: int = 30, admin=Depends(auth.get_admin)):
+    import csv as _csv
+    rep = db.kpi_report(days)
+    buf = io.StringIO()
+    w = _csv.writer(buf)
+    w.writerow(["日期", "新註冊", "搜尋數", "活躍用戶"])
+    for r in rep["daily"]:
+        w.writerow([r["date"], r["signups"], r["searches"], r["active"]])
+    return Response(content="﻿" + buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=kpi.csv"})
+
+
 # ---- 後台:AI 模型 / 金鑰集中設定 ----
 @app.get("/api/admin/ai-config")
 def admin_ai_config(admin=Depends(auth.get_admin)):
@@ -1351,6 +1369,38 @@ def admin_email_blast(req: EmailBlastRequest, admin=Depends(auth.get_admin)):
             pass
     db.log_audit(admin.email, "email_blast", f"{sent}/{len(emails)}", req.subject)
     return {"sent": sent, "total": len(emails)}
+
+
+# ---- 推播中心(多管道一次發)----
+class BroadcastRequest(BaseModel):
+    title: str
+    body: str = ""
+    url: str = ""
+    channels: list[str] = Field(default_factory=lambda: ["inapp"])  # inapp / email / tg / discord
+
+
+@app.post("/api/admin/broadcast")
+def admin_broadcast(req: BroadcastRequest, request: Request, admin=Depends(auth.get_admin)):
+    if not req.title.strip():
+        raise HTTPException(400, "標題不能空白")
+    result = db.broadcast(req.title.strip(), req.body, req.url, req.channels)
+    if "email" in req.channels:
+        import mailer
+        if mailer.mail_available():
+            emails = db.all_user_emails()
+            html = (f"<h3>{req.title}</h3>" + req.body.replace("\n", "<br>")
+                    + (f'<p><a href="{req.url}">前往</a></p>' if req.url else ""))
+            sent = 0
+            for e in emails:
+                try:
+                    ok, _ = mailer.send_email(e, req.title, html)
+                    sent += 1 if ok else 0
+                except Exception:
+                    pass
+            result["email"] = sent
+    db.log_audit(admin.email, "broadcast", req.title, "、".join(req.channels),
+                 target_type="broadcast", changes={"channels": req.channels}, ip=_ip(request))
+    return {"ok": True, **result}
 
 
 # ---- 檢舉 ----
