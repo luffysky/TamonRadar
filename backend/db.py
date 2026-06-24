@@ -289,6 +289,13 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
 
 
+class CrawlItem(Base):
+    __tablename__ = "tr_crawl_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(32), index=True)
+    payload: Mapped[dict] = mapped_column(JSON, default=dict)
+
+
 class ScheduledBroadcast(Base):
     __tablename__ = "tr_scheduled_broadcasts"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -524,6 +531,44 @@ def save_run(job, user_id: int) -> None:
         run.keywords = list(job.config.keywords)
         run.summary = result.get("summary", {})
         run.records = result.get("records", [])
+        s.commit()
+
+
+def append_crawl_items(run_id: str, items: list[dict]) -> None:
+    """串流寫入整站爬項目(批次),記憶體不堆全部。"""
+    if not items:
+        return
+    with SessionLocal() as s:
+        s.add_all([CrawlItem(run_id=run_id, payload=it) for it in items])
+        s.commit()
+
+
+def count_crawl_items(run_id: str) -> int:
+    with SessionLocal() as s:
+        return int(s.scalar(select(func.count()).select_from(CrawlItem).where(CrawlItem.run_id == run_id)) or 0)
+
+
+def list_crawl_items(run_id: str, offset: int = 0, limit: int = 100) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(CrawlItem).where(CrawlItem.run_id == run_id)
+                         .order_by(CrawlItem.id).offset(offset).limit(limit)).all()
+        return [r.payload for r in rows]
+
+
+def iter_crawl_items(run_id: str, batch: int = 1000):
+    """匯出用:分批讀全部項目,避免一次載入。"""
+    off = 0
+    while True:
+        chunk = list_crawl_items(run_id, off, batch)
+        if not chunk:
+            break
+        yield from chunk
+        off += batch
+
+
+def clear_crawl_items(run_id: str) -> None:
+    with SessionLocal() as s:
+        s.query(CrawlItem).filter(CrawlItem.run_id == run_id).delete()
         s.commit()
 
 

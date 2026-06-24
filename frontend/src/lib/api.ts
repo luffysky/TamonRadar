@@ -647,6 +647,13 @@ export interface KpiReport {
   daily: { date: string; signups: number; searches: number; active: number }[];
   days: number;
 }
+export async function getRunItems(runId: string, offset = 0, limit = 500): Promise<{ items: CrawlResult["records"]; total: number }> {
+  const res = await fetch(`${API_BASE}/api/run/${runId}/items?offset=${offset}&limit=${limit}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取完整資料失敗");
+  return res.json();
+}
+
 export async function getEnvCheck(): Promise<{ groups: Record<string, Record<string, boolean>> }> {
   const res = await fetch(`${API_BASE}/api/admin/env-check`, { headers: authHeaders() });
   check401(res);

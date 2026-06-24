@@ -76,8 +76,13 @@ class JobManager:
             try:
                 if job.config.site_url:
                     from crawler.site_crawler import run_site_crawl
+                    try:
+                        db.clear_crawl_items(job.id)   # 重跑時清掉舊的串流項目
+                    except Exception:
+                        pass
                     result = run_site_crawl(
                         job.config, on_event=job.add_event, should_stop=job.should_stop,
+                        on_batch=lambda batch: db.append_crawl_items(job.id, batch),
                     )
                 else:
                     result = run_crawl(

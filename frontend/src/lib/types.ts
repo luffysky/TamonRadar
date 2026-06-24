@@ -26,6 +26,8 @@ export interface Summary {
 export interface CrawlResult {
   records: CrawlRecord[];
   summary: Summary;
+  total?: number;
+  streamed?: boolean;
 }
 
 export interface ProgressEvent {

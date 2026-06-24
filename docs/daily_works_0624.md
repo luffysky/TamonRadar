@@ -77,7 +77,11 @@
 - 圖表鑽取:點分類統計/來源網站長條 → 篩選下方商品/列表/表格(再點或清除取消、未選長條淡化)。
 - 整站爬:選填「只抓特定路徑」(path 含 /products/ 等才收;仍遞迴找連結)。
 
-## 資料庫(已建,共 26 表,皆 tr_ 前綴)
+## 後續批次 7(大型整站爬串流寫 DB)
+- run_site_crawl 改串流:每 300 項 flush 到 tr_crawl_items,記憶體只留預覽(前1000)+ 增量計數 summary。
+- 匯出 CSV/Excel 自動讀 tr_crawl_items 全量;前端「載入完整資料」分頁拉取(/api/run/{id}/items)。
+
+## 資料庫(已建,共 27 表,皆 tr_ 前綴)
 tr_users / tr_runs / tr_user_settings / tr_schedules / tr_watches / tr_favorites /
 tr_posts / tr_post_comments / tr_post_likes / tr_post_comment_likes / tr_post_reactions /
 tr_threads / tr_replies / tr_subscriptions / tr_audit / tr_announcements / tr_reports /

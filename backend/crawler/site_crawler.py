@@ -10,12 +10,17 @@ import requests
 from bs4 import BeautifulSoup
 
 from .detail_scraper import items_from_soup, _LIGHT_HEADERS
-from .reporter import to_dataframe, build_summary
+from .reporter import to_dataframe, build_summary, COLUMN_ORDER
 from .utils import get_domain
 from . import robots
 
 
-def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -> dict:
+PREVIEW_CAP = 1000   # 回傳給前端 / 存 run.records 的預覽筆數上限
+FLUSH_EVERY = 300    # 每累積這麼多項就 flush 到 DB,記憶體不會一直長
+
+
+def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False, on_batch=None) -> dict:
+    """整站爬。大型爬取時用 on_batch(batch) 串流寫入 DB,記憶體只留預覽 + 計數。"""
     start = (config.site_url or "").strip()
     # 安全上限(避免 OOM/逾時);可用 env SITE_MAX_PAGES_CAP 調整,預設 5000
     cap = int(os.environ.get("SITE_MAX_PAGES_CAP", "5000"))
@@ -26,8 +31,31 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
     root = get_domain(start)
     seen = {start}
     queue = [(start, 0)]
-    records: list[dict] = []
     pages = 0
+
+    # 串流統計(不堆全部 records)
+    from collections import Counter
+    cats: Counter = Counter()
+    doms: Counter = Counter()
+    total = 0
+    with_price = 0
+    preview: list[dict] = []
+    buffer: list[dict] = []
+    seen_k: set = set()
+
+    def _norm(it: dict) -> dict:
+        d = {c: it.get(c, "") for c in COLUMN_ORDER}
+        d["is_listing"] = bool(it.get("is_listing", False))
+        return d
+
+    def _flush():
+        nonlocal buffer
+        if buffer and on_batch:
+            try:
+                on_batch(buffer)
+            except Exception:
+                pass
+        buffer = []
 
     # 選填關鍵字過濾:只收標題/摘要/網址含關鍵字的項目
     from .utils import keyword_tokens, is_relevant
@@ -70,10 +98,30 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
             items = []
         if f_tokens:
             items = [it for it in items if is_relevant(it, f_tokens)]
-        records.extend(items)
+
+        kept = 0
+        for it in items:
+            title = (it.get("title") or "").strip()
+            k = (title, it.get("url", ""))
+            if not title or k in seen_k:
+                continue
+            seen_k.add(k)
+            nit = _norm(it)
+            total += 1
+            kept += 1
+            cats[nit.get("category") or "未分類"] += 1
+            doms[nit.get("domain") or "unknown"] += 1
+            if (nit.get("price") or "").strip():
+                with_price += 1
+            if len(preview) < PREVIEW_CAP:
+                preview.append(nit)
+            buffer.append(nit)
+        if len(buffer) >= FLUSH_EVERY:
+            _flush()
+
         on_event({
             "type": "page", "current": pages, "total": max_pages,
-            "message": f"[{pages}/{max_pages}] {url} → {len(items)} 項",
+            "message": f"[{pages}/{max_pages}] {url} → {kept} 項(累計 {total})",
         })
 
         if depth < max_depth:
@@ -85,17 +133,13 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
 
         time.sleep(throttle)
 
-    # 去重
-    seen_k: set = set()
-    uniq: list[dict] = []
-    for x in records:
-        k = (x.get("title", ""), x.get("url", ""))
-        if x.get("title") and k not in seen_k:
-            seen_k.add(k)
-            uniq.append(x)
-
-    df = to_dataframe(uniq)
-    summary = build_summary(df)
+    _flush()
+    summary = {
+        "total": total, "with_price": with_price,
+        "categories": dict(cats.most_common()),
+        "domains": dict(doms.most_common(10)),
+    }
+    note = "" if total <= PREVIEW_CAP else f"(預覽前 {PREVIEW_CAP} 筆,完整 {total} 筆可匯出 CSV)"
     on_event({"type": "done", "summary": summary,
-              "message": f"整站爬完成:掃 {pages} 頁、{summary['total']} 項"})
-    return {"records": df.to_dict(orient="records"), "summary": summary}
+              "message": f"整站爬完成:掃 {pages} 頁、{total} 項 {note}"})
+    return {"records": preview, "summary": summary, "total": total, "streamed": total > PREVIEW_CAP}

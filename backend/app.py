@@ -681,12 +681,27 @@ def history_diff(run_id: str, user=Depends(auth.get_current_user)):
     }
 
 
+@app.get("/api/run/{run_id}/items")
+def run_items(run_id: str, offset: int = 0, limit: int = 100, user=Depends(auth.get_current_user)):
+    """大型整站爬:分頁取得完整項目(預覽以外的資料)。"""
+    run = db.get_run(run_id)
+    if run and run.get("user_id") not in (None, user.id) and not auth.is_admin(user.email):
+        raise HTTPException(403, "不是你的紀錄")
+    return {"items": db.list_crawl_items(run_id, max(0, offset), max(1, min(limit, 500))),
+            "total": db.count_crawl_items(run_id)}
+
+
 # ---------- export ----------
 # 注意:匯出是瀏覽器直接點連結下載,沒法帶 Authorization header,
 # 所以這裡靠「不可猜的 run_id」當作存取權杖(與 SSE 串流同一個取捨)。
 
 def _records_for(run_id: str) -> list[dict]:
-    """匯出時的資料來源:先找進行中的 job,再找資料庫歷史。"""
+    """匯出時的資料來源:大型整站爬的完整項目存在 tr_crawl_items(串流),優先用它(全量)。"""
+    try:
+        if db.count_crawl_items(run_id) > 0:
+            return list(db.iter_crawl_items(run_id))
+    except Exception:
+        pass
     job = manager.get(run_id)
     if job and job.result:
         return job.result.get("records", [])

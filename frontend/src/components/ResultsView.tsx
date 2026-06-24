@@ -43,6 +43,26 @@ export default function ResultsView({
   const catData = summary?.categories && Object.keys(summary.categories).length ? summary.categories : countBy("category");
   const domData = summary?.domains && Object.keys(summary.domains).length ? summary.domains : countBy("domain", 10);
 
+  const [loadedAll, setLoadedAll] = useState<CrawlRecord[] | null>(null);
+  const [loadingAll, setLoadingAll] = useState(false);
+  const totalCount = result.total ?? summary?.total ?? records.length;
+  const isStreamed = (result.streamed ?? false) || totalCount > records.length;
+  const view = loadedAll ?? records;
+
+  async function loadFull() {
+    setLoadingAll(true);
+    try {
+      const { getRunItems } = await import("@/lib/api");
+      const acc: CrawlRecord[] = [];
+      for (let off = 0; off < totalCount && off < 20000; off += 500) {
+        const { items } = await getRunItems(runId, off, 500);
+        if (!items.length) break;
+        acc.push(...(items as CrawlRecord[]));
+      }
+      setLoadedAll(acc);
+    } catch { /* */ } finally { setLoadingAll(false); }
+  }
+
   const [drill, setDrill] = useState<{ field: "category" | "domain"; value: string } | null>(null);
   function clickBar(field: "category" | "domain", name: string) {
     setDrill((d) => (d && d.field === field && d.value === name ? null : { field, value: name }));
@@ -131,6 +151,20 @@ export default function ResultsView({
 
       <InsightsPanel runId={runId} vertical={vertical} />
 
+      {isStreamed && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-3 py-2 text-sm dark:bg-amber-950/30">
+          <span className="text-slate-700 dark:text-slate-200">這次共 <b>{totalCount.toLocaleString()}</b> 筆,目前顯示前 {records.length.toLocaleString()} 筆。</span>
+          {loadedAll ? (
+            <span className="text-emerald-600">✅ 已載入完整 {loadedAll.length.toLocaleString()} 筆</span>
+          ) : (
+            <button onClick={loadFull} disabled={loadingAll} className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700 disabled:opacity-50">
+              {loadingAll ? "載入中…" : "載入完整資料"}
+            </button>
+          )}
+          <a href={exportUrl(runId, "csv")} className="text-xs text-brand-600 hover:underline dark:text-brand-300">或匯出 CSV(完整)</a>
+        </div>
+      )}
+
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-slate-600 dark:text-slate-300">匯出:</span>
@@ -171,14 +205,14 @@ export default function ResultsView({
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">{candTitle}</h2>
-        <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url) && passDrill(r))} favUrls={favUrls} onToggleFav={user ? toggleFav : undefined} showPrice={showPrice} />
+        <ProductCards records={view.filter((r) => !hiddenUrls.has(r.url) && passDrill(r))} favUrls={favUrls} onToggleFav={user ? toggleFav : undefined} showPrice={showPrice} />
       </section>
 
-      {records.some((r) => r.is_listing) && (
+      {view.some((r) => r.is_listing) && (
         <section>
           <h2 className="mb-1 text-lg font-semibold text-slate-700 dark:text-slate-200">各網站搜尋結果</h2>
           <p className="mb-3 text-xs text-slate-400">點進去是該網站的搜尋/列表頁,可看到更多同類商品。</p>
-          <ListingCards records={records.filter((r) => !hiddenUrls.has(r.url) && passDrill(r))} />
+          <ListingCards records={view.filter((r) => !hiddenUrls.has(r.url) && passDrill(r))} />
         </section>
       )}
 
@@ -200,7 +234,7 @@ export default function ResultsView({
             <Markdown>{compareMd}</Markdown>
           </div>
         )}
-        <ResultsTable records={drill ? records.filter(passDrill) : records} hiddenUrls={hiddenUrls} selectedUrls={selected} onToggleSelect={user ? toggleSelect : undefined} showPrice={showPrice} />
+        <ResultsTable records={drill ? view.filter(passDrill) : view} hiddenUrls={hiddenUrls} selectedUrls={selected} onToggleSelect={user ? toggleSelect : undefined} showPrice={showPrice} />
       </section>
     </div>
   );
