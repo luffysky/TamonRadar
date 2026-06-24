@@ -10,10 +10,12 @@ export default function ProductCards({
   records,
   favUrls,
   onToggleFav,
+  showPrice = true,
 }: {
   records: CrawlRecord[];
   favUrls?: Set<string>;
   onToggleFav?: (r: CrawlRecord) => void;
+  showPrice?: boolean;
 }) {
   const [lightbox, setLightbox] = useState<CrawlRecord | null>(null);
   const [page, setPage] = useState(0);
@@ -46,9 +48,9 @@ export default function ProductCards({
       <div className="mb-3 flex items-center gap-2">
         <span className="text-xs text-slate-400">排序</span>
         <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(0); }} className="rounded-lg border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-900">
-          <option value="smart">推薦(有價/有圖優先)</option>
-          <option value="price_asc">價格:低 → 高</option>
-          <option value="price_desc">價格:高 → 低</option>
+          <option value="smart">推薦</option>
+          {showPrice && <option value="price_asc">價格:低 → 高</option>}
+          {showPrice && <option value="price_desc">價格:高 → 低</option>}
           <option value="name">名稱</option>
         </select>
       </div>
@@ -80,7 +82,7 @@ export default function ProductCards({
               </span>
               <p className="line-clamp-2 text-sm font-medium text-slate-700 dark:text-slate-200">{r.title}</p>
               <div className="mt-auto flex items-center justify-between pt-2">
-                <span className="font-bold text-rose-600">{r.price}</span>
+                <span className="font-bold text-rose-600">{showPrice ? r.price : ""}</span>
                 <a
                   href={r.url}
                   target="_blank"

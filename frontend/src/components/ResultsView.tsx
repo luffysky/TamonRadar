@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { CrawlResult, CrawlRecord } from "@/lib/types";
 import { exportUrl, aiClean, aiCompare, getFavorites, addFavorite, removeFavorite } from "@/lib/api";
 import { useAuth } from "./AuthProvider";
+import { getVertical } from "@/lib/verticals";
 import { Sparkles, GitCompare } from "lucide-react";
 import Markdown from "./Markdown";
 import StatCards from "./StatCards";
@@ -18,12 +19,17 @@ export default function ResultsView({
   runId,
   result,
   showAi = true,
+  vertical = "merch",
 }: {
   runId: string;
   result: CrawlResult;
   showAi?: boolean;
+  vertical?: string;
 }) {
   const { records, summary } = result;
+  const v = getVertical(vertical);
+  const candTitle = v.kind === "product" ? "商品候選" : `${v.label}精選`;
+  const showPrice = v.kind === "product";
   const { user } = useAuth();
   const [hiddenUrls, setHiddenUrls] = useState<Set<string>>(new Set());
   const [cleaning, setCleaning] = useState(false);
@@ -131,8 +137,8 @@ export default function ResultsView({
       )}
 
       <section>
-        <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">商品候選</h2>
-        <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url))} favUrls={favUrls} onToggleFav={user ? toggleFav : undefined} />
+        <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">{candTitle}</h2>
+        <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url))} favUrls={favUrls} onToggleFav={user ? toggleFav : undefined} showPrice={showPrice} />
       </section>
 
       {records.some((r) => r.is_listing) && (
@@ -161,7 +167,7 @@ export default function ResultsView({
             <Markdown>{compareMd}</Markdown>
           </div>
         )}
-        <ResultsTable records={records} hiddenUrls={hiddenUrls} selectedUrls={selected} onToggleSelect={user ? toggleSelect : undefined} />
+        <ResultsTable records={records} hiddenUrls={hiddenUrls} selectedUrls={selected} onToggleSelect={user ? toggleSelect : undefined} showPrice={showPrice} />
       </section>
     </div>
   );

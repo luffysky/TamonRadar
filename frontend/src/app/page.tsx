@@ -319,7 +319,7 @@ export default function HomePage() {
       {result && jobId && (
         <section>
           <h2 className="mb-4 text-xl font-bold text-slate-800 dark:text-slate-100">搜尋結果</h2>
-          <ResultsView runId={jobId} result={result} />
+          <ResultsView runId={jobId} result={result} vertical={vertical} />
         </section>
       )}
     </div>

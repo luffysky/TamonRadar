@@ -39,6 +39,13 @@ def _default_provider() -> str:
 
 VALID_PROVIDERS = ("brave", "serpapi", "serper", "googlecse", "tavily", "searxng", "duckduckgo", "selenium")
 
+# 各領域對應的分類標籤(購物類沿用原本的計分分類器,其餘用領域當分類,避免全落「其他」)
+VERTICAL_LABELS = {
+    "food": "美食", "pet": "寵物", "animal": "動物/生態", "travel": "旅遊",
+    "stock": "股市/投資", "startup": "創業", "realestate": "房地產", "job": "工作職缺",
+    "course": "學習/課程", "health": "健康/醫療", "tech": "3C/科技", "car": "汽車", "secondhand": "二手",
+}
+
 
 @dataclass
 class CrawlConfig:

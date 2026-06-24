@@ -16,11 +16,13 @@ export default function ResultsTable({
   hiddenUrls,
   selectedUrls,
   onToggleSelect,
+  showPrice = true,
 }: {
   records: CrawlRecord[];
   hiddenUrls?: Set<string>;
   selectedUrls?: Set<string>;
   onToggleSelect?: (url: string) => void;
+  showPrice?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("全部");
@@ -116,10 +118,12 @@ export default function ResultsTable({
             ))}
           </select>
         )}
-        <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
-          <input type="checkbox" checked={onlyPrice} onChange={(e) => setOnlyPrice(e.target.checked)} />
-          只看有價格
-        </label>
+        {showPrice && (
+          <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+            <input type="checkbox" checked={onlyPrice} onChange={(e) => setOnlyPrice(e.target.checked)} />
+            只看有價格
+          </label>
+        )}
         <label className="flex items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
           <input type="checkbox" checked={onlyProducts} onChange={(e) => setOnlyProducts(e.target.checked)} />
           只看商品頁
@@ -134,7 +138,7 @@ export default function ResultsTable({
               {onToggleSelect && <th className="px-2 py-2" />}
               <Th k="category">分類</Th>
               <Th k="title">標題</Th>
-              <Th k="price">價格</Th>
+              {showPrice && <Th k="price">價格</Th>}
               <Th k="domain">來源</Th>
             </tr>
           </thead>
@@ -165,13 +169,13 @@ export default function ResultsTable({
                   ) : null}
                   {r.snippet ? <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-slate-400">{r.snippet}</p> : null}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 font-semibold text-rose-600">{r.price || "—"}</td>
+                {showPrice && <td className="whitespace-nowrap px-3 py-2 font-semibold text-rose-600">{r.price || "—"}</td>}
                 <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-500 dark:text-slate-400">{r.domain}</td>
               </tr>
             ))}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={onToggleSelect ? 5 : 4} className="px-3 py-10 text-center text-slate-400">
+                <td colSpan={(onToggleSelect ? 1 : 0) + (showPrice ? 1 : 0) + 3} className="px-3 py-10 text-center text-slate-400">
                   沒有符合條件的資料
                 </td>
               </tr>

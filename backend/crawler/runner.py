@@ -234,6 +234,14 @@ def run_crawl(
             for item in deduped[len(records):]:
                 records.append(classify_search_only(item))
 
+        # 領域感知分類:非購物領域,把「其他/空」的分類改成該領域標籤(避免全落「其他」)
+        from .config import VERTICAL_LABELS
+        vlabel = VERTICAL_LABELS.get(config.vertical, "")
+        if vlabel:
+            for r in records:
+                if not r.get("category") or r.get("category") == "其他":
+                    r["category"] = vlabel
+
         df = to_dataframe(records)
         summary = build_summary(df)
         on_event({
