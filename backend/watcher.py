@@ -7,7 +7,9 @@ import requests
 from bs4 import BeautifulSoup
 
 import db
+import money
 import notify
+from crawler.utils import extract_price
 
 _HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -53,14 +55,26 @@ def check_watch(watch_id: int) -> dict:
 
     status = _evaluate(text, w["available_keywords"], w["unavailable_keywords"])
     prev = w["last_status"]
-    db.set_watch_status(watch_id, status)
+    name = w["name"] or w["url"]
 
+    # 價格門檻:抓現價(台幣),低於目標就通知
+    target = w.get("target_price")
+    cur_twd = money.to_twd(extract_price(text)) if target else None
+    prev_twd = w.get("last_price_twd")
+
+    db.set_watch_status(watch_id, status, cur_twd)
+
+    settings = db.get_settings(w["user_id"])
     notified = False
+
     if status == "available" and prev != "available":
-        settings = db.get_settings(w["user_id"])
-        name = w["name"] or w["url"]
-        msg = f"🎫 TamonRadar 監看通知\n「{name}」可能可以買了!\n{w['url']}"
-        notify.notify_all(settings, msg)
+        embed = notify.make_embed("🎫 可以買了!", f"「{name}」偵測到可購買。", w["url"], 0x10B981, w.get("image_url", ""))
+        notify.notify_all(settings, f"🎫 TamonRadar 監看:「{name}」可能可以買了!\n{w['url']}", embed=embed)
         notified = True
 
-    return {"ok": True, "status": status, "previous": prev, "notified": notified}
+    if target and cur_twd and cur_twd <= target and (prev_twd is None or prev_twd > target):
+        embed = notify.make_embed("💰 降到目標價!", f"「{name}」現價 NT${cur_twd}(目標 {target})", w["url"], 0xEF4444)
+        notify.notify_all(settings, f"💰 TamonRadar 監看:「{name}」降到 NT${cur_twd}(目標 {target})\n{w['url']}", embed=embed)
+        notified = True
+
+    return {"ok": True, "status": status, "price_twd": cur_twd, "previous": prev, "notified": notified}

@@ -134,6 +134,8 @@ class Watch(Base):
     enabled: Mapped[bool] = mapped_column(default=True)
     last_status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown|available|unavailable
     last_checked: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    target_price: Mapped[int | None] = mapped_column(nullable=True)      # 低於此台幣價就通知
+    last_price_twd: Mapped[int | None] = mapped_column(nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -212,6 +214,16 @@ def _ensure_columns() -> None:
             ("ai_used", "ALTER TABLE tr_users ADD COLUMN ai_used INTEGER DEFAULT 0"),
             ("admin_note", "ALTER TABLE tr_users ADD COLUMN admin_note TEXT DEFAULT ''"),
             ("tags", "ALTER TABLE tr_users ADD COLUMN tags JSON"),
+        ):
+            if col not in cols:
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
+
+    if "tr_watches" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_watches")}
+        for col, ddl in (
+            ("target_price", "ALTER TABLE tr_watches ADD COLUMN target_price INTEGER"),
+            ("last_price_twd", "ALTER TABLE tr_watches ADD COLUMN last_price_twd INTEGER"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -453,6 +465,8 @@ def _watch_dict(w: "Watch") -> dict:
         "enabled": w.enabled,
         "last_status": w.last_status,
         "last_checked": w.last_checked.isoformat() if w.last_checked else None,
+        "target_price": w.target_price,
+        "last_price_twd": w.last_price_twd,
     }
 
 
@@ -486,6 +500,7 @@ def create_watch(user_id: int, data: dict) -> dict:
             unavailable_keywords=data.get("unavailable_keywords", []),
             interval_minutes=max(1, min(int(data.get("interval_minutes", 5)), 1440)),
             enabled=data.get("enabled", True),
+            target_price=data.get("target_price"),
         )
         s.add(w)
         s.commit()
@@ -498,20 +513,22 @@ def update_watch(watch_id: int, user_id: int, data: dict) -> dict | None:
         w = s.get(Watch, watch_id)
         if w is None or w.user_id != user_id:
             return None
-        for key in ("name", "url", "available_keywords", "unavailable_keywords", "interval_minutes", "enabled"):
-            if key in data and data[key] is not None:
+        for key in ("name", "url", "available_keywords", "unavailable_keywords", "interval_minutes", "enabled", "target_price"):
+            if key in data:
                 setattr(w, key, data[key])
         s.commit()
         s.refresh(w)
         return _watch_dict(w)
 
 
-def set_watch_status(watch_id: int, status: str) -> None:
+def set_watch_status(watch_id: int, status: str, price_twd: int | None = None) -> None:
     with SessionLocal() as s:
         w = s.get(Watch, watch_id)
         if w:
             w.last_status = status
             w.last_checked = _now()
+            if price_twd is not None:
+                w.last_price_twd = price_twd
             s.commit()
 
 

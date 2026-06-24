@@ -406,9 +406,11 @@ export interface Watch {
   enabled: boolean;
   last_status: string;
   last_checked: string | null;
+  target_price: number | null;
+  last_price_twd?: number | null;
 }
 
-export type WatchInput = Omit<Watch, "id" | "last_status" | "last_checked">;
+export type WatchInput = Omit<Watch, "id" | "last_status" | "last_checked" | "last_price_twd">;
 
 export async function getWatches(): Promise<{ watches: Watch[] }> {
   const res = await fetch(`${API_BASE}/api/watches`, { headers: authHeaders() });

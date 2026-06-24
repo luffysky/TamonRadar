@@ -21,6 +21,7 @@ export default function WatchesPage() {
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [interval, setIntervalMin] = useState(5);
+  const [targetPrice, setTargetPrice] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function reload() {
@@ -50,9 +51,10 @@ export default function WatchesPage() {
         name: name.trim(), url: url.trim(),
         available_keywords: [], unavailable_keywords: [],
         interval_minutes: interval, enabled: true,
+        target_price: targetPrice.trim() ? Number(targetPrice.replace(/[^0-9]/g, "")) : null,
       };
       await createWatch(data);
-      setName(""); setUrl("");
+      setName(""); setUrl(""); setTargetPrice("");
       await reload();
       toast("已新增監看,會自動定時檢查", "success");
     } catch (e) {
@@ -95,7 +97,11 @@ export default function WatchesPage() {
         <div className="flex items-end gap-3">
           <label className="flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">每隔幾分鐘檢查</span>
-            <input type="number" min={1} max={1440} value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="w-32 rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600" />
+            <input type="number" min={1} max={1440} value={interval} onChange={(e) => setIntervalMin(Number(e.target.value))} className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600" />
+          </label>
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-600 dark:text-slate-300">目標價(選填,低於就通知)</span>
+            <input value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} placeholder="NT$" className="w-28 rounded-lg border border-slate-300 px-2 py-1.5 dark:border-slate-600" />
           </label>
           <button onClick={add} disabled={busy} className="ml-auto rounded-lg bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-50">
             新增監看
@@ -117,6 +123,7 @@ export default function WatchesPage() {
                 <a href={w.url} target="_blank" rel="noreferrer" className="block truncate text-xs text-brand-600 hover:underline dark:text-brand-300">{w.url}</a>
                 <p className="text-xs text-slate-400">
                   每 {w.interval_minutes} 分鐘{w.last_checked ? ` · 上次 ${new Date(w.last_checked).toLocaleString("zh-TW")}` : " · 尚未檢查"}
+                  {w.target_price ? ` · 目標 NT$${w.target_price}${w.last_price_twd ? `(現 NT$${w.last_price_twd})` : ""}` : ""}
                 </p>
               </div>
               <span className={`rounded-full px-2 py-0.5 text-xs ${st.cls}`}>{st.label}</span>

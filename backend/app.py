@@ -132,6 +132,7 @@ class WatchRequest(BaseModel):
     unavailable_keywords: list[str] = Field(default_factory=list)
     interval_minutes: int = 5
     enabled: bool = True
+    target_price: int | None = None
 
 
 # ---------- auth ----------
