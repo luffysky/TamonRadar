@@ -26,18 +26,18 @@
 - ~~/api/assistant 問答端點~~
 - ~~全站浮動 AI 助手 widget~~
 
-### Batch 3 — SEO / GEO(讓 Google 與 AI 都爬得到)
-- [ ] robots.txt(允許一般與 AI 爬蟲:GPTBot、ClaudeBot、PerplexityBot…)
-- [ ] sitemap.xml(動態,含部落格/討論區頁)
-- [ ] 每頁 metadata(title/description/OG/Twitter card)
-- [ ] JSON-LD 結構化資料(Organization、Article、Discussion…)
-- [ ] GEO:給 AI 易讀的內容結構、llms.txt
-- [ ] 後台 SEO 管理(編輯各頁 title/description/關鍵字)
+### Batch 3 — SEO / GEO(讓 Google 與 AI 都爬得到)✅
+- ~~robots.txt(允許一般與 AI 爬蟲:GPTBot、ClaudeBot、PerplexityBot…)~~
+- ~~sitemap.xml(動態)~~
+- ~~每頁 metadata(title/description/OG/Twitter card)~~
+- ~~JSON-LD 結構化資料(WebSite、Article)~~
+- ~~GEO:llms.txt~~
+- [ ] 後台 SEO 管理(編輯各頁 title/description/關鍵字)← 之後做
 
-### Batch 4 — 部落格(Blog)
-- [ ] 文章資料表 + 後台撰寫/編輯(管理員)
-- [ ] 公開文章列表 + 內頁(SSR、利於 SEO)
-- [ ] 分類/標籤、Markdown 內文、封面圖
+### Batch 4 — 部落格(Blog)✅
+- ~~文章資料表 + 後台撰寫/編輯(管理員)~~
+- ~~公開文章列表 + 內頁(SSR、利於 SEO,含 Article JSON-LD)~~
+- ~~分類、Markdown 內文、封面圖~~
 
 ### Batch 5 — 討論區(Forum)
 - [ ] 分類、主題串、回覆 資料表

@@ -18,6 +18,7 @@ export default function Nav() {
         <nav className="flex flex-wrap items-center justify-end gap-1 text-sm">
           <Link href="/" className={link}>搜尋</Link>
           <Link href="/history" className={link}>歷史</Link>
+          <Link href="/blog" className={link}>部落格</Link>
           {user && <Link href="/schedules" className={link}>排程</Link>}
           {user && <Link href="/watches" className={link}>監看</Link>}
           {user && <Link href="/settings" className={link}>設定</Link>}

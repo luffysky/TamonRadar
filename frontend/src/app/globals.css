@@ -47,6 +47,26 @@ body {
   }
 }
 
+/* Markdown 文章排版 */
+.markdown {
+  @apply text-slate-700 dark:text-slate-200 leading-relaxed;
+}
+.markdown h1 { @apply mt-6 mb-3 text-2xl font-bold text-slate-800 dark:text-slate-100; }
+.markdown h2 { @apply mt-6 mb-3 text-xl font-bold text-slate-800 dark:text-slate-100; }
+.markdown h3 { @apply mt-4 mb-2 text-lg font-semibold text-slate-800 dark:text-slate-100; }
+.markdown p { @apply my-3; }
+.markdown a { @apply text-brand-600 underline dark:text-brand-300; }
+.markdown ul { @apply my-3 list-disc pl-6; }
+.markdown ol { @apply my-3 list-decimal pl-6; }
+.markdown li { @apply my-1; }
+.markdown blockquote { @apply my-3 border-l-4 border-slate-300 pl-4 text-slate-500 dark:border-slate-600 dark:text-slate-400; }
+.markdown code { @apply rounded bg-slate-100 px-1 py-0.5 text-sm dark:bg-slate-700; }
+.markdown pre { @apply my-3 overflow-auto rounded-lg bg-slate-900 p-3 text-sm text-slate-100; }
+.markdown pre code { @apply bg-transparent p-0; }
+.markdown img { @apply my-3 max-w-full rounded-lg; }
+.markdown table { @apply my-3 w-full border-collapse text-sm; }
+.markdown th, .markdown td { @apply border border-slate-200 px-2 py-1 dark:border-slate-700; }
+
 /* 載入骨架 */
 .skeleton {
   @apply relative overflow-hidden rounded-md bg-slate-200 dark:bg-slate-700;

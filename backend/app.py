@@ -652,3 +652,62 @@ def admin_set_plan(user_id: int, req: PlanRequest, admin=Depends(auth.get_admin)
     if not db.set_user_plan(user_id, req.plan):
         raise HTTPException(404, "找不到使用者")
     return {"ok": True}
+
+
+# ---------- 部落格 ----------
+
+class PostRequest(BaseModel):
+    title: str = "未命名"
+    slug: str = ""
+    excerpt: str = ""
+    content: str = ""
+    cover_image: str = ""
+    category: str = ""
+    tags: list[str] = Field(default_factory=list)
+    published: bool = False
+
+
+@app.get("/api/blog")
+def blog_list(category: str | None = None):
+    return {"posts": db.list_published_posts(category)}
+
+
+@app.get("/api/blog/{slug}")
+def blog_get(slug: str):
+    p = db.get_post_by_slug(slug)
+    if not p:
+        raise HTTPException(404, "找不到文章")
+    return p
+
+
+@app.get("/api/admin/blog")
+def admin_blog_list(admin=Depends(auth.get_admin)):
+    return {"posts": db.list_all_posts()}
+
+
+@app.get("/api/admin/blog/{post_id}")
+def admin_blog_get(post_id: int, admin=Depends(auth.get_admin)):
+    p = db.get_post(post_id)
+    if not p:
+        raise HTTPException(404, "找不到文章")
+    return p
+
+
+@app.post("/api/admin/blog")
+def admin_blog_create(req: PostRequest, admin=Depends(auth.get_admin)):
+    return db.create_post(admin.id, req.model_dump())
+
+
+@app.put("/api/admin/blog/{post_id}")
+def admin_blog_update(post_id: int, req: PostRequest, admin=Depends(auth.get_admin)):
+    p = db.update_post(post_id, req.model_dump())
+    if not p:
+        raise HTTPException(404, "找不到文章")
+    return p
+
+
+@app.delete("/api/admin/blog/{post_id}")
+def admin_blog_delete(post_id: int, admin=Depends(auth.get_admin)):
+    if not db.delete_post(post_id):
+        raise HTTPException(404, "找不到文章")
+    return {"ok": True}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import {
   getAdminStats, getAdminUsers, setUserPlan,
   type AdminStats, type AdminUser,
@@ -58,7 +59,10 @@ export default function AdminPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">管理員後台</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">管理員後台</h1>
+        <Link href="/admin/blog" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">部落格管理</Link>
+      </div>
 
       {stats && (
         <>

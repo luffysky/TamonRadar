@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, String, create_engine, func, inspect, select, text,
+    JSON, DateTime, ForeignKey, String, Text, create_engine, func, inspect, select, text,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker,
@@ -127,6 +127,23 @@ class Watch(Base):
     last_status: Mapped[str] = mapped_column(String(20), default="unknown")  # unknown|available|unavailable
     last_checked: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Post(Base):
+    __tablename__ = "tr_posts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    slug: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    title: Mapped[str] = mapped_column(String(300))
+    excerpt: Mapped[str] = mapped_column(String(500), default="")
+    content: Mapped[str] = mapped_column(Text, default="")          # Markdown
+    cover_image: Mapped[str] = mapped_column(String(1000), default="")
+    category: Mapped[str] = mapped_column(String(50), default="")
+    tags: Mapped[list] = mapped_column(JSON, default=list)
+    published: Mapped[bool] = mapped_column(default=False)
+    author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
 def init_db() -> None:
@@ -505,3 +522,108 @@ def admin_users(limit: int = 500) -> list[dict]:
             "ai_used": u.ai_used or 0,
             "created_at": u.created_at.isoformat() if u.created_at else None,
         } for u in rows]
+
+
+# ---------- 部落格 ----------
+
+def _post_dict(p: "Post", full: bool = False) -> dict:
+    d = {
+        "id": p.id,
+        "slug": p.slug,
+        "title": p.title,
+        "excerpt": p.excerpt or "",
+        "cover_image": p.cover_image or "",
+        "category": p.category or "",
+        "tags": p.tags or [],
+        "published": p.published,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+    }
+    if full:
+        d["content"] = p.content or ""
+    return d
+
+
+def _unique_slug(s, base: str) -> str:
+    base = base or "post"
+    slug = base
+    i = 2
+    while s.scalar(select(Post).where(Post.slug == slug)):
+        slug = f"{base}-{i}"
+        i += 1
+    return slug
+
+
+def list_published_posts(category: str | None = None) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(Post).where(Post.published == True)  # noqa: E712
+        if category:
+            q = q.where(Post.category == category)
+        rows = s.scalars(q.order_by(Post.created_at.desc())).all()
+        return [_post_dict(p) for p in rows]
+
+
+def list_all_posts() -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Post).order_by(Post.created_at.desc())).all()
+        return [_post_dict(p) for p in rows]
+
+
+def get_post_by_slug(slug: str, only_published: bool = True) -> dict | None:
+    with SessionLocal() as s:
+        p = s.scalar(select(Post).where(Post.slug == slug))
+        if p is None or (only_published and not p.published):
+            return None
+        return _post_dict(p, full=True)
+
+
+def get_post(post_id: int) -> dict | None:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        return _post_dict(p, full=True) if p else None
+
+
+def create_post(author_id: int, data: dict) -> dict:
+    with SessionLocal() as s:
+        slug = _unique_slug(s, (data.get("slug") or "").strip() or f"post")
+        p = Post(
+            slug=slug,
+            title=data.get("title", "未命名"),
+            excerpt=data.get("excerpt", ""),
+            content=data.get("content", ""),
+            cover_image=data.get("cover_image", ""),
+            category=data.get("category", ""),
+            tags=data.get("tags", []),
+            published=data.get("published", False),
+            author_id=author_id,
+        )
+        s.add(p)
+        s.commit()
+        s.refresh(p)
+        return _post_dict(p, full=True)
+
+
+def update_post(post_id: int, data: dict) -> dict | None:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        if p is None:
+            return None
+        for key in ("title", "excerpt", "content", "cover_image", "category", "tags", "published"):
+            if key in data and data[key] is not None:
+                setattr(p, key, data[key])
+        if data.get("slug") and data["slug"].strip() != p.slug:
+            p.slug = _unique_slug(s, data["slug"].strip())
+        p.updated_at = _now()
+        s.commit()
+        s.refresh(p)
+        return _post_dict(p, full=True)
+
+
+def delete_post(post_id: int) -> bool:
+    with SessionLocal() as s:
+        p = s.get(Post, post_id)
+        if p is None:
+            return False
+        s.delete(p)
+        s.commit()
+        return True

@@ -424,3 +424,62 @@ export async function setUserPlan(userId: number, plan: string): Promise<void> {
   check401(res);
   if (!res.ok) throw new Error("更新方案失敗");
 }
+
+// ---------- 部落格 ----------
+
+export interface BlogPost {
+  id: number;
+  slug: string;
+  title: string;
+  excerpt: string;
+  cover_image: string;
+  category: string;
+  tags: string[];
+  published: boolean;
+  content?: string;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export type PostInput = {
+  title: string; slug: string; excerpt: string; content: string;
+  cover_image: string; category: string; tags: string[]; published: boolean;
+};
+
+export async function adminListPosts(): Promise<{ posts: BlogPost[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/blog`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取文章失敗");
+  return res.json();
+}
+
+export async function adminGetPost(id: number): Promise<BlogPost> {
+  const res = await fetch(`${API_BASE}/api/admin/blog/${id}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取文章失敗");
+  return res.json();
+}
+
+export async function createPost(data: PostInput): Promise<BlogPost> {
+  const res = await fetch(`${API_BASE}/api/admin/blog`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("建立文章失敗");
+  return res.json();
+}
+
+export async function updatePost(id: number, data: PostInput): Promise<BlogPost> {
+  const res = await fetch(`${API_BASE}/api/admin/blog/${id}`, {
+    method: "PUT", headers: jsonAuthHeaders(), body: JSON.stringify(data),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("更新文章失敗");
+  return res.json();
+}
+
+export async function deletePost(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/blog/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("刪除文章失敗");
+}
