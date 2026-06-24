@@ -64,6 +64,7 @@
 - R8 補完:草稿預覽 token(/blog/preview/[token])。
 - 新增 6 個 tab:票券/租屋/遊戲/加密貨幣/機票住宿/醫美補教(各自 facets)。
 - 推播中心:分群(全體/特權/已驗證/TG/Discord)+ 排程發送(tr_scheduled_broadcasts,每分鐘檢查)。
+- 各 tab 分析做深:金額解析(萬/k/範圍)、每垂直專屬面向(租金設備/票價座位/薪資經驗/幣種主題/航空公司/料理供應…)+ headline 一句話總結。
 
 ## 資料庫(已建,共 26 表,皆 tr_ 前綴)
 tr_users / tr_runs / tr_user_settings / tr_schedules / tr_watches / tr_favorites /
