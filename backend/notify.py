@@ -78,12 +78,16 @@ def notify_all(settings: dict, text: str, embed: dict | None = None) -> dict:
     central_tg = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     central_dc = os.environ.get("DISCORD_BOT_TOKEN", "")
 
-    # Discord:優先用自己的 webhook,否則用平台 bot DM
+    # Discord 優先序:自己的 webhook → 平台 bot DM(你的 user id)→ 平台共用頻道 webhook(env)
+    central_webhook = os.environ.get("DISCORD_WEBHOOK", "")
     if settings.get("discord_webhook"):
         ok, msg = send_discord(settings["discord_webhook"], content=("" if embed else text), embed=embed)
         results["discord"] = {"ok": ok, "msg": msg}
     elif settings.get("discord_user_id") and central_dc:
         ok, msg = send_discord_dm(central_dc, settings["discord_user_id"], content=("" if embed else text), embed=embed)
+        results["discord"] = {"ok": ok, "msg": msg}
+    elif central_webhook:
+        ok, msg = send_discord(central_webhook, content=("" if embed else text), embed=embed)
         results["discord"] = {"ok": ok, "msg": msg}
 
     # Telegram:有 chat_id 就送;token 優先用自己的,否則用平台共用 bot
