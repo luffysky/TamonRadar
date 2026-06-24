@@ -26,6 +26,30 @@ def start() -> None:
         _add(sc)
     for w in db.list_enabled_watches():
         add_watch(w)
+    # 每日彙整(01:00 UTC ≈ 台灣 09:00)
+    _sched.add_job(_daily_digest, "cron", hour=1, minute=0, id="daily-digest", replace_existing=True)
+
+
+def _daily_digest() -> None:
+    for uid in db.list_digest_user_ids():
+        settings = db.get_settings(uid)
+        has_channel = settings.get("discord_webhook") or (
+            settings.get("telegram_token") and settings.get("telegram_chat_id")
+        )
+        if not has_channel:
+            continue
+        favs = db.list_favorites(uid)
+        watches = db.list_watches(uid)
+        avail = [w for w in watches if w.get("last_status") == "available"]
+        lines = ["📬 TamonRadar 每日彙整", f"收藏 {len(favs)} 項、監看 {len(watches)} 項。"]
+        if avail:
+            lines.append("✅ 目前可購買的監看:")
+            for w in avail[:10]:
+                lines.append(f"・{w['name'] or w['url']}")
+        try:
+            notify.notify_all(settings, "\n".join(lines))
+        except Exception:
+            pass
 
 
 def _job_id(schedule_id: int) -> str:

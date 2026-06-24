@@ -113,6 +113,7 @@ class SettingsRequest(BaseModel):
     groq_key: str = ""
     openrouter_key: str = ""
     ai_provider: str = ""
+    daily_digest: bool = False
 
 
 class ScheduleRequest(BaseModel):
@@ -671,6 +672,7 @@ def put_settings(req: SettingsRequest, user=Depends(auth.get_current_user)):
         "groq_key": req.groq_key.strip(),
         "openrouter_key": req.openrouter_key.strip(),
         "ai_provider": req.ai_provider.strip(),
+        "daily_digest": req.daily_digest,
     })
     return {"ok": True}
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { login, register, googleLoginUrl, forgotPassword } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function LoginPage() {
   const { user, ready, signIn } = useAuth();
@@ -75,8 +76,8 @@ export default function LoginPage() {
             className="w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
           />
           {mode !== "forgot" && (
-            <input
-              type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
+            <PasswordInput
+              value={password} onChange={setPassword} required
               placeholder="密碼(至少 6 字)" autoComplete={mode === "login" ? "current-password" : "new-password"}
               className="w-full rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none"
             />

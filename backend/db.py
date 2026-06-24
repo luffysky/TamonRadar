@@ -103,6 +103,7 @@ class Settings(Base):
     groq_key: Mapped[str] = mapped_column(String(255), default="")
     openrouter_key: Mapped[str] = mapped_column(String(255), default="")
     ai_provider: Mapped[str] = mapped_column(String(20), default="")  # ""=自動 / openai / gemini / groq / openrouter / anthropic
+    daily_digest: Mapped[bool] = mapped_column(default=False)  # 每日彙整通知
 
 
 class Schedule(Base):
@@ -238,6 +239,7 @@ def _ensure_columns() -> None:
             ("groq_key", "ALTER TABLE tr_user_settings ADD COLUMN groq_key VARCHAR(255) DEFAULT ''"),
             ("openrouter_key", "ALTER TABLE tr_user_settings ADD COLUMN openrouter_key VARCHAR(255) DEFAULT ''"),
             ("ai_provider", "ALTER TABLE tr_user_settings ADD COLUMN ai_provider VARCHAR(20) DEFAULT ''"),
+            ("daily_digest", "ALTER TABLE tr_user_settings ADD COLUMN daily_digest BOOLEAN DEFAULT false"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -336,11 +338,13 @@ def get_settings(user_id: int) -> dict:
     with SessionLocal() as s:
         st = s.get(Settings, user_id)
         if st is None:
-            return {k: "" for k in fields}
-        return {
+            return {**{k: "" for k in fields}, "daily_digest": False}
+        out = {
             k: (crypto.decrypt(getattr(st, k)) if k in _SECRET_FIELDS else (getattr(st, k) or ""))
             for k in fields
         }
+        out["daily_digest"] = bool(st.daily_digest)
+        return out
 
 
 # 需要加密儲存的敏感欄位
@@ -362,7 +366,15 @@ def save_settings(user_id: int, data: dict) -> None:
             if key in data and data[key] is not None:
                 value = crypto.encrypt(data[key]) if key in _SECRET_FIELDS else data[key]
                 setattr(st, key, value)
+        if "daily_digest" in data and data["daily_digest"] is not None:
+            st.daily_digest = bool(data["daily_digest"])
         s.commit()
+
+
+def list_digest_user_ids() -> list[int]:
+    with SessionLocal() as s:
+        return [uid for (uid,) in s.execute(
+            select(Settings.user_id).where(Settings.daily_digest == True)).all()]  # noqa: E712
 
 
 # ---------- 排程 ----------

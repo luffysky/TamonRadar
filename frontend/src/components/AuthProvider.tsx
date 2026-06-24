@@ -5,9 +5,11 @@ import { useRouter } from "next/navigation";
 import {
   clearSession,
   getStoredUser,
+  getToken,
   setSession,
   type AuthUser,
 } from "@/lib/auth";
+import { getMe } from "@/lib/api";
 
 interface AuthCtx {
   user: AuthUser | null;
@@ -31,6 +33,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setUser(getStoredUser());
     setReady(true);
+    // 跟後端同步最新使用者資料(is_admin / plan 等),修正舊快取
+    const token = getToken();
+    if (token) {
+      getMe()
+        .then(({ user: fresh }) => {
+          setUser(fresh);
+          setSession(token, fresh);
+        })
+        .catch(() => {});
+    }
   }, []);
 
   function signIn(token: string, u: AuthUser) {

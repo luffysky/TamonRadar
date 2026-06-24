@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, type NotifySettings } from "@/lib/api";
 import { useRequireAuth, useAuth } from "@/components/AuthProvider";
+import PasswordInput from "@/components/PasswordInput";
 
 export default function SettingsPage() {
   const { user, ready } = useRequireAuth();
@@ -13,6 +14,7 @@ export default function SettingsPage() {
   const [form, setForm] = useState<NotifySettings>({
     discord_webhook: "", telegram_token: "", telegram_chat_id: "",
     openai_key: "", anthropic_key: "", gemini_key: "", groq_key: "", openrouter_key: "", ai_provider: "",
+    daily_digest: false,
   });
   const [msg, setMsg] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -135,6 +137,11 @@ export default function SettingsPage() {
           </select>
         </div>
 
+        <label className="flex items-center gap-2 border-t border-slate-100 pt-3 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
+          <input type="checkbox" checked={form.daily_digest} onChange={(e) => setForm({ ...form, daily_digest: e.target.checked })} />
+          每日彙整通知(每天一封總結,而非每次變化都推)
+        </label>
+
         <div className="flex items-center gap-3">
           <button onClick={save} disabled={saving} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
             儲存
@@ -151,8 +158,8 @@ export default function SettingsPage() {
         <p className="text-xs text-slate-400">{user.email}{user.is_admin ? " · 管理員" : ""}</p>
 
         <label className="block pt-2 text-sm font-medium text-slate-700 dark:text-slate-200">變更密碼</label>
-        <input type="password" value={curPw} onChange={(e) => setCurPw(e.target.value)} placeholder="目前密碼" className={field} />
-        <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="新密碼(至少 6 字)" className={`${field} mt-2`} />
+        <PasswordInput value={curPw} onChange={setCurPw} placeholder="目前密碼" className={field} autoComplete="current-password" />
+        <div className="mt-2"><PasswordInput value={newPw} onChange={setNewPw} placeholder="新密碼(至少 6 字)" className={field} autoComplete="new-password" /></div>
         <div className="flex items-center gap-3">
           <button
             onClick={async () => {

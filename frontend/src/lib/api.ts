@@ -317,6 +317,7 @@ export interface NotifySettings {
   groq_key: string;
   openrouter_key: string;
   ai_provider: string;
+  daily_digest: boolean;
 }
 
 export async function getSettings(): Promise<NotifySettings> {
