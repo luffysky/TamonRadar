@@ -190,19 +190,33 @@ def is_listing_url(url: str) -> bool:
     return any(m in u for m in markers)
 
 
+_CJK = r"一-鿿぀-ヿ"  # 中日韓 + 日文假名
+
+
 def keyword_tokens(keywords: list[str]) -> set[str]:
-    """把關鍵字拆成 token(長度>=2),用來判斷結果相關性。"""
+    """把關鍵字拆成可比對的 token。
+
+    重點:中文與英數分開切,中文再取 2-gram,英數依非字母數字切開。
+    例:「Python線上課程」→ {python, 線上, 上課, 課程};「ai-island-web」→ {ai, island, web}。
+    """
     toks: set[str] = set()
     for kw in keywords or []:
-        for t in re.split(r"\s+", (kw or "").strip()):
-            t = t.strip().lower()
+        low = (kw or "").strip().lower()
+        # 英數連續串(python / ai / island / web / 2024…)
+        for t in re.findall(r"[a-z0-9]+", low):
             if len(t) >= 2:
                 toks.add(t)
+        # 中文連續串 → 整段 + 2-gram
+        for run in re.findall(rf"[{_CJK}]+", low):
+            if len(run) <= 4:
+                toks.add(run)
+            for i in range(len(run) - 1):
+                toks.add(run[i:i + 2])
     return toks
 
 
 def is_relevant(item: dict, tokens: set[str]) -> bool:
-    """標題/摘要/網址有出現任一關鍵字 token 才算相關。"""
+    """標題/摘要/網址有出現任一關鍵字 token 才算相關(寬鬆:命中任一即可)。"""
     if not tokens:
         return True
     hay = f"{item.get('title', '')} {item.get('snippet', '')} {item.get('url', '')}".lower()
