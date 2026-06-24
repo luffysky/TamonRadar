@@ -3,6 +3,7 @@
 import { useState } from "react";
 import type { CrawlRecord } from "@/lib/types";
 import { categoryClass } from "@/lib/format";
+import ProductImage from "./ProductImage";
 
 export default function ProductCards({ records }: { records: CrawlRecord[] }) {
   const [lightbox, setLightbox] = useState<CrawlRecord | null>(null);
@@ -30,17 +31,7 @@ export default function ProductCards({ records }: { records: CrawlRecord[] }) {
               className="aspect-square w-full overflow-hidden bg-slate-100 dark:bg-slate-700"
               aria-label="放大圖片"
             >
-              {r.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={r.image_url}
-                  alt={r.title}
-                  className="h-full w-full object-cover transition group-hover:scale-105"
-                  loading="lazy"
-                />
-              ) : (
-                <div className="grid h-full place-items-center text-slate-300">無圖片</div>
-              )}
+              <ProductImage src={r.image_url} alt={r.title} />
             </button>
             <div className="flex flex-1 flex-col p-3">
               <span className={`mb-1 w-fit rounded-full border px-2 py-0.5 text-[10px] ${categoryClass(r.category)}`}>
