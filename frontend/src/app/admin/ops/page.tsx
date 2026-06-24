@@ -8,14 +8,14 @@ import { ADMIN_BASE } from "@/lib/admin";
 import {
   adminListAnnouncements, adminCreateAnnouncement, adminDeleteAnnouncement,
   getAuditLogs, getReports, resolveReport, adminEmailBlast, getSeo, saveSeo, exportUsersUrl,
-  listPageSeo, savePageSeo, getAppSettings, saveAppSetting,
-  type Announcement, type AuditLog, type ReportItem, type PageSeo,
+  listPageSeo, savePageSeo, getAppSettings, saveAppSetting, getAiCosts,
+  type Announcement, type AuditLog, type ReportItem, type PageSeo, type AiCosts,
 } from "@/lib/api";
 
 export default function AdminOpsPage() {
   const { user, ready } = useRequireAuth();
   const toast = useToast();
-  const [tab, setTab] = useState<"ann" | "audit" | "report" | "email" | "seo" | "app">("ann");
+  const [tab, setTab] = useState<"ann" | "audit" | "report" | "email" | "seo" | "app" | "ai">("ann");
 
   const [anns, setAnns] = useState<Announcement[]>([]);
   const [annForm, setAnnForm] = useState({ title: "", body: "", level: "info", active: true });
@@ -27,6 +27,7 @@ export default function AdminOpsPage() {
   const [pageForm, setPageForm] = useState<PageSeo>({ path: "/", title: "", description: "", keywords: "" });
   const [appSettings, setAppSettings] = useState<Record<string, string>>({});
   const [appForm, setAppForm] = useState({ key: "", value: "" });
+  const [aiCosts, setAiCosts] = useState<AiCosts | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -36,13 +37,14 @@ export default function AdminOpsPage() {
     getSeo().then(setSeo).catch(() => {});
     listPageSeo().then((d) => setPages(d.pages)).catch(() => {});
     getAppSettings().then((d) => setAppSettings(d.settings)).catch(() => {});
+    getAiCosts().then(setAiCosts).catch(() => {});
   }, [user]);
 
   if (!ready || !user) return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
   if (!user.is_admin) return <p className="py-20 text-center text-sm text-rose-500">沒有管理員權限。</p>;
 
   const field = "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600 dark:bg-slate-900";
-  const tabs: [typeof tab, string][] = [["ann", "站內公告"], ["audit", "稽核日誌"], ["report", "檢舉佇列"], ["email", "Email 群發"], ["seo", "SEO"], ["app", "應用設定"]];
+  const tabs: [typeof tab, string][] = [["ann", "站內公告"], ["audit", "稽核日誌"], ["report", "檢舉佇列"], ["email", "Email 群發"], ["seo", "SEO"], ["app", "應用設定"], ["ai", "AI 成本"]];
 
   return (
     <div className="space-y-5">
@@ -147,6 +149,51 @@ export default function AdminOpsPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {tab === "ai" && aiCosts && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <div className="text-2xl font-bold text-brand-600 dark:text-brand-300">${aiCosts.total_cost}</div>
+              <div className="text-xs text-slate-500">總成本(USD)</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <div className="text-2xl font-bold text-slate-700 dark:text-slate-200">{aiCosts.total_in.toLocaleString()}</div>
+              <div className="text-xs text-slate-500">輸入 tokens</div>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <div className="text-2xl font-bold text-slate-700 dark:text-slate-200">{aiCosts.total_out.toLocaleString()}</div>
+              <div className="text-xs text-slate-500">輸出 tokens</div>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">各模型成本</p>
+              {aiCosts.by_model.length === 0 ? <p className="text-slate-400">尚無資料</p> : aiCosts.by_model.map((m) => (
+                <div key={m.model} className="flex justify-between text-slate-600 dark:text-slate-300"><span className="truncate">{m.model}({m.calls})</span><span>${m.cost}</span></div>
+              ))}
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">成本前幾名使用者</p>
+              {aiCosts.top_users.map((u) => (
+                <div key={u.email} className="flex justify-between text-slate-600 dark:text-slate-300"><span className="truncate">{u.email}</span><span>${u.cost}</span></div>
+              ))}
+            </div>
+          </div>
+          <div className="overflow-hidden rounded-xl border border-slate-200 bg-white text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <p className="border-b border-slate-100 px-3 py-2 font-semibold text-slate-700 dark:border-slate-700 dark:text-slate-200">最近呼叫明細</p>
+            {aiCosts.recent.length === 0 ? <p className="p-3 text-slate-400">尚無資料</p> : aiCosts.recent.map((r, i) => (
+              <div key={i} className="flex flex-wrap items-center gap-x-3 border-b border-slate-100 px-3 py-1.5 text-xs dark:border-slate-700">
+                <span className="text-slate-400">{r.created_at ? new Date(r.created_at).toLocaleString("zh-TW") : ""}</span>
+                <span className="text-slate-600 dark:text-slate-300">{r.model}</span>
+                <span className="text-slate-400">in {r.in_tokens} / out {r.out_tokens}</span>
+                <span className="ml-auto font-medium text-brand-600 dark:text-brand-300">${r.cost}</span>
+                <span className="w-full truncate text-slate-400">{r.email}</span>
+              </div>
+            ))}
           </div>
         </div>
       )}

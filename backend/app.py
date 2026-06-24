@@ -402,7 +402,7 @@ def assistant(req: AssistantRequest, user=Depends(auth.get_optional_user)):
         + (f"先前對話:\n{hist}\n" if hist else "")
         + f"使用者問題:{req.question}"
     )
-    answer, _ = ai.ai_complete(prompt, max_tokens=900, **args)
+    answer, _ = ai.ai_complete(prompt, max_tokens=900, user_id=(user.id if user else None), **args)
     return {"available": True, "answer": answer}
 
 
@@ -712,7 +712,7 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
         + (f"先前對話:\n{hist}\n" if hist else "")
         + f"使用者問題:{req.question}\n\n資料:\n{json.dumps(_slim_records(records), ensure_ascii=False)}"
     )
-    answer, model = ai.ai_complete(prompt, max_tokens=1500, **args)
+    answer, model = ai.ai_complete(prompt, max_tokens=1500, user_id=user.id, **args)
     db.bump_ai_usage(user.id)
     return {"available": True, "answer": answer, "model": model}
 
@@ -738,7 +738,7 @@ def ai_compare(req: CompareRequest, user=Depends(auth.get_current_user)):
         "並在最後給「最划算」與「最推薦」各一個建議(附連結)。\n\n"
         f"商品:\n{json.dumps(slim, ensure_ascii=False)}"
     )
-    answer, _ = ai.ai_complete(prompt, max_tokens=1500, **args)
+    answer, _ = ai.ai_complete(prompt, max_tokens=1500, user_id=user.id, **args)
     db.bump_ai_usage(user.id)
     return {"available": True, "answer": answer}
 
@@ -753,7 +753,7 @@ def ai_keywords(req: KeywordsRequest, user=Depends(auth.get_current_user)):
         "把以下需求展開成 5-8 個適合在購物/搜尋引擎使用的繁體中文關鍵字。"
         "只回 JSON 字串陣列,不要其他文字。\n需求:" + req.query
     )
-    text, _ = ai.ai_complete(prompt, max_tokens=300, **args)
+    text, _ = ai.ai_complete(prompt, max_tokens=300, user_id=user.id, **args)
     kws: list[str] = []
     try:
         s, e = (text or "").find("["), (text or "").rfind("]")
@@ -780,7 +780,7 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
         "只回傳 JSON,格式:{\"noise_urls\": [\"...\"]},不要其他文字。\n\n"
         f"資料:\n{json.dumps(_slim_records(records, 100), ensure_ascii=False)}"
     )
-    text, _ = ai.ai_complete(prompt, max_tokens=1500, **args)
+    text, _ = ai.ai_complete(prompt, max_tokens=1500, user_id=user.id, **args)
     db.bump_ai_usage(user.id)
     noise: list[str] = []
     try:
@@ -827,7 +827,7 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
         "若資料不足以回答,就誠實說明。\n\n"
         f"資料:\n{json.dumps(_slim_records(records, 60), ensure_ascii=False)}"
     )
-    text, model = ai.ai_complete(prompt, max_tokens=2000, **args)
+    text, model = ai.ai_complete(prompt, max_tokens=2000, user_id=user.id, **args)
     db.bump_ai_usage(user.id)
     return {"available": True, "summary": text, "model": model}
 
@@ -1013,6 +1013,11 @@ def admin_charts(admin=Depends(auth.get_admin)):
 @app.get("/api/admin/crawls")
 def admin_crawls(admin=Depends(auth.get_admin)):
     return {"crawls": db.admin_recent_crawls()}
+
+
+@app.get("/api/admin/ai-costs")
+def admin_ai_costs(admin=Depends(auth.get_admin)):
+    return db.admin_ai_costs()
 
 
 @app.get("/api/admin/users")

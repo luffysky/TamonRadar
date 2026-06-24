@@ -250,6 +250,18 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class AiCost(Base):
+    __tablename__ = "tr_ai_cost"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(20), default="")
+    model: Mapped[str] = mapped_column(String(80), default="")
+    in_tokens: Mapped[int] = mapped_column(default=0)
+    out_tokens: Mapped[int] = mapped_column(default=0)
+    cost_usd: Mapped[float] = mapped_column(default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
 class Usage(Base):
     __tablename__ = "tr_usage"
     user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), primary_key=True)
@@ -743,6 +755,40 @@ def admin_stats() -> dict:
         "by_provider": by_provider,
         "by_plan": by_plan,
         "top_ai_users": top_ai,
+    }
+
+
+def record_ai_cost(user_id: int, provider: str, model: str, in_tok: int, out_tok: int, cost_usd: float) -> None:
+    with SessionLocal() as s:
+        s.add(AiCost(user_id=user_id, provider=provider, model=model,
+                     in_tokens=in_tok, out_tokens=out_tok, cost_usd=cost_usd))
+        s.commit()
+
+
+def admin_ai_costs(limit: int = 50) -> dict:
+    """AI 成本明細:總計、各模型統計、最近呼叫、用量前幾名使用者。"""
+    with SessionLocal() as s:
+        total_cost = s.scalar(select(func.coalesce(func.sum(AiCost.cost_usd), 0.0))) or 0.0
+        total_in = s.scalar(select(func.coalesce(func.sum(AiCost.in_tokens), 0))) or 0
+        total_out = s.scalar(select(func.coalesce(func.sum(AiCost.out_tokens), 0))) or 0
+        by_model = [{"model": m, "calls": int(c), "cost": round(float(cost or 0), 4)}
+                    for m, c, cost in s.execute(
+                        select(AiCost.model, func.count(), func.sum(AiCost.cost_usd))
+                        .group_by(AiCost.model).order_by(func.sum(AiCost.cost_usd).desc())).all()]
+        rows = s.execute(
+            select(AiCost, User.email).join(User, AiCost.user_id == User.id)
+            .order_by(AiCost.created_at.desc()).limit(limit)).all()
+        recent = [{
+            "email": email, "provider": a.provider, "model": a.model,
+            "in_tokens": a.in_tokens, "out_tokens": a.out_tokens, "cost": round(a.cost_usd, 6),
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        } for a, email in rows]
+        top = [{"email": e, "cost": round(float(c or 0), 4)} for e, c in s.execute(
+            select(User.email, func.sum(AiCost.cost_usd)).join(User, AiCost.user_id == User.id)
+            .group_by(User.email).order_by(func.sum(AiCost.cost_usd).desc()).limit(5)).all()]
+    return {
+        "total_cost": round(float(total_cost), 4), "total_in": int(total_in), "total_out": int(total_out),
+        "by_model": by_model, "recent": recent, "top_users": top,
     }
 
 

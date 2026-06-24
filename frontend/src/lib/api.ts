@@ -670,6 +670,19 @@ export async function saveSeo(data: Record<string, string>): Promise<void> {
   if (!res.ok) throw new Error("儲存 SEO 失敗");
 }
 
+export interface AiCosts {
+  total_cost: number; total_in: number; total_out: number;
+  by_model: { model: string; calls: number; cost: number }[];
+  recent: { email: string; provider: string; model: string; in_tokens: number; out_tokens: number; cost: number; created_at: string | null }[];
+  top_users: { email: string; cost: number }[];
+}
+export async function getAiCosts(): Promise<AiCosts> {
+  const res = await fetch(`${API_BASE}/api/admin/ai-costs`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取 AI 成本失敗");
+  return res.json();
+}
+
 export async function getAppSettings(): Promise<{ settings: Record<string, string> }> {
   const res = await fetch(`${API_BASE}/api/admin/app-settings`, { headers: authHeaders() });
   check401(res);

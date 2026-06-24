@@ -43,8 +43,37 @@ def ai_available(user_keys: dict | None = None, prefer: str = "") -> bool:
     return _pick(user_keys or {}, prefer) is not None
 
 
+# 各模型每 1M tokens 價格(美元,輸入/輸出);未列出的以 0 計
+_PRICES = {
+    "gpt-4o-mini": (0.15, 0.60),
+    "gpt-4o": (2.50, 10.0),
+    "gemini-2.0-flash": (0.10, 0.40),
+    "llama-3.3-70b-versatile": (0.59, 0.79),
+    "openai/gpt-4o-mini": (0.15, 0.60),
+    "claude-sonnet-4-6": (3.0, 15.0),
+    "claude-3-5-haiku": (0.80, 4.0),
+}
+
+
+def _cost_usd(model: str, in_tok: int, out_tok: int) -> float:
+    pin, pout = _PRICES.get(model, (0.0, 0.0))
+    return round(in_tok / 1_000_000 * pin + out_tok / 1_000_000 * pout, 6)
+
+
+def _record(user_id, provider, model, in_tok, out_tok):
+    if not user_id:
+        return
+    try:
+        import db
+        db.record_ai_cost(user_id, provider, model, int(in_tok or 0), int(out_tok or 0),
+                          _cost_usd(model, in_tok or 0, out_tok or 0))
+    except Exception:
+        pass
+
+
 def ai_complete(prompt: str, max_tokens: int = 1500,
-                user_keys: dict | None = None, prefer: str = "") -> tuple[str | None, str]:
+                user_keys: dict | None = None, prefer: str = "",
+                user_id: int | None = None) -> tuple[str | None, str]:
     user_keys = user_keys or {}
     provider = _pick(user_keys, prefer)
     if not provider:
@@ -58,6 +87,8 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
         m = client.messages.create(model=model, max_tokens=max_tokens,
                                     messages=[{"role": "user", "content": prompt}])
         text = "".join(b.text for b in m.content if getattr(b, "type", "") == "text")
+        u = getattr(m, "usage", None)
+        _record(user_id, "anthropic", model, getattr(u, "input_tokens", 0), getattr(u, "output_tokens", 0))
         return text, f"anthropic:{model}"
 
     cfg = _OPENAI_COMPATIBLE[provider]
@@ -66,4 +97,6 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
     client = OpenAI(api_key=key, base_url=cfg["base_url"]) if cfg["base_url"] else OpenAI(api_key=key)
     r = client.chat.completions.create(model=model, max_tokens=max_tokens,
                                        messages=[{"role": "user", "content": prompt}])
+    u = getattr(r, "usage", None)
+    _record(user_id, provider, model, getattr(u, "prompt_tokens", 0), getattr(u, "completion_tokens", 0))
     return (r.choices[0].message.content or ""), f"{provider}:{model}"
