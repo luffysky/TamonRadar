@@ -14,13 +14,32 @@ import notify
 from crawler.utils import extract_price
 
 
+# CTA 按鈕常見字眼(結帳/預購/到貨通知…),比庫存關鍵字更廣
+CTA_KEYWORDS = [
+    "立即購買", "加入購物車", "我要購買", "現在購買", "直接購買", "立即結帳", "結帳", "去買",
+    "立即購票", "購票", "馬上搶", "立即預購", "預購", "預訂", "訂購", "下單",
+    "到貨通知", "補貨通知", "缺貨通知", "貨到通知", "到貨提醒",
+    "buy now", "add to cart", "add-to-cart", "checkout", "pre-order", "preorder",
+    "order now", "notify me", "purchase",
+]
+
+
 def _find_cta(soup, base_url: str, avail_kws: list) -> tuple[str, str]:
-    """找對方頁面的 CTA 連結(立即購買/加入購物車…),回傳 (文字, 連結)。找不到回 ('','')。"""
-    kws = [k.lower() for k in (avail_kws or DEFAULT_AVAILABLE)]
+    """找對方頁面的 CTA 連結(立即購買/加入購物車/結帳/預購/到貨通知…),回傳 (文字, 連結)。"""
+    kws = CTA_KEYWORDS + [k.lower() for k in (avail_kws or [])]
+    # 優先找帶 href 的連結;表單 action 也算
     for a in soup.find_all("a", href=True):
         t = a.get_text(" ", strip=True)
         if t and any(k in t.lower() for k in kws):
             return t[:60], urljoin(base_url, a["href"])
+    for btn in soup.find_all("button"):
+        t = btn.get_text(" ", strip=True)
+        if t and any(k in t.lower() for k in kws):
+            # 按鈕沒連結 → 退回商品頁本身(至少帶到該頁)
+            form = btn.find_parent("form")
+            if form and form.get("action"):
+                return t[:60], urljoin(base_url, form["action"])
+            return t[:60], base_url
     return "", ""
 
 _HEADERS = {
@@ -104,6 +123,10 @@ def check_watch(watch_id: int) -> dict:
     cta_t, cta_u = _find_cta(soup, w["url"], w["available_keywords"])
     if cta_u:
         db.set_watch_cta(watch_id, cta_t, cta_u)
+
+    # 列表頁(抓到多個品項、頁面層級無單一庫存狀態)→ 顯示「監看內容中」而非「尚未判斷」
+    if status == "unknown" and len(cur) >= 2:
+        status = "watching"
 
     # 更新狀態 / 快照
     db.set_watch_status(watch_id, status, cur_twd)

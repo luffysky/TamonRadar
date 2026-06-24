@@ -12,12 +12,15 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   available: { label: "可能可買!", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" },
   unavailable: { label: "目前無貨/未開賣", cls: "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400" },
   unknown: { label: "尚未判斷", cls: "bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500" },
+  watching: { label: "監看內容中", cls: "bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300" },
 };
 
 export default function WatchesPage() {
   const { user, ready } = useRequireAuth();
   const toast = useToast();
   const [watches, setWatches] = useState<Watch[]>([]);
+  const [editId, setEditId] = useState<number | null>(null);
+  const [edit, setEdit] = useState<{ interval: number; target: string; notifyOn: string[] }>({ interval: 5, target: "", notifyOn: [] });
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [interval, setIntervalMin] = useState(5);
@@ -68,6 +71,22 @@ export default function WatchesPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function startEdit(w: Watch) {
+    setEditId(w.id);
+    setEdit({ interval: w.interval_minutes, target: w.target_price ? String(w.target_price) : "", notifyOn: w.notify_on ?? ["new", "removed", "price", "restock"] });
+  }
+  async function saveEdit(w: Watch) {
+    await updateWatch(w.id, {
+      ...w,
+      interval_minutes: Math.max(1, Math.min(edit.interval, 1440)),
+      target_price: edit.target.trim() ? Number(edit.target.replace(/[^0-9]/g, "")) : null,
+      notify_on: edit.notifyOn,
+    });
+    setEditId(null);
+    await reload();
+    toast("已更新監看設定", "success");
   }
 
   async function toggle(w: Watch) {
@@ -136,7 +155,8 @@ export default function WatchesPage() {
         {watches.map((w) => {
           const st = STATUS[w.last_status] ?? STATUS.unknown;
           return (
-            <div key={w.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div key={w.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex flex-wrap items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-slate-700 dark:text-slate-200">{w.name || w.url}</p>
                 <a href={w.url} target="_blank" rel="noreferrer" className="block truncate text-xs text-brand-600 hover:underline dark:text-brand-300">{w.url}</a>
@@ -155,8 +175,31 @@ export default function WatchesPage() {
                 </a>
               )}
               <button onClick={() => checkNow(w.id)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">立即檢查</button>
+              <button onClick={() => (editId === w.id ? setEditId(null) : startEdit(w))} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">{editId === w.id ? "收起" : "編輯"}</button>
               <button onClick={() => toggle(w)} className="rounded-md border border-slate-300 px-3 py-1.5 text-xs hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">{w.enabled ? "停用" : "啟用"}</button>
               <button onClick={() => remove(w.id)} className="rounded-md border border-rose-200 px-3 py-1.5 text-xs text-rose-600 hover:bg-rose-50">刪除</button>
+            </div>
+
+            {editId === w.id && (
+              <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-3 dark:border-slate-700">
+                <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">每隔幾分鐘
+                  <input type="number" min={1} max={1440} value={edit.interval} onChange={(e) => setEdit({ ...edit, interval: Number(e.target.value) })} className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-sm dark:border-slate-600" />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">目標價
+                  <input value={edit.target} onChange={(e) => setEdit({ ...edit, target: e.target.value })} placeholder="NT$" className="w-24 rounded-lg border border-slate-300 px-2 py-1 text-sm dark:border-slate-600" />
+                </label>
+                <div className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">通知條件
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {[["restock", "補貨"], ["new", "新增"], ["removed", "下架"], ["price", "改價"]].map(([k, label]) => (
+                      <label key={k} className="flex items-center gap-1 text-sm text-slate-600 dark:text-slate-300">
+                        <input type="checkbox" checked={edit.notifyOn.includes(k)} onChange={() => setEdit({ ...edit, notifyOn: edit.notifyOn.includes(k) ? edit.notifyOn.filter((x) => x !== k) : [...edit.notifyOn, k] })} /> {label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={() => saveEdit(w)} className="ml-auto rounded-lg bg-brand-600 px-4 py-1.5 text-sm text-white hover:bg-brand-700">儲存</button>
+              </div>
+            )}
             </div>
           );
         })}

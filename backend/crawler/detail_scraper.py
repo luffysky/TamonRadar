@@ -222,7 +222,30 @@ def items_from_soup(soup: BeautifulSoup, url: str) -> list[dict]:
                 "is_listing": False, "image_url": "",
             })
     out.extend(_extract_listing_products(soup, url, ""))
-    # 靜態 HTML 沒抓到東西時,再試內嵌 JSON(SPA 站)
+
+    # 商品卡:抓指向商品頁的連結(Shopify /products/、WooCommerce 等)+ 鄰近價格
+    _price_re = re.compile(r"(NT\$|US\$|RM|HK\$|\$|￥|€|£)\s?[\d,]+(?:\.\d+)?")
+    seen_links: set = set()
+    for a in soup.find_all("a", href=True):
+        href = a["href"]
+        if not any(m in href.lower() for m in ("/product", "/products/", "/item", "-i.", "/dp/")):
+            continue
+        title = clean_text(a.get_text(" ", strip=True))
+        if not title or len(title) < 2:
+            continue
+        link = urljoin(url, href)
+        if link in seen_links:
+            continue
+        seen_links.add(link)
+        container = a.find_parent(["li", "article", "div"]) or a
+        pm = _price_re.search(container.get_text(" ", strip=True))
+        out.append({
+            "keyword": "", "title": title, "url": link, "domain": get_domain(link),
+            "snippet": "", "price": pm.group(0) if pm else "",
+            "category": classify_item(title, "", ""), "character": "", "is_listing": False, "image_url": "",
+        })
+
+    # 仍沒抓到 → 試內嵌 JSON(SPA 站)
     if not out:
         out.extend(_items_from_embedded_json(soup, url))
     return out
