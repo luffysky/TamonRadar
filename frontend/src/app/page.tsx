@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { startCrawl, streamCrawl, stopCrawl, getHealth } from "@/lib/api";
+import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords } from "@/lib/api";
 import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
 
@@ -88,6 +88,18 @@ export default function HomePage() {
     if (jobId) stopCrawl(jobId);
   }
 
+  async function aiSuggest() {
+    const q = window.prompt("描述你想找什麼,AI 幫你想關鍵字(例:便宜又好評的機械鍵盤)");
+    if (!q) return;
+    try {
+      const r = await aiKeywords(q);
+      if (r.keywords.length) setKeywords(r.keywords.join("\n"));
+      else alert("沒有產生關鍵字(可能未設定 AI 金鑰)");
+    } catch {
+      alert("產生失敗,請稍後再試");
+    }
+  }
+
   if (!ready || !user) {
     return <p className="py-20 text-center text-sm text-slate-400">載入中…</p>;
   }
@@ -104,7 +116,10 @@ export default function HomePage() {
 
       <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
-          <label className="text-sm font-medium text-slate-700 dark:text-slate-200">搜尋關鍵字(一行一個)</label>
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-slate-700 dark:text-slate-200">搜尋關鍵字(一行一個)</label>
+            <button onClick={aiSuggest} disabled={running} className="text-xs text-brand-600 hover:underline disabled:opacity-50 dark:text-brand-300">✨ AI 想關鍵字</button>
+          </div>
           <textarea
             data-tour="search"
             value={keywords}

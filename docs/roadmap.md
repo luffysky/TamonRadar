@@ -92,10 +92,14 @@ GOOGLE_CLIENT_ID/SECRET、OAUTH_REDIRECT_BASE、FRONTEND_URL、RESEND_API_KEY/RE
 - [ ] 訂閱管理(等金流)、收入報表(等金流)
   > 註:完整 ERP(進銷存/財會/HR)超出本產品範疇,只做與營運相關的務實部分。
 
-### Batch 8 — 資料/分析功能
-- [ ] 價格走勢圖(同商品多次歷史折線)
-- [ ] 收藏/追蹤清單 + 目標價通知
-- [ ] 首頁儀表板總覽
+### Batch 8 — 資料/分析功能 ✅
+- ~~價格走勢圖(同商品多次歷史折線,SVG)~~
+- ~~收藏/追蹤清單 + 目標價通知(排程跑完檢查)~~
+- ~~使用者儀表板 /dashboard 總覽~~
+
+### 後台安全 ✅
+- ~~/admin 藏到祕密路徑(NEXT_PUBLIC_ADMIN_SLUG)+ 後端 API 權限把關~~
+- ~~about 頁完整功能一覽(隨時更新)~~
 
 ### Batch 9 — 監看/通知增強
 - [ ] 價格門檻通知(低於 X 元)
@@ -104,10 +108,12 @@ GOOGLE_CLIENT_ID/SECRET、OAUTH_REDIRECT_BASE、FRONTEND_URL、RESEND_API_KEY/RE
 - [ ] 通知附縮圖 / Discord embed
 
 ### Batch 10 — AI 增強
-- [ ] AI 幫想關鍵字、多商品比較、對話記憶
+- ~~AI 幫想關鍵字~~
+- [ ] 多商品比較、對話記憶
 
 ### Batch 11 — 帳號/體驗
-- [ ] Email 驗證、修改密碼、刪除帳號、GitHub 登入、分享公開連結、瀏覽器擴充
+- ~~修改密碼、刪除帳號~~
+- [ ] Email 驗證、GitHub 登入、分享公開連結、瀏覽器擴充
 
 ### Batch 12 — 收費(金流最後接)
 - [ ] 方案/配額系統(監看數/頻率/AI 次數依方案放行)

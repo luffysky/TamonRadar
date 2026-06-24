@@ -85,6 +85,10 @@ class AssistantRequest(BaseModel):
     history: list[dict] | None = None
 
 
+class KeywordsRequest(BaseModel):
+    query: str
+
+
 class AuthRequest(BaseModel):
     email: str
     password: str
@@ -559,6 +563,27 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
     answer, model = ai.ai_complete(prompt, max_tokens=1500, **args)
     db.bump_ai_usage(user.id)
     return {"available": True, "answer": answer, "model": model}
+
+
+@app.post("/api/ai/keywords")
+def ai_keywords(req: KeywordsRequest, user=Depends(auth.get_current_user)):
+    args = _ai_args(user)
+    if not ai.ai_available(**args):
+        return {"available": False, "keywords": []}
+    prompt = (
+        "把以下需求展開成 5-8 個適合在購物/搜尋引擎使用的繁體中文關鍵字。"
+        "只回 JSON 字串陣列,不要其他文字。\n需求:" + req.query
+    )
+    text, _ = ai.ai_complete(prompt, max_tokens=300, **args)
+    kws: list[str] = []
+    try:
+        s, e = (text or "").find("["), (text or "").rfind("]")
+        if s >= 0 and e > s:
+            kws = [str(x).strip() for x in json.loads(text[s:e + 1]) if str(x).strip()][:8]
+    except Exception:
+        kws = []
+    db.bump_ai_usage(user.id)
+    return {"available": True, "keywords": kws}
 
 
 @app.post("/api/ai/clean")

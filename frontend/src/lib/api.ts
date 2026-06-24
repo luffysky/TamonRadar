@@ -253,6 +253,15 @@ export async function aiChat(runId: string, question: string): Promise<{ availab
   return res.json();
 }
 
+export async function aiKeywords(query: string): Promise<{ available: boolean; keywords: string[] }> {
+  const res = await fetch(`${API_BASE}/api/ai/keywords`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ query }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("產生關鍵字失敗");
+  return res.json();
+}
+
 export async function aiClean(runId: string): Promise<{ available: boolean; noise_urls: string[]; noise_count?: number }> {
   const res = await fetch(`${API_BASE}/api/ai/clean`, {
     method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ run_id: runId }),
