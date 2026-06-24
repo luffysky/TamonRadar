@@ -1273,6 +1273,14 @@ def blog_delete(post_id: int, user=Depends(auth.get_current_user)):
     return {"ok": True}
 
 
+@app.get("/api/blog/author/{author_id}")
+def blog_author(author_id: int):
+    d = db.get_author_blog(author_id)
+    if not d:
+        raise HTTPException(404, "找不到這個作者")
+    return d
+
+
 @app.get("/api/blog/{slug}")
 def blog_get(slug: str):
     p = db.get_post_by_slug(slug)

@@ -57,7 +57,12 @@ export default async function ArticlePage({ params }: { params: { slug: string }
         <span className="mt-3 inline-block rounded-full bg-brand-100 px-2 py-0.5 text-xs text-brand-700">{post.category}</span>
       )}
       <h1 className="mt-2 text-3xl font-bold text-slate-800 dark:text-slate-100">{post.title}</h1>
-      <p className="mt-2 text-sm text-slate-400">{post.author ? `作者:${post.author} · ` : ""}{post.created_at ? new Date(post.created_at).toLocaleDateString("zh-TW") : ""}</p>
+      <p className="mt-2 text-sm text-slate-400">
+        {post.author && post.author_id ? (
+          <>作者:<Link href={`/blogs/${post.author_id}`} className="text-brand-600 hover:underline dark:text-brand-300">{post.author}</Link> · </>
+        ) : null}
+        {post.created_at ? new Date(post.created_at).toLocaleDateString("zh-TW") : ""}
+      </p>
       {post.cover_image && (
         // eslint-disable-next-line @next/next/no-img-element
         <img src={post.cover_image} alt={post.title} className="mt-4 w-full rounded-xl object-cover" />

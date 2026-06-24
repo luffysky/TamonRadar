@@ -1189,6 +1189,24 @@ def get_post(post_id: int) -> dict | None:
         return _post_dict(p, full=True, author_name=names.get(p.author_id, ""))
 
 
+def get_author_blog(author_id: int) -> dict | None:
+    """某使用者的公開部落格:作者資訊 + 已發佈文章。"""
+    with SessionLocal() as s:
+        u = s.get(User, author_id)
+        if u is None:
+            return None
+        rows = s.scalars(
+            select(Post).where(Post.author_id == author_id, Post.published == True)  # noqa: E712
+            .order_by(Post.created_at.desc())
+        ).all()
+        name = u.username or (u.email.split("@")[0] if u.email else "使用者")
+        return {
+            "author_id": u.id, "author": name,
+            "post_count": len(rows),
+            "posts": [_post_dict(p, author_name=name) for p in rows],
+        }
+
+
 def post_owner(post_id: int) -> int | None:
     with SessionLocal() as s:
         p = s.get(Post, post_id)
