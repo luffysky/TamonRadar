@@ -37,6 +37,7 @@ export default function AssistantWidget() {
   return (
     <>
       <button
+        data-tour="assistant"
         onClick={() => setOpen((o) => !o)}
         className="fixed bottom-5 left-5 z-40 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-lg shadow-brand-600/30 transition hover:scale-105 active:scale-95"
         aria-label="AI 助手"

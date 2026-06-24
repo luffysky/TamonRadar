@@ -100,6 +100,7 @@ export default function HomePage() {
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-200">搜尋關鍵字(一行一個)</label>
           <textarea
+            data-tour="search"
             value={keywords}
             onChange={(e) => setKeywords(e.target.value)}
             rows={5}
@@ -110,6 +111,7 @@ export default function HomePage() {
           <label className="mt-3 flex flex-col gap-1 text-sm">
             <span className="text-slate-600 dark:text-slate-300">搜尋來源</span>
             <select
+              data-tour="provider"
               value={provider}
               disabled={running}
               onChange={(e) => setProvider(e.target.value)}
@@ -159,6 +161,7 @@ export default function HomePage() {
 
           <div className="mt-4 flex gap-2">
             <button
+              data-tour="start"
               onClick={handleStart}
               disabled={running}
               className="flex-1 rounded-lg bg-brand-600 px-4 py-2 font-medium text-white hover:bg-brand-700 disabled:opacity-50"

@@ -2,6 +2,13 @@
 
 > 做法:一批一批做,每批編譯/測過再 push。完成的項目用 ~~刪除線~~ 標記、不刪掉。金流最後接。
 
+## ⚠️ 需要設定的環境變數(新增的記得補上 Zeabur)
+**後端**:DATABASE_URL、JWT_SECRET、ADMIN_EMAILS、CORS_ORIGINS、BRAVE_API_KEY/SERPAPI_KEY、
+SEARCH_PROVIDER、OPENAI_API_KEY/ANTHROPIC_API_KEY/GEMINI_API_KEY/GROQ_API_KEY/OPENROUTER_API_KEY(+各模型)、
+GOOGLE_CLIENT_ID/SECRET、OAUTH_REDIRECT_BASE、FRONTEND_URL、RESEND_API_KEY/RESEND_FROM、GMAIL_*、TWD_PER_*
+**前端**:NEXT_PUBLIC_API_BASE、NEXT_PUBLIC_SITE_URL、**NEXT_PUBLIC_GIPHY_API_KEY(新)**
+
+
 ## ✅ 已完成(基礎)
 - ~~搜尋 API(Brave/SerpAPI,serp 優先自動 fallback)~~
 - ~~多使用者帳號 + Google 登入 + 忘記密碼(Resend/Gmail)~~
