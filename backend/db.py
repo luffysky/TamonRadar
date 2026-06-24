@@ -746,6 +746,40 @@ def admin_stats() -> dict:
     }
 
 
+def admin_charts() -> dict:
+    """後台圖表用的近 30 天時間序列:註冊、AI/搜尋用量、內容成長。"""
+    from datetime import timedelta
+    since = _now() - timedelta(days=30)
+    days = [(since + timedelta(days=i)).strftime("%Y-%m-%d") for i in range(31)]
+
+    def bucket(dates) -> dict:
+        b: dict = {}
+        for dt in dates:
+            if dt:
+                k = dt.strftime("%Y-%m-%d")
+                b[k] = b.get(k, 0) + 1
+        return b
+
+    with SessionLocal() as s:
+        users = list(s.scalars(select(User.created_at).where(User.created_at >= since)).all())
+        runs = list(s.scalars(select(Run.created_at).where(Run.created_at >= since)).all())
+        posts = list(s.scalars(select(Post.created_at).where(Post.created_at >= since)).all())
+        usage_rows = s.execute(select(Usage.day, Usage.ai, Usage.search)).all()
+
+    su, ru, po = bucket(users), bucket(runs), bucket(posts)
+    ub: dict = {}
+    for day, ai, search in usage_rows:
+        d = ub.setdefault(day, {"ai": 0, "search": 0})
+        d["ai"] += ai or 0
+        d["search"] += search or 0
+
+    return {
+        "signups": [{"date": d[5:], "count": su.get(d, 0)} for d in days],
+        "ai_usage": [{"date": d[5:], "ai": ub.get(d, {}).get("ai", 0), "search": ub.get(d, {}).get("search", 0)} for d in days],
+        "content": [{"date": d[5:], "runs": ru.get(d, 0), "posts": po.get(d, 0)} for d in days],
+    }
+
+
 def admin_users(limit: int = 500) -> list[dict]:
     with SessionLocal() as s:
         rows = s.scalars(select(User).order_by(User.created_at.desc()).limit(limit)).all()

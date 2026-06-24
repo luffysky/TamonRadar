@@ -9,6 +9,7 @@ import {
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 import { ADMIN_BASE } from "@/lib/admin";
+import DashboardCharts from "@/components/DashboardCharts";
 
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
@@ -133,10 +134,12 @@ export default function AdminPage() {
         </>
       )}
 
+      <DashboardCharts />
+
       <input
         value={q}
         onChange={(e) => setQ(e.target.value)}
-        placeholder="搜尋 email…"
+        placeholder="搜尋 名稱 / email…"
         className="w-full max-w-sm rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600"
       />
 

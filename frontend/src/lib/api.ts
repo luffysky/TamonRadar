@@ -508,6 +508,18 @@ export interface AdminUser {
   created_at: string | null;
 }
 
+export interface AdminCharts {
+  signups: { date: string; count: number }[];
+  ai_usage: { date: string; ai: number; search: number }[];
+  content: { date: string; runs: number; posts: number }[];
+}
+export async function getAdminCharts(): Promise<AdminCharts> {
+  const res = await fetch(`${API_BASE}/api/admin/charts`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取圖表失敗");
+  return res.json();
+}
+
 export async function getAdminStats(): Promise<AdminStats> {
   const res = await fetch(`${API_BASE}/api/admin/stats`, { headers: authHeaders() });
   check401(res);

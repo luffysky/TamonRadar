@@ -1004,6 +1004,11 @@ def admin_stats(admin=Depends(auth.get_admin)):
     return db.admin_stats()
 
 
+@app.get("/api/admin/charts")
+def admin_charts(admin=Depends(auth.get_admin)):
+    return db.admin_charts()
+
+
 @app.get("/api/admin/users")
 def admin_users(admin=Depends(auth.get_admin)):
     return {"users": db.admin_users()}
