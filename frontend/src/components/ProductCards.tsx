@@ -17,12 +17,21 @@ export default function ProductCards({
 }) {
   const [lightbox, setLightbox] = useState<CrawlRecord | null>(null);
   const [page, setPage] = useState(0);
+  const [sort, setSort] = useState("smart");
   const PER = 20;
 
   const score = (r: CrawlRecord) => ((r.price || "").trim() ? 2 : 0) + (r.image_url ? 1 : 0);
-  const items = [...records]
-    .filter((r) => !r.is_listing) // 排除搜尋/列表頁,只放真正的商品/內容頁
-    .sort((a, b) => score(b) - score(a)); // 有價/有圖優先
+  const priceNum = (r: CrawlRecord) => {
+    const n = parseInt((r.price || "").replace(/[^0-9]/g, ""), 10);
+    return Number.isNaN(n) ? null : n;
+  };
+  const base = records.filter((r) => !r.is_listing); // 排除搜尋/列表頁
+  const items = [...base].sort((a, b) => {
+    if (sort === "price_asc") return (priceNum(a) ?? Infinity) - (priceNum(b) ?? Infinity);
+    if (sort === "price_desc") return (priceNum(b) ?? -Infinity) - (priceNum(a) ?? -Infinity);
+    if (sort === "name") return (a.title || "").localeCompare(b.title || "", "zh-Hant");
+    return score(b) - score(a); // smart:有價/有圖優先
+  });
 
   if (items.length === 0) {
     return <p className="text-sm text-slate-400">這次沒有商品頁(多為搜尋/列表頁,請看下方完整結果)。</p>;
@@ -34,6 +43,15 @@ export default function ProductCards({
 
   return (
     <>
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-xs text-slate-400">排序</span>
+        <select value={sort} onChange={(e) => { setSort(e.target.value); setPage(0); }} className="rounded-lg border border-slate-300 px-2 py-1 text-sm dark:border-slate-600 dark:bg-slate-900">
+          <option value="smart">推薦(有價/有圖優先)</option>
+          <option value="price_asc">價格:低 → 高</option>
+          <option value="price_desc">價格:高 → 低</option>
+          <option value="name">名稱</option>
+        </select>
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {shown.map((r, i) => (
           <div
