@@ -197,7 +197,11 @@ def run_crawl(
                     driver=driver, item=item,
                     min_sleep=config.min_sleep, max_sleep=config.max_sleep,
                 )
+                extra = detail.pop("_extra_products", []) if isinstance(detail, dict) else []
                 records.append(detail)
+                if extra:
+                    records.extend(extra)
+                    on_event({"type": "info", "message": f"從列表頁多抓到 {len(extra)} 個商品"})
                 on_event({
                     "type": "detail_progress", "current": i, "total": total,
                     "title": item.get("title", ""), "category": detail.get("category", ""),

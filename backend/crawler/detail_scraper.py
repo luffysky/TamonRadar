@@ -1,9 +1,10 @@
 import json
 import re
+from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
 
-from .utils import clean_text, extract_price, classify_item, sleep_random, looks_like_block_page, is_listing_url
+from .utils import clean_text, extract_price, classify_item, sleep_random, looks_like_block_page, is_listing_url, get_domain
 from .characters import detect_character
 
 
@@ -64,6 +65,67 @@ def _walk_jsonld_prices(data) -> list[str]:
     return found
 
 
+def _jsonld_products(data) -> list[dict]:
+    res: list[dict] = []
+    if isinstance(data, dict):
+        t = data.get("@type", "")
+        types = t if isinstance(t, list) else [t]
+        if "Product" in types:
+            res.append(data)
+        if "ItemList" in types:
+            for el in data.get("itemListElement", []):
+                if isinstance(el, dict):
+                    res.extend(_jsonld_products(el.get("item", el)))
+        for v in data.values():
+            if isinstance(v, (dict, list)):
+                res.extend(_jsonld_products(v))
+    elif isinstance(data, list):
+        for x in data:
+            res.extend(_jsonld_products(x))
+    return res
+
+
+def _extract_listing_products(soup: BeautifulSoup, base_url: str, keyword: str) -> list[dict]:
+    """從列表頁內嵌的結構化資料(JSON-LD)抽出個別商品。"""
+    out: list[dict] = []
+    seen: set[str] = set()
+    for tag in soup.find_all("script", attrs={"type": "application/ld+json"}):
+        raw = tag.string or tag.get_text() or ""
+        if not raw.strip():
+            continue
+        try:
+            data = json.loads(raw)
+        except Exception:
+            continue
+        for p in _jsonld_products(data):
+            name = clean_text(p.get("name", ""))
+            url = p.get("url", "") or ""
+            if not name or not url:
+                continue
+            url = urljoin(base_url, url)
+            if url in seen:
+                continue
+            seen.add(url)
+            offers = p.get("offers") or {}
+            if isinstance(offers, list):
+                offers = offers[0] if offers else {}
+            price = ""
+            if isinstance(offers, dict) and offers.get("price"):
+                price = f"{offers.get('priceCurrency', '')} {offers.get('price')}".strip()
+            img = p.get("image", "")
+            if isinstance(img, list):
+                img = img[0] if img else ""
+            if isinstance(img, dict):
+                img = img.get("url", "")
+            out.append({
+                "keyword": keyword, "title": name, "url": url, "domain": get_domain(url),
+                "snippet": "", "price": price, "image_url": img or "",
+                "category": classify_item(name, "", ""), "character": detect_character(name),
+                "is_listing": False, "status": "from_listing", "error": "",
+            })
+    return out[:40]
+
+
 def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: float = 5) -> dict:
     url = item.get("url", "")
 
@@ -122,6 +184,11 @@ def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: floa
             price = extract_price(page_text_head)
         # 搜尋/列表頁的價格是混雜的(常亂價),不顯示單一價格避免誤導
         detail["price"] = "" if is_listing_url(url) else price
+        # 列表頁:嘗試從內嵌結構化資料抽出個別商品
+        if is_listing_url(url):
+            extra = _extract_listing_products(soup, url, item.get("keyword", ""))
+            if extra:
+                detail["_extra_products"] = extra
 
         page_text = clean_text(soup.get_text(" ", strip=True))
         detail["category"] = classify_item(

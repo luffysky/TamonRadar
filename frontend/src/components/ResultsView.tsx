@@ -6,6 +6,7 @@ import { exportUrl, aiClean } from "@/lib/api";
 import StatCards from "./StatCards";
 import BarChart from "./BarChart";
 import ProductCards from "./ProductCards";
+import ListingCards from "./ListingCards";
 import ResultsTable from "./ResultsTable";
 import AiSummary from "./AiSummary";
 import AiChat from "./AiChat";
@@ -80,6 +81,14 @@ export default function ResultsView({
         <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">商品候選</h2>
         <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url))} />
       </section>
+
+      {records.some((r) => r.is_listing) && (
+        <section>
+          <h2 className="mb-1 text-lg font-semibold text-slate-700 dark:text-slate-200">各網站搜尋結果</h2>
+          <p className="mb-3 text-xs text-slate-400">點進去是該網站的搜尋/列表頁,可看到更多同類商品。</p>
+          <ListingCards records={records.filter((r) => !hiddenUrls.has(r.url))} />
+        </section>
+      )}
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">完整結果</h2>
