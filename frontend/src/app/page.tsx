@@ -281,7 +281,7 @@ export default function HomePage() {
             )}
           </div>
           <p className="mt-2 text-xs text-slate-400">
-            提醒:Google 可能跳出驗證而擋下自動搜尋,系統會標記並跳過該關鍵字。請勿大量爬取。
+            提醒:本工具僅抓取公開資料並遵守各網站 robots.txt(標明禁止的不爬)、自動節流;請勿用於侵權、轉售或大量爬取。Google 跳驗證時會自動跳過該關鍵字。
           </p>
 
           <div className="mt-4 border-t border-slate-100 pt-4 dark:border-slate-700">
