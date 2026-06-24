@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Radar } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import ThemeToggle from "./ThemeToggle";
 
@@ -44,7 +45,7 @@ export default function Nav() {
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/70 backdrop-blur-lg dark:border-slate-700 dark:bg-slate-900/70">
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
         <Link href="/" onClick={() => setOpen(false)} className="flex shrink-0 items-center gap-2 font-bold text-brand-600 dark:text-brand-300">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-base text-white shadow-sm">📡</span>
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-white shadow-sm"><Radar className="h-[18px] w-[18px]" /></span>
           <span>TamonRadar</span>
         </Link>
 
