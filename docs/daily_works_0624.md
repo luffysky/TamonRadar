@@ -57,12 +57,20 @@
 - **R8 密碼文章**:密碼保護 + 前台解鎖。(備註:預覽 token 未做)
 - **深度情報**:insights.py + /api/insights;商品比價/划算分 + 各 tab 專屬 facets,全 vertical 顯示。
 
-## 資料庫(已建,共 25 表,皆 tr_ 前綴)
+## 後續批次 4(情報再深化 + 推播完善)
+- 跨次比較:跟上次同關鍵字搜尋比價(變便宜/變貴/新增/消失)。
+- AI 結構化洞察 + **可點實體**(購買建議/風險/行情解讀 + 附最佳CP/最低價/好價連結)。
+- R7 補完:AI 產 SEO 摘要標籤、AI 生成封面(存 R2)。
+- R8 補完:草稿預覽 token(/blog/preview/[token])。
+- 新增 6 個 tab:票券/租屋/遊戲/加密貨幣/機票住宿/醫美補教(各自 facets)。
+- 推播中心:分群(全體/特權/已驗證/TG/Discord)+ 排程發送(tr_scheduled_broadcasts,每分鐘檢查)。
+
+## 資料庫(已建,共 26 表,皆 tr_ 前綴)
 tr_users / tr_runs / tr_user_settings / tr_schedules / tr_watches / tr_favorites /
 tr_posts / tr_post_comments / tr_post_likes / tr_post_comment_likes / tr_post_reactions /
 tr_threads / tr_replies / tr_subscriptions / tr_audit / tr_announcements / tr_reports /
 tr_app_settings / tr_usage / tr_ai_cost / tr_notifications / tr_push_subs / tr_ai_chat_log /
-tr_bot_chat_log / tr_bind_codes
+tr_bot_chat_log / tr_bind_codes / tr_scheduled_broadcasts
 
 ## 待辦
 見 [0624_todo.md](0624_todo.md) 與 [roadmap.md](roadmap.md)。
