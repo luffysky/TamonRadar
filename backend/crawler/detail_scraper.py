@@ -43,6 +43,36 @@ _JSON_NAME_KEYS = {"name", "title", "symbolname", "longname", "shortname", "labe
 _JSON_PRICE_KEYS = {"price", "last", "lastprice", "regularmarketprice", "close", "value", "amount"}
 
 
+def _balanced_json(text: str, start: int) -> str | None:
+    """從 start(應是 '{')開始取出字串感知的平衡 JSON 物件。"""
+    if start < 0 or start >= len(text) or text[start] != "{":
+        return None
+    depth = 0
+    in_str = False
+    esc = False
+    q = ""
+    for i in range(start, len(text)):
+        c = text[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == q:
+                in_str = False
+        else:
+            if c in "\"'":
+                in_str = True
+                q = c
+            elif c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start:i + 1]
+    return None
+
+
 def _items_from_embedded_json(soup: BeautifulSoup, url: str) -> list[dict]:
     """從頁面內嵌 JSON(__NEXT_DATA__ / application/json)抽出「有名稱+價格」的資料列。
 
@@ -70,16 +100,30 @@ def _items_from_embedded_json(soup: BeautifulSoup, url: str) -> list[dict]:
             for v in o:
                 walk(v, depth + 1)
 
+    markers = ("__NUXT__", "__INITIAL_STATE__", "__PRELOADED_STATE__", "__APOLLO_STATE__")
     for tag in soup.find_all("script"):
         t = (tag.get("type") or "").lower()
+        raw = tag.string or tag.get_text() or ""
+        if not raw.strip():
+            continue
         if tag.get("id") == "__NEXT_DATA__" or t == "application/json":
-            raw = tag.string or tag.get_text() or ""
-            if not raw.strip():
-                continue
             try:
                 walk(json.loads(raw))
             except Exception:
+                pass
+            continue
+        # 一般 <script> 內的 SPA 狀態(window.__NUXT__ = {...} 等)
+        for mk in markers:
+            mi = raw.find(mk)
+            if mi < 0:
                 continue
+            blob = _balanced_json(raw, raw.find("{", mi))
+            if blob:
+                try:
+                    walk(json.loads(blob))
+                except Exception:
+                    pass
+            break
 
     seen: set = set()
     out: list[dict] = []
