@@ -1,10 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Radar, Sparkles } from "lucide-react";
+import {
+  Radar, Sparkles, Gift, Utensils, PawPrint, Bird, Plane, TrendingUp, Rocket,
+  Home as HomeIcon, Briefcase, BookOpen, HeartPulse, Laptop, Car, Recycle,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords, scrapePage, startSiteCrawl } from "@/lib/api";
 import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
+
+const VERT_ICON: Record<string, LucideIcon> = {
+  merch: Gift, food: Utensils, pet: PawPrint, animal: Bird, travel: Plane,
+  stock: TrendingUp, startup: Rocket, realestate: HomeIcon, job: Briefcase,
+  course: BookOpen, health: HeartPulse, tech: Laptop, car: Car, secondhand: Recycle,
+};
 
 const PROVIDER_LABELS: Record<string, string> = {
   serpapi: "SerpAPI",
@@ -166,22 +176,25 @@ export default function HomePage() {
         </p>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr]">
+      <section className="space-y-4">
         <div className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm">
           <div {...tabDrag} className="scroll-thin mb-3 flex w-full gap-1.5 overflow-x-auto pb-1 select-none">
-            {VERTICALS.map((v) => (
-              <button
-                key={v.key}
-                onClick={() => pickVertical(v.key)}
-                className={`flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
-                  vertical === v.key
-                    ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200"
-                    : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
-                }`}
-              >
-                <span>{v.icon}</span> {v.label}
-              </button>
-            ))}
+            {VERTICALS.map((v) => {
+              const Icon = VERT_ICON[v.key] ?? Gift;
+              return (
+                <button
+                  key={v.key}
+                  onClick={() => pickVertical(v.key)}
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-sm transition ${
+                    vertical === v.key
+                      ? "border-brand-500 bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-200"
+                      : "border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-700"
+                  }`}
+                >
+                  <Icon className="h-4 w-4" /> {v.label}
+                </button>
+              );
+            })}
           </div>
           <p className="mb-2 text-xs text-slate-400">{getVertical(vertical).tagline}</p>
           <div className="flex items-center justify-between">

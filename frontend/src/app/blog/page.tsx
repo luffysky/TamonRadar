@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Radar } from "lucide-react";
 import { API_BASE, type BlogPost } from "@/lib/api";
 import BlogActions from "@/components/BlogActions";
 
@@ -40,7 +41,7 @@ export default async function BlogPage() {
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={p.cover_image} alt={p.title} className="h-40 w-full object-cover" />
               ) : (
-                <div className="grid h-40 place-items-center bg-gradient-to-br from-brand-500 to-brand-700 text-3xl text-white">📡</div>
+                <div className="grid h-40 place-items-center bg-gradient-to-br from-brand-500 to-brand-700 text-white"><Radar className="h-10 w-10 opacity-80" /></div>
               )}
               <div className="p-4">
                 {p.category && <span className="mb-1 inline-block rounded-full bg-brand-100 px-2 py-0.5 text-[10px] text-brand-700">{p.category}</span>}

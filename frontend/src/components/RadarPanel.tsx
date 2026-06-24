@@ -66,7 +66,7 @@ export default function RadarPanel({ runId }: { runId: string }) {
   if (loading) {
     return (
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 text-sm text-slate-400 shadow-sm">
-        📡 價格雷達分析中…
+        價格雷達分析中…
       </div>
     );
   }
@@ -74,7 +74,7 @@ export default function RadarPanel({ runId }: { runId: string }) {
   if (!data?.has_previous || !data.diff) {
     return (
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-5 text-sm text-slate-400 shadow-sm">
-        📡 價格雷達：這是第一筆紀錄，還沒有可比較的上一次。再搜尋一次同樣的關鍵字就能看到變化。
+        價格雷達：這是第一筆紀錄，還沒有可比較的上一次。再搜尋一次同樣的關鍵字就能看到變化。
       </div>
     );
   }
@@ -100,9 +100,9 @@ export default function RadarPanel({ runId }: { runId: string }) {
         <p className="text-sm text-slate-500 dark:text-slate-400">跟上一次相比沒有明顯變化。</p>
       ) : (
         <div className="space-y-4">
-          <Section title="💰 降價" color="text-rose-600" items={data.diff.price_drops} kind="drop" />
-          <Section title="✨ 新出現" color="text-emerald-600" items={data.diff.new_items} kind="new" />
-          <Section title="📦 補貨 / 新上架價" color="text-sky-600" items={data.diff.restock} kind="restock" />
+          <Section title="降價" color="text-rose-600" items={data.diff.price_drops} kind="drop" />
+          <Section title="新出現" color="text-emerald-600" items={data.diff.new_items} kind="new" />
+          <Section title="補貨 / 新上架價" color="text-sky-600" items={data.diff.restock} kind="restock" />
         </div>
       )}
     </div>
