@@ -9,6 +9,7 @@ import {
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 import RichTextEditor from "@/components/social/RichTextEditor";
+import { ADMIN_BASE } from "@/lib/admin";
 
 const EMPTY: PostInput = {
   title: "", slug: "", excerpt: "", content: "", cover_image: "", category: "", tags: [], published: false,
@@ -74,7 +75,7 @@ export default function AdminBlogPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-bold text-slate-800 dark:text-slate-100">部落格管理</h1>
-        <Link href="/admin" className="text-sm text-brand-600 hover:underline dark:text-brand-300">← 回管理後台</Link>
+        <Link href={ADMIN_BASE} className="text-sm text-brand-600 hover:underline dark:text-brand-300">← 回管理後台</Link>
       </div>
 
       <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">

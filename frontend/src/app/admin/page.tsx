@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
+import { ADMIN_BASE } from "@/lib/admin";
 
 function Stat({ label, value }: { label: string; value: number | string }) {
   return (
@@ -75,7 +76,7 @@ export default function AdminPage() {
           >
             註冊 Discord 指令
           </button>
-          <Link href="/admin/blog" className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">部落格管理</Link>
+          <Link href={`${ADMIN_BASE}/blog`} className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">部落格管理</Link>
         </div>
       </div>
 
@@ -145,7 +146,7 @@ export default function AdminPage() {
               {users.filter((u) => u.email.toLowerCase().includes(q.toLowerCase())).map((u) => (
                 <tr key={u.id} className="border-t border-slate-100 dark:border-slate-700">
                   <td className="px-3 py-2">
-                    <Link href={`/admin/users/${u.id}`} className="text-brand-600 hover:underline dark:text-brand-300">{u.email}</Link>
+                    <Link href={`${ADMIN_BASE}/users/${u.id}`} className="text-brand-600 hover:underline dark:text-brand-300">{u.email}</Link>
                   </td>
                   <td className="px-3 py-2 text-xs text-slate-500">{u.provider}</td>
                   <td className="px-3 py-2">

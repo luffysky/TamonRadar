@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import ThemeToggle from "./ThemeToggle";
+import { ADMIN_BASE } from "@/lib/admin";
 
 interface NavLink {
   href: string;
@@ -18,11 +19,12 @@ const LINKS: NavLink[] = [
   { href: "/history", label: "歷史", show: "all" },
   { href: "/blog", label: "部落格", show: "all" },
   { href: "/forum", label: "討論區", show: "all" },
+  { href: "/dashboard", label: "儀表板", show: "auth" },
   { href: "/favorites", label: "收藏", show: "auth" },
   { href: "/schedules", label: "排程", show: "auth" },
   { href: "/watches", label: "監看", show: "auth" },
   { href: "/settings", label: "設定", show: "auth" },
-  { href: "/admin", label: "管理", show: "admin" },
+  { href: ADMIN_BASE, label: "管理", show: "admin" },
   { href: "/about", label: "說明", show: "all" },
 ];
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { getAdminUserDetail, setUserNote, setUserPlan, type AdminUserDetail } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
+import { ADMIN_BASE } from "@/lib/admin";
 
 export default function AdminUserDetailPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
@@ -47,7 +48,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
 
   return (
     <div className="mx-auto max-w-2xl space-y-5">
-      <Link href="/admin" className="text-sm text-brand-600 hover:underline dark:text-brand-300">← 回管理後台</Link>
+      <Link href={ADMIN_BASE} className="text-sm text-brand-600 hover:underline dark:text-brand-300">← 回管理後台</Link>
 
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-700 dark:bg-slate-800">
         <h1 className="text-lg font-bold text-slate-800 dark:text-slate-100">{u.email}</h1>

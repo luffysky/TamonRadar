@@ -32,6 +32,21 @@ export default function AboutPage() {
         </p>
       </section>
 
+      <Card title="完整功能一覽">
+        <div className="grid gap-2 text-sm text-slate-600 dark:text-slate-300 sm:grid-cols-2">
+          <div>🔍 多來源搜尋(SerpAPI / Serper / Google CSE / Tavily / Brave / SearXNG / DuckDuckGo)</div>
+          <div>📡 價格雷達:新品 / 降價 / 補貨(自動換算台幣)</div>
+          <div>⏰ 排程自動搜尋 + Discord / Telegram 推播</div>
+          <div>🎫 監看到貨 / 開賣即時通知</div>
+          <div>❤️ 收藏 / 追蹤 + 目標價通知 + 價格走勢圖</div>
+          <div>🤖 AI 摘要 / 對話 / 濾雜訊(GPT / Gemini / Groq / OpenRouter / Claude,可自備金鑰)</div>
+          <div>💬 AI 小幫手(看得懂你的搜尋結果,能比價、找代購)</div>
+          <div>📝 部落格 + 討論區(18 分類,Tiptap 編輯器 + emoji / GIF / 上傳)</div>
+          <div>👤 個人儀表板、Google 登入、深色模式、PWA 可安裝</div>
+          <div>🛠️ 管理後台:統計、CRM、營運報表</div>
+        </div>
+      </Card>
+
       <Card title="使用流程">
         <div className="space-y-5">
           <Step n={1} title="輸入關鍵字">
