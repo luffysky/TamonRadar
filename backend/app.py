@@ -684,6 +684,33 @@ def _enforce_quota(user, kind: str) -> None:
         raise HTTPException(429, f"今日免費{'AI' if kind == 'ai' else '搜尋'}額度已用完(每日 {limit} 次)。升級方案或明天再來。")
 
 
+@app.get("/api/push/key")
+def push_key():
+    import push
+    return {"key": push.public_key()}
+
+
+class PushSubRequest(BaseModel):
+    endpoint: str
+    keys: dict
+
+
+@app.post("/api/push/subscribe")
+def push_subscribe(req: PushSubRequest, user=Depends(auth.get_current_user)):
+    db.add_push_sub(user.id, req.endpoint, req.keys.get("p256dh", ""), req.keys.get("auth", ""))
+    return {"ok": True}
+
+
+class PushUnsubRequest(BaseModel):
+    endpoint: str
+
+
+@app.post("/api/push/unsubscribe")
+def push_unsubscribe(req: PushUnsubRequest, user=Depends(auth.get_current_user)):
+    db.remove_push_sub(req.endpoint)
+    return {"ok": True}
+
+
 @app.get("/api/notifications")
 def get_notifications(user=Depends(auth.get_current_user)):
     return db.list_notifications(user.id)

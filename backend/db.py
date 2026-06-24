@@ -255,6 +255,16 @@ class Subscription(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class PushSub(Base):
+    __tablename__ = "tr_push_subs"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    endpoint: Mapped[str] = mapped_column(String(500), unique=True)
+    p256dh: Mapped[str] = mapped_column(String(255), default="")
+    auth: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
 class Notification(Base):
     __tablename__ = "tr_notifications"
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -811,6 +821,38 @@ def add_notification(user_id: int, title: str, body: str = "", url: str = "") ->
             s.commit()
     except Exception:
         pass
+    # 同時嘗試瀏覽器推播(關著網站也能收到系統通知)
+    try:
+        import push
+        push.send_to_user(user_id, title, body, url)
+    except Exception:
+        pass
+
+
+def add_push_sub(user_id: int, endpoint: str, p256dh: str, auth: str) -> None:
+    with SessionLocal() as s:
+        row = s.scalar(select(PushSub).where(PushSub.endpoint == endpoint))
+        if row is None:
+            s.add(PushSub(user_id=user_id, endpoint=endpoint, p256dh=p256dh, auth=auth))
+        else:
+            row.user_id = user_id
+            row.p256dh = p256dh
+            row.auth = auth
+        s.commit()
+
+
+def remove_push_sub(endpoint: str) -> None:
+    with SessionLocal() as s:
+        row = s.scalar(select(PushSub).where(PushSub.endpoint == endpoint))
+        if row:
+            s.delete(row)
+            s.commit()
+
+
+def list_push_subs(user_id: int) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(PushSub).where(PushSub.user_id == user_id)).all()
+        return [{"endpoint": r.endpoint, "p256dh": r.p256dh, "auth": r.auth} for r in rows]
 
 
 def list_notifications(user_id: int, limit: int = 50) -> dict:

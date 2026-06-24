@@ -804,6 +804,19 @@ export async function deletePost(id: number): Promise<void> {
   if (!res.ok) throw new Error("刪除文章失敗");
 }
 
+// ---- Web Push ----
+export async function getPushKey(): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/push/key`);
+  if (!res.ok) return "";
+  return (await res.json()).key || "";
+}
+export async function subscribePush(sub: PushSubscription): Promise<void> {
+  await fetch(`${API_BASE}/api/push/subscribe`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(sub) });
+}
+export async function unsubscribePush(endpoint: string): Promise<void> {
+  await fetch(`${API_BASE}/api/push/unsubscribe`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ endpoint }) });
+}
+
 // ---- 站內通知 ----
 export interface Notif { id: number; title: string; body: string; url: string; read: boolean; created_at: string | null; }
 export async function getNotifications(): Promise<{ items: Notif[]; unread: number }> {

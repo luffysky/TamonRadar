@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { getSettings, saveSettings, testNotify, changePassword, deleteAccount, updateProfile, type NotifySettings } from "@/lib/api";
 import { useRequireAuth, useAuth } from "@/components/AuthProvider";
 import PasswordInput from "@/components/PasswordInput";
+import PushToggle from "@/components/PushToggle";
 
 export default function SettingsPage() {
   const { user, ready } = useRequireAuth();
@@ -143,6 +144,12 @@ export default function SettingsPage() {
           <input type="checkbox" checked={form.daily_digest} onChange={(e) => setForm({ ...form, daily_digest: e.target.checked })} />
           每日彙整通知(每天一封總結,而非每次變化都推)
         </label>
+
+        <div className="border-t border-slate-100 pt-3 dark:border-slate-700">
+          <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-200">瀏覽器系統通知</p>
+          <p className="mb-2 text-xs text-slate-400">不用 Discord/Telegram,關著網站也能在桌面/手機收到系統通知。</p>
+          <PushToggle />
+        </div>
 
         <div className="flex items-center gap-3">
           <button onClick={save} disabled={saving} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700 disabled:opacity-50">
