@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import type { CrawlResult } from "@/lib/types";
-import { exportUrl, aiClean } from "@/lib/api";
+import { useEffect, useState } from "react";
+import type { CrawlResult, CrawlRecord } from "@/lib/types";
+import { exportUrl, aiClean, getFavorites, addFavorite, removeFavorite } from "@/lib/api";
+import { useAuth } from "./AuthProvider";
 import StatCards from "./StatCards";
 import BarChart from "./BarChart";
 import ProductCards from "./ProductCards";
@@ -21,9 +22,40 @@ export default function ResultsView({
   showAi?: boolean;
 }) {
   const { records, summary } = result;
+  const { user } = useAuth();
   const [hiddenUrls, setHiddenUrls] = useState<Set<string>>(new Set());
   const [cleaning, setCleaning] = useState(false);
   const [cleanMsg, setCleanMsg] = useState<string | null>(null);
+  const [favUrls, setFavUrls] = useState<Set<string>>(new Set());
+  const [favIds, setFavIds] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    if (!user) return;
+    getFavorites()
+      .then((d) => {
+        setFavUrls(new Set(d.urls));
+        const m: Record<string, number> = {};
+        d.favorites.forEach((f) => (m[f.url] = f.id));
+        setFavIds(m);
+      })
+      .catch(() => {});
+  }, [user]);
+
+  async function toggleFav(r: CrawlRecord) {
+    try {
+      if (favUrls.has(r.url)) {
+        const id = favIds[r.url];
+        if (id) await removeFavorite(id);
+        setFavUrls((s) => { const n = new Set(s); n.delete(r.url); return n; });
+      } else {
+        const f = await addFavorite({ url: r.url, title: r.title, image_url: r.image_url, domain: r.domain, price: r.price });
+        setFavUrls((s) => new Set(s).add(r.url));
+        setFavIds((m) => ({ ...m, [r.url]: f.id }));
+      }
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function clean() {
     setCleaning(true);
@@ -79,7 +111,7 @@ export default function ResultsView({
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-slate-700 dark:text-slate-200">商品候選</h2>
-        <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url))} />
+        <ProductCards records={records.filter((r) => !hiddenUrls.has(r.url))} favUrls={favUrls} onToggleFav={user ? toggleFav : undefined} />
       </section>
 
       {records.some((r) => r.is_listing) && (

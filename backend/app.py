@@ -685,6 +685,50 @@ def get_watches(user=Depends(auth.get_current_user)):
     return {"watches": db.list_watches(user.id)}
 
 
+class FavoriteRequest(BaseModel):
+    url: str
+    title: str = ""
+    image_url: str = ""
+    domain: str = ""
+    price: str = ""
+
+
+class TargetRequest(BaseModel):
+    target_twd: int | None = None
+
+
+@app.get("/api/favorites")
+def get_favorites(user=Depends(auth.get_current_user)):
+    return {"favorites": db.list_favorites(user.id), "urls": db.favorite_urls(user.id)}
+
+
+@app.post("/api/favorites")
+def add_favorite(req: FavoriteRequest, user=Depends(auth.get_current_user)):
+    if not req.url.strip().startswith("http"):
+        raise HTTPException(400, "網址不正確")
+    return db.add_favorite(user.id, req.model_dump())
+
+
+@app.patch("/api/favorites/{fav_id}")
+def set_favorite_target(fav_id: int, req: TargetRequest, user=Depends(auth.get_current_user)):
+    f = db.set_favorite_target(fav_id, user.id, req.target_twd)
+    if not f:
+        raise HTTPException(404, "找不到收藏")
+    return f
+
+
+@app.delete("/api/favorites/{fav_id}")
+def delete_favorite(fav_id: int, user=Depends(auth.get_current_user)):
+    if not db.remove_favorite(fav_id, user.id):
+        raise HTTPException(404, "找不到收藏")
+    return {"ok": True}
+
+
+@app.get("/api/price-history")
+def get_price_history(url: str, user=Depends(auth.get_current_user)):
+    return {"history": db.price_history(user.id, url)}
+
+
 @app.post("/api/watches")
 def create_watch(req: WatchRequest, user=Depends(auth.get_current_user)):
     if not req.url.strip().startswith("http"):

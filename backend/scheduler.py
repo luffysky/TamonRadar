@@ -153,3 +153,18 @@ def _run(schedule_id: int) -> None:
     )
     if has_channel:
         notify.notify_all(settings, _build_message(sc, result, prev))
+        # 收藏的目標價通知:這次結果中有收藏商品降到目標價就提醒
+        try:
+            import money
+            favs = db.list_favorites_with_target(sc["user_id"])
+            by_url = {r.get("url"): r for r in result.get("records", [])}
+            hits = []
+            for f in favs:
+                rec = by_url.get(f["url"])
+                twd = money.to_twd(rec.get("price", "")) if rec else None
+                if twd and f.get("target_twd") and twd <= f["target_twd"]:
+                    hits.append(f"🎯 {f['title'] or f['url']} 降到 NT${twd}(目標 {f['target_twd']})\n{f['url']}")
+            if hits:
+                notify.notify_all(settings, "TamonRadar 目標價通知\n" + "\n".join(hits[:10]))
+        except Exception:
+            pass

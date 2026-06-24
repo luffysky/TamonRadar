@@ -566,6 +566,47 @@ export async function deletePost(id: number): Promise<void> {
   if (!res.ok) throw new Error("刪除文章失敗");
 }
 
+// ---------- 收藏 / 價格走勢 ----------
+
+export interface Favorite {
+  id: number; url: string; title: string; image_url: string; domain: string;
+  price: string; target_twd: number | null; created_at: string | null;
+}
+
+export async function getFavorites(): Promise<{ favorites: Favorite[]; urls: string[] }> {
+  const res = await fetch(`${API_BASE}/api/favorites`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取收藏失敗");
+  return res.json();
+}
+
+export async function addFavorite(data: { url: string; title?: string; image_url?: string; domain?: string; price?: string }): Promise<Favorite> {
+  const res = await fetch(`${API_BASE}/api/favorites`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data) });
+  check401(res);
+  if (!res.ok) throw new Error("收藏失敗");
+  return res.json();
+}
+
+export async function setFavoriteTarget(id: number, target_twd: number | null): Promise<Favorite> {
+  const res = await fetch(`${API_BASE}/api/favorites/${id}`, { method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify({ target_twd }) });
+  check401(res);
+  if (!res.ok) throw new Error("設定失敗");
+  return res.json();
+}
+
+export async function removeFavorite(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/favorites/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("移除失敗");
+}
+
+export async function getPriceHistory(url: string): Promise<{ history: { date: string; price_twd: number; price: string }[] }> {
+  const res = await fetch(`${API_BASE}/api/price-history?url=${encodeURIComponent(url)}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取走勢失敗");
+  return res.json();
+}
+
 // ---------- 討論區 ----------
 
 export interface ForumCategory { slug: string; label: string; emoji: string; }

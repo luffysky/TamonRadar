@@ -8,9 +8,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import crypto
+import money
 
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, String, Text, create_engine, func, inspect, select, text,
+    JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, create_engine, func, inspect, select, text,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker,
@@ -175,6 +176,21 @@ class Reply(Base):
     content: Mapped[str] = mapped_column(Text, default="")
     author_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"))
     author_email: Mapped[str] = mapped_column(String(255), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Favorite(Base):
+    __tablename__ = "tr_favorites"
+    __table_args__ = (UniqueConstraint("user_id", "url", name="uq_fav_user_url"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    url: Mapped[str] = mapped_column(String(1000))
+    title: Mapped[str] = mapped_column(String(300), default="")
+    image_url: Mapped[str] = mapped_column(String(1000), default="")
+    domain: Mapped[str] = mapped_column(String(200), default="")
+    price: Mapped[str] = mapped_column(String(50), default="")
+    target_twd: Mapped[int | None] = mapped_column(nullable=True)  # 目標價(台幣),低於就通知
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -593,6 +609,86 @@ def get_user_detail(user_id: int) -> dict | None:
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "counts": {"runs": int(runs), "watches": int(watches), "schedules": int(schedules), "threads": int(threads)},
         }
+
+
+def _fav_dict(f: "Favorite") -> dict:
+    return {
+        "id": f.id, "url": f.url, "title": f.title, "image_url": f.image_url,
+        "domain": f.domain, "price": f.price, "target_twd": f.target_twd,
+        "created_at": f.created_at.isoformat() if f.created_at else None,
+    }
+
+
+def list_favorites(user_id: int) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(Favorite).where(Favorite.user_id == user_id).order_by(Favorite.created_at.desc())).all()
+        return [_fav_dict(f) for f in rows]
+
+
+def favorite_urls(user_id: int) -> list[str]:
+    with SessionLocal() as s:
+        return [u for (u,) in s.execute(select(Favorite.url).where(Favorite.user_id == user_id)).all()]
+
+
+def add_favorite(user_id: int, data: dict) -> dict:
+    with SessionLocal() as s:
+        f = s.scalar(select(Favorite).where(Favorite.user_id == user_id, Favorite.url == data.get("url", "")))
+        if f is None:
+            f = Favorite(user_id=user_id, url=data.get("url", ""))
+            s.add(f)
+        f.title = data.get("title", "")[:300]
+        f.image_url = data.get("image_url", "")
+        f.domain = data.get("domain", "")
+        f.price = data.get("price", "")
+        s.commit()
+        s.refresh(f)
+        return _fav_dict(f)
+
+
+def set_favorite_target(fav_id: int, user_id: int, target_twd: int | None) -> dict | None:
+    with SessionLocal() as s:
+        f = s.get(Favorite, fav_id)
+        if f is None or f.user_id != user_id:
+            return None
+        f.target_twd = target_twd
+        s.commit()
+        s.refresh(f)
+        return _fav_dict(f)
+
+
+def remove_favorite(fav_id: int, user_id: int) -> bool:
+    with SessionLocal() as s:
+        f = s.get(Favorite, fav_id)
+        if f is None or f.user_id != user_id:
+            return False
+        s.delete(f)
+        s.commit()
+        return True
+
+
+def price_history(user_id: int, url: str) -> list[dict]:
+    """掃使用者所有歷史搜尋,回傳某網址的價格(台幣)隨時間變化。"""
+    out: list[dict] = []
+    with SessionLocal() as s:
+        runs = s.scalars(select(Run).where(Run.user_id == user_id).order_by(Run.finished_at.asc())).all()
+        for r in runs:
+            for rec in (r.records or []):
+                if rec.get("url") == url and rec.get("price"):
+                    twd = money.to_twd(rec.get("price", ""))
+                    if twd:
+                        out.append({
+                            "date": r.finished_at.isoformat() if r.finished_at else None,
+                            "price_twd": twd, "price": rec.get("price", ""),
+                        })
+                    break
+    return out
+
+
+def list_favorites_with_target(user_id: int) -> list[dict]:
+    """給通知檢查用:有設目標價的收藏。"""
+    with SessionLocal() as s:
+        rows = s.scalars(select(Favorite).where(Favorite.user_id == user_id, Favorite.target_twd.isnot(None))).all()
+        return [_fav_dict(f) for f in rows]
 
 
 def set_user_note(user_id: int, note: str, tags: list) -> bool:

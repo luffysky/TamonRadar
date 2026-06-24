@@ -18,6 +18,7 @@ const LINKS: NavLink[] = [
   { href: "/history", label: "歷史", show: "all" },
   { href: "/blog", label: "部落格", show: "all" },
   { href: "/forum", label: "討論區", show: "all" },
+  { href: "/favorites", label: "收藏", show: "auth" },
   { href: "/schedules", label: "排程", show: "auth" },
   { href: "/watches", label: "監看", show: "auth" },
   { href: "/settings", label: "設定", show: "auth" },

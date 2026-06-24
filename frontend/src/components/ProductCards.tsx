@@ -1,11 +1,20 @@
 "use client";
 
 import { useState } from "react";
+import { Heart } from "lucide-react";
 import type { CrawlRecord } from "@/lib/types";
 import { categoryClass } from "@/lib/format";
 import ProductImage from "./ProductImage";
 
-export default function ProductCards({ records }: { records: CrawlRecord[] }) {
+export default function ProductCards({
+  records,
+  favUrls,
+  onToggleFav,
+}: {
+  records: CrawlRecord[];
+  favUrls?: Set<string>;
+  onToggleFav?: (r: CrawlRecord) => void;
+}) {
   const [lightbox, setLightbox] = useState<CrawlRecord | null>(null);
 
   const score = (r: CrawlRecord) => ((r.price || "").trim() ? 2 : 0) + (r.image_url ? 1 : 0);
@@ -24,8 +33,17 @@ export default function ProductCards({ records }: { records: CrawlRecord[] }) {
         {items.map((r, i) => (
           <div
             key={`${r.url}-${i}`}
-            className="group flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
+            className="group relative flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-soft transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-700 dark:bg-slate-800"
           >
+            {onToggleFav && (
+              <button
+                onClick={() => onToggleFav(r)}
+                aria-label="收藏"
+                className="absolute right-2 top-2 z-10 grid h-8 w-8 place-items-center rounded-full bg-white/85 text-rose-500 shadow-sm backdrop-blur hover:bg-white dark:bg-slate-900/70"
+              >
+                <Heart className="h-4 w-4" fill={favUrls?.has(r.url) ? "currentColor" : "none"} />
+              </button>
+            )}
             <button
               onClick={() => r.image_url && setLightbox(r)}
               className="aspect-square w-full overflow-hidden bg-slate-100 dark:bg-slate-700"
