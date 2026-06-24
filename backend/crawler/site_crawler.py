@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 from .detail_scraper import items_from_soup, _LIGHT_HEADERS
 from .reporter import to_dataframe, build_summary
 from .utils import get_domain
+from . import robots
 
 
 def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -> dict:
@@ -33,6 +34,9 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False) -
             on_event({"type": "stopped", "message": "已被使用者停止"})
             break
         url, depth = queue.pop(0)
+        if not robots.allowed(url):
+            on_event({"type": "warning", "message": f"robots.txt 禁止,略過:{url}"})
+            continue
         try:
             r = requests.get(url, headers=_LIGHT_HEADERS, timeout=12)
             ctype = r.headers.get("content-type", "")

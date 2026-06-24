@@ -18,6 +18,9 @@ _LIGHT_HEADERS = {
 
 def _light_fetch_one(url: str) -> dict:
     """用 requests(免瀏覽器)抓單一商品頁的 og:image 與結構化價格。"""
+    from . import robots
+    if not robots.allowed(url):
+        return {}
     try:
         r = requests.get(url, headers=_LIGHT_HEADERS, timeout=8)
         if r.status_code >= 400 or not r.text:
@@ -266,6 +269,9 @@ def _feed_items(soup: BeautifulSoup, base_url: str) -> list[dict]:
 
 def scrape_full_page(url: str) -> list[dict]:
     """整頁抓取:給一個網址,抓出該頁所有表格列 + 內嵌商品(適合股票/排行/列表頁)。"""
+    from . import robots
+    if not robots.allowed(url):
+        raise RuntimeError("該網站的 robots.txt 不允許抓取此頁")
     r = requests.get(url, headers=_LIGHT_HEADERS, timeout=15)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "lxml")
