@@ -87,6 +87,7 @@ export default function AdminPage() {
             註冊 Discord 指令
           </button>
           <Link href={`${ADMIN_BASE}/blog`} className="rounded-lg bg-brand-600 px-3 py-1.5 text-sm text-white hover:bg-brand-700">部落格管理</Link>
+          <Link href={`${ADMIN_BASE}/ops`} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700">營運管理</Link>
         </div>
       </div>
 

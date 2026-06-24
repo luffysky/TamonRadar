@@ -483,6 +483,7 @@ export interface AdminUser {
   provider: string;
   plan: string;
   privileged?: boolean;
+  banned?: boolean;
   ai_used: number;
   tags?: string[];
   created_at: string | null;
@@ -548,6 +549,86 @@ export async function updateProfile(username: string): Promise<{ username: strin
   check401(res);
   if (!res.ok) throw new Error("更新名稱失敗");
   return res.json();
+}
+
+export async function setUserBanned(userId: number, banned: boolean): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/users/${userId}/ban`, {
+    method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ banned }),
+  });
+  check401(res);
+  if (!res.ok) throw new Error("更新停權失敗");
+}
+
+export function exportUsersUrl(): string {
+  return `${API_BASE}/api/admin/users/export`;
+}
+
+export interface AuditLog { id: number; admin_email: string; action: string; target: string; detail: string; created_at: string | null; }
+export async function getAuditLogs(): Promise<{ logs: AuditLog[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/audit`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取稽核失敗");
+  return res.json();
+}
+
+export interface Announcement { id: number; title: string; body: string; level: string; active: boolean; created_at: string | null; }
+export async function getAnnouncements(): Promise<{ announcements: Announcement[] }> {
+  const res = await fetch(`${API_BASE}/api/announcements`);
+  if (!res.ok) return { announcements: [] };
+  return res.json();
+}
+export async function adminListAnnouncements(): Promise<{ announcements: Announcement[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/announcements`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取公告失敗");
+  return res.json();
+}
+export async function adminCreateAnnouncement(data: { title: string; body: string; level: string; active: boolean }): Promise<Announcement> {
+  const res = await fetch(`${API_BASE}/api/admin/announcements`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data) });
+  check401(res);
+  if (!res.ok) throw new Error("建立公告失敗");
+  return res.json();
+}
+export async function adminDeleteAnnouncement(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/announcements/${id}`, { method: "DELETE", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("刪除公告失敗");
+}
+
+export async function adminEmailBlast(subject: string, body: string): Promise<{ sent: number; total: number }> {
+  const res = await fetch(`${API_BASE}/api/admin/email-blast`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ subject, body }) });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "群發失敗");
+  return res.json();
+}
+
+export interface ReportItem { id: number; target_type: string; target_id: number; reason: string; reporter_id: number; status: string; created_at: string | null; }
+export async function createReport(target_type: string, target_id: number, reason: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/report`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify({ target_type, target_id, reason }) });
+  check401(res);
+  if (!res.ok) throw new Error("檢舉失敗");
+}
+export async function getReports(status = "open"): Promise<{ reports: ReportItem[] }> {
+  const res = await fetch(`${API_BASE}/api/admin/reports?status=${status}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取檢舉失敗");
+  return res.json();
+}
+export async function resolveReport(id: number): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/reports/${id}/resolve`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("處理失敗");
+}
+
+export async function getSeo(): Promise<Record<string, string>> {
+  const res = await fetch(`${API_BASE}/api/seo`);
+  if (!res.ok) return {};
+  return res.json();
+}
+export async function saveSeo(data: Record<string, string>): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/admin/seo`, { method: "POST", headers: jsonAuthHeaders(), body: JSON.stringify(data) });
+  check401(res);
+  if (!res.ok) throw new Error("儲存 SEO 失敗");
 }
 
 export async function setupTelegramBot(): Promise<{ ok: boolean; error?: string }> {

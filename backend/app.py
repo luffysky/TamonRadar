@@ -896,6 +896,7 @@ def admin_set_plan(user_id: int, req: PlanRequest, admin=Depends(auth.get_admin)
         raise HTTPException(400, "方案只能是 free 或 pro")
     if not db.set_user_plan(user_id, req.plan):
         raise HTTPException(404, "找不到使用者")
+    db.log_audit(admin.email, "set_plan", str(user_id), req.plan)
     return {"ok": True}
 
 
@@ -907,6 +908,132 @@ class PrivilegeRequest(BaseModel):
 def admin_set_privilege(user_id: int, req: PrivilegeRequest, admin=Depends(auth.get_admin)):
     if not db.set_privilege(user_id, req.privileged):
         raise HTTPException(404, "找不到使用者")
+    db.log_audit(admin.email, "privilege" if req.privileged else "unprivilege", str(user_id))
+    return {"ok": True}
+
+
+class BanRequest(BaseModel):
+    banned: bool
+
+
+@app.post("/api/admin/users/{user_id}/ban")
+def admin_ban(user_id: int, req: BanRequest, admin=Depends(auth.get_admin)):
+    if not db.set_banned(user_id, req.banned):
+        raise HTTPException(404, "找不到使用者")
+    db.log_audit(admin.email, "ban" if req.banned else "unban", str(user_id))
+    return {"ok": True}
+
+
+@app.get("/api/admin/users/export")
+def admin_export_users(admin=Depends(auth.get_admin)):
+    import csv
+    import io
+    rows = db.all_users_for_export()
+    buf = io.StringIO()
+    fields = ["id", "email", "username", "provider", "plan", "privileged", "banned", "ai_used", "tags", "created_at"]
+    w = csv.DictWriter(buf, fieldnames=fields)
+    w.writeheader()
+    w.writerows(rows)
+    db.log_audit(admin.email, "export_users", f"{len(rows)} 筆")
+    return Response(content="﻿" + buf.getvalue(), media_type="text/csv",
+                    headers={"Content-Disposition": "attachment; filename=users.csv"})
+
+
+@app.get("/api/admin/audit")
+def admin_audit(admin=Depends(auth.get_admin)):
+    return {"logs": db.list_audit()}
+
+
+# ---- 站內公告 ----
+class AnnouncementRequest(BaseModel):
+    title: str = ""
+    body: str = ""
+    level: str = "info"
+    active: bool = True
+
+
+@app.get("/api/announcements")
+def public_announcements():
+    return {"announcements": db.list_announcements(active_only=True)}
+
+
+@app.get("/api/admin/announcements")
+def admin_announcements(admin=Depends(auth.get_admin)):
+    return {"announcements": db.list_announcements()}
+
+
+@app.post("/api/admin/announcements")
+def admin_create_announcement(req: AnnouncementRequest, admin=Depends(auth.get_admin)):
+    db.log_audit(admin.email, "announce", req.title)
+    return db.create_announcement(req.model_dump())
+
+
+@app.delete("/api/admin/announcements/{ann_id}")
+def admin_delete_announcement(ann_id: int, admin=Depends(auth.get_admin)):
+    db.delete_announcement(ann_id)
+    return {"ok": True}
+
+
+# ---- Email 群發 ----
+class EmailBlastRequest(BaseModel):
+    subject: str
+    body: str
+
+
+@app.post("/api/admin/email-blast")
+def admin_email_blast(req: EmailBlastRequest, admin=Depends(auth.get_admin)):
+    import mailer
+    if not mailer.mail_available():
+        raise HTTPException(400, "尚未設定寄信(Resend / Gmail)")
+    emails = db.all_user_emails()
+    html = req.body.replace("\n", "<br>")
+    sent = 0
+    for e in emails:
+        try:
+            ok, _ = mailer.send_email(e, req.subject, html)
+            if ok:
+                sent += 1
+        except Exception:
+            pass
+    db.log_audit(admin.email, "email_blast", f"{sent}/{len(emails)}", req.subject)
+    return {"sent": sent, "total": len(emails)}
+
+
+# ---- 檢舉 ----
+class ReportRequest(BaseModel):
+    target_type: str
+    target_id: int
+    reason: str = ""
+
+
+@app.post("/api/report")
+def create_report(req: ReportRequest, user=Depends(auth.get_current_user)):
+    return db.create_report(user.id, req.target_type, req.target_id, req.reason)
+
+
+@app.get("/api/admin/reports")
+def admin_reports(status: str = "open", admin=Depends(auth.get_admin)):
+    return {"reports": db.list_reports(status)}
+
+
+@app.post("/api/admin/reports/{report_id}/resolve")
+def admin_resolve_report(report_id: int, admin=Depends(auth.get_admin)):
+    db.resolve_report(report_id)
+    db.log_audit(admin.email, "resolve_report", str(report_id))
+    return {"ok": True}
+
+
+# ---- SEO 中繼資料 ----
+@app.get("/api/seo")
+def public_seo():
+    return db.get_app_settings()
+
+
+@app.post("/api/admin/seo")
+def admin_save_seo(req: dict, admin=Depends(auth.get_admin)):
+    allowed = {k: str(v) for k, v in req.items() if k in ("site_title", "site_description", "og_image", "keywords")}
+    db.save_app_settings(allowed)
+    db.log_audit(admin.email, "save_seo", "", ", ".join(allowed.keys()))
     return {"ok": True}
 
 

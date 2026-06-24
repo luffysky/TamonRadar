@@ -68,6 +68,7 @@ class User(Base):
     provider: Mapped[str] = mapped_column(String(32), default="local")   # local | google
     plan: Mapped[str] = mapped_column(String(20), default="free")        # free | pro
     privileged: Mapped[bool] = mapped_column(default=False)              # 特權:全功能/全 AI 免費、跳過所有額度
+    banned: Mapped[bool] = mapped_column(default=False)                  # 停權:無法登入/使用
     ai_used: Mapped[int] = mapped_column(default=0)                      # AI 累計呼叫次數
     admin_note: Mapped[str] = mapped_column(Text, default="")           # 後台備註(CRM)
     tags: Mapped[list] = mapped_column(JSON, default=list)              # 後台標籤(CRM)
@@ -199,6 +200,43 @@ class Favorite(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
+class AuditLog(Base):
+    __tablename__ = "tr_audit"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_email: Mapped[str] = mapped_column(String(255), default="")
+    action: Mapped[str] = mapped_column(String(80), default="")
+    target: Mapped[str] = mapped_column(String(255), default="")
+    detail: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class Announcement(Base):
+    __tablename__ = "tr_announcements"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    title: Mapped[str] = mapped_column(String(200), default="")
+    body: Mapped[str] = mapped_column(Text, default="")
+    level: Mapped[str] = mapped_column(String(20), default="info")  # info|warning|success
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Report(Base):
+    __tablename__ = "tr_reports"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    target_type: Mapped[str] = mapped_column(String(20), default="")  # thread|reply|post
+    target_id: Mapped[int] = mapped_column(default=0)
+    reason: Mapped[str] = mapped_column(String(500), default="")
+    reporter_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    status: Mapped[str] = mapped_column(String(20), default="open")  # open|resolved
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class AppSetting(Base):
+    __tablename__ = "tr_app_settings"
+    key: Mapped[str] = mapped_column(String(80), primary_key=True)
+    value: Mapped[str] = mapped_column(Text, default="")
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
     _ensure_columns()
@@ -219,6 +257,7 @@ def _ensure_columns() -> None:
             ("tags", "ALTER TABLE tr_users ADD COLUMN tags JSON"),
             ("username", "ALTER TABLE tr_users ADD COLUMN username VARCHAR(60) DEFAULT ''"),
             ("privileged", "ALTER TABLE tr_users ADD COLUMN privileged BOOLEAN DEFAULT false"),
+            ("banned", "ALTER TABLE tr_users ADD COLUMN banned BOOLEAN DEFAULT false"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -685,7 +724,7 @@ def get_user_detail(user_id: int) -> dict | None:
         }
         return {
             "id": u.id, "email": u.email, "username": u.username or "", "provider": u.provider, "plan": u.plan,
-            "privileged": bool(u.privileged),
+            "privileged": bool(u.privileged), "banned": bool(u.banned),
             "ai_used": u.ai_used or 0, "admin_note": u.admin_note or "", "tags": u.tags or [],
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "counts": {"runs": int(runs), "watches": int(watches), "schedules": int(schedules),
@@ -693,6 +732,144 @@ def get_user_detail(user_id: int) -> dict | None:
             "recent_runs": recent_runs,
             "channels": channels,
         }
+
+
+def set_banned(user_id: int, banned: bool) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        if not u:
+            return False
+        u.banned = bool(banned)
+        s.commit()
+        return True
+
+
+def is_banned(user_id: int) -> bool:
+    with SessionLocal() as s:
+        u = s.get(User, user_id)
+        return bool(u and u.banned)
+
+
+def all_users_for_export() -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(User).order_by(User.created_at.asc())).all()
+        return [{
+            "id": u.id, "email": u.email, "username": u.username or "", "provider": u.provider,
+            "plan": u.plan, "privileged": bool(u.privileged), "banned": bool(u.banned),
+            "ai_used": u.ai_used or 0, "tags": ";".join(u.tags or []),
+            "created_at": u.created_at.isoformat() if u.created_at else "",
+        } for u in rows]
+
+
+def all_user_emails() -> list[str]:
+    with SessionLocal() as s:
+        return [e for (e,) in s.execute(
+            select(User.email).where(User.banned == False, User.email != "")).all()]  # noqa: E712
+
+
+# ---------- 稽核日誌 ----------
+def log_audit(admin_email: str, action: str, target: str = "", detail: str = "") -> None:
+    try:
+        with SessionLocal() as s:
+            s.add(AuditLog(admin_email=admin_email, action=action, target=str(target)[:255], detail=str(detail)[:2000]))
+            s.commit()
+    except Exception:
+        pass
+
+
+def list_audit(limit: int = 200) -> list[dict]:
+    with SessionLocal() as s:
+        rows = s.scalars(select(AuditLog).order_by(AuditLog.created_at.desc()).limit(limit)).all()
+        return [{
+            "id": a.id, "admin_email": a.admin_email, "action": a.action,
+            "target": a.target, "detail": a.detail,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        } for a in rows]
+
+
+# ---------- 站內公告 ----------
+def _ann_dict(a: "Announcement") -> dict:
+    return {"id": a.id, "title": a.title, "body": a.body, "level": a.level, "active": a.active,
+            "created_at": a.created_at.isoformat() if a.created_at else None}
+
+
+def create_announcement(data: dict) -> dict:
+    with SessionLocal() as s:
+        a = Announcement(title=data.get("title", ""), body=data.get("body", ""),
+                         level=data.get("level", "info"), active=data.get("active", True))
+        s.add(a)
+        s.commit()
+        s.refresh(a)
+        return _ann_dict(a)
+
+
+def list_announcements(active_only: bool = False) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(Announcement)
+        if active_only:
+            q = q.where(Announcement.active == True)  # noqa: E712
+        rows = s.scalars(q.order_by(Announcement.created_at.desc())).all()
+        return [_ann_dict(a) for a in rows]
+
+
+def delete_announcement(ann_id: int) -> bool:
+    with SessionLocal() as s:
+        a = s.get(Announcement, ann_id)
+        if not a:
+            return False
+        s.delete(a)
+        s.commit()
+        return True
+
+
+# ---------- 檢舉 ----------
+def create_report(reporter_id: int, target_type: str, target_id: int, reason: str) -> dict:
+    with SessionLocal() as s:
+        r = Report(reporter_id=reporter_id, target_type=target_type, target_id=target_id, reason=reason[:500])
+        s.add(r)
+        s.commit()
+        s.refresh(r)
+        return {"id": r.id, "status": r.status}
+
+
+def list_reports(status: str | None = "open", limit: int = 200) -> list[dict]:
+    with SessionLocal() as s:
+        q = select(Report)
+        if status:
+            q = q.where(Report.status == status)
+        rows = s.scalars(q.order_by(Report.created_at.desc()).limit(limit)).all()
+        return [{
+            "id": r.id, "target_type": r.target_type, "target_id": r.target_id,
+            "reason": r.reason, "reporter_id": r.reporter_id, "status": r.status,
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        } for r in rows]
+
+
+def resolve_report(report_id: int) -> bool:
+    with SessionLocal() as s:
+        r = s.get(Report, report_id)
+        if not r:
+            return False
+        r.status = "resolved"
+        s.commit()
+        return True
+
+
+# ---------- App 設定(SEO 等)----------
+def get_app_settings() -> dict:
+    with SessionLocal() as s:
+        return {k: v for (k, v) in s.execute(select(AppSetting.key, AppSetting.value)).all()}
+
+
+def save_app_settings(data: dict) -> None:
+    with SessionLocal() as s:
+        for k, v in data.items():
+            row = s.get(AppSetting, k)
+            if row is None:
+                s.add(AppSetting(key=k, value=str(v)))
+            else:
+                row.value = str(v)
+        s.commit()
 
 
 def set_privilege(user_id: int, privileged: bool) -> bool:

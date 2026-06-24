@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { getAdminUserDetail, setUserNote, setUserPlan, setUserPrivilege, type AdminUserDetail } from "@/lib/api";
+import { getAdminUserDetail, setUserNote, setUserPlan, setUserPrivilege, setUserBanned, type AdminUserDetail } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 import { ADMIN_BASE } from "@/lib/admin";
@@ -43,6 +43,12 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
     toast(u!.privileged ? "已取消特權" : "已給予特權", "success");
     load();
   }
+  async function toggleBan() {
+    if (!u!.banned && !confirm("確定停權這個帳號?該使用者將無法登入/使用。")) return;
+    await setUserBanned(id, !u!.banned);
+    toast(u!.banned ? "已解除停權" : "已停權", "success");
+    load();
+  }
 
   const Stat = ({ label, value }: { label: string; value: number }) => (
     <div className="rounded-lg border border-slate-200 bg-white p-3 text-center dark:border-slate-700 dark:bg-slate-800">
@@ -71,6 +77,10 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
           <button onClick={togglePriv} className={`rounded-md border px-3 py-1 text-xs ${u.privileged ? "border-violet-300 text-violet-600 hover:bg-violet-50" : "border-slate-300 hover:bg-slate-50 dark:border-slate-600 dark:hover:bg-slate-700"}`}>
             {u.privileged ? "取消特權" : "給予特權(全功能免費)"}
           </button>
+          <button onClick={toggleBan} className={`rounded-md border px-3 py-1 text-xs ${u.banned ? "border-emerald-300 text-emerald-600 hover:bg-emerald-50" : "border-rose-300 text-rose-600 hover:bg-rose-50"}`}>
+            {u.banned ? "解除停權" : "停權"}
+          </button>
+          {u.banned && <span className="rounded-full bg-rose-100 px-2 py-0.5 text-xs text-rose-700">已停權</span>}
         </div>
       </div>
 

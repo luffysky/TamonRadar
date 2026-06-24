@@ -113,6 +113,8 @@ def get_current_user(
         user = s.get(User, user_id)
     if user is None:
         raise HTTPException(401, "使用者不存在")
+    if getattr(user, "banned", False):
+        raise HTTPException(403, "此帳號已被停權")
     return user
 
 
