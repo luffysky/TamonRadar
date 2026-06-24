@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
@@ -10,9 +10,10 @@ import Underline from "@tiptap/extension-underline";
 import EmojiPicker, { Theme } from "emoji-picker-react";
 import {
   Bold, Italic, Underline as UnderlineIcon, Heading1, Heading2, Quote,
-  List, ListOrdered, Link as LinkIcon, Image as ImageIcon, Smile, Film, Undo, Redo,
+  List, ListOrdered, Link as LinkIcon, Image as ImageIcon, Smile, Film, Paperclip, Loader2, Undo, Redo,
 } from "lucide-react";
 import GifPicker from "./GifPicker";
+import { uploadFile } from "@/lib/api";
 
 function Btn({ active, onClick, title, children }: { active?: boolean; onClick: () => void; title: string; children: React.ReactNode }) {
   return (
@@ -40,6 +41,8 @@ export default function RichTextEditor({
 }) {
   const [showEmoji, setShowEmoji] = useState(false);
   const [showGif, setShowGif] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -59,6 +62,14 @@ export default function RichTextEditor({
     },
   });
 
+  // 外部 content 變更時同步(載入既有文章、送出後清空)。打字時 content===getHTML() 不會誤觸。
+  useEffect(() => {
+    if (editor && content !== editor.getHTML()) {
+      editor.commands.setContent(content || "");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, editor]);
+
   if (!editor) return null;
 
   const addLink = () => {
@@ -69,6 +80,25 @@ export default function RichTextEditor({
     const url = window.prompt("輸入圖片網址");
     if (url) editor.chain().focus().setImage({ src: url }).run();
   };
+
+  async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f || !editor) return;
+    setUploading(true);
+    try {
+      const { url, type, name } = await uploadFile(f);
+      const t = type || "";
+      if (t.startsWith("image/")) editor.chain().focus().setImage({ src: url }).run();
+      else if (t.startsWith("video/")) editor.chain().focus().insertContent(`<video controls src="${url}" style="max-width:100%"></video><p></p>`).run();
+      else if (t.startsWith("audio/")) editor.chain().focus().insertContent(`<audio controls src="${url}"></audio><p></p>`).run();
+      else editor.chain().focus().insertContent(`<a href="${url}" target="_blank" rel="noreferrer">📎 ${name || "下載檔案"}</a><p></p>`).run();
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "上傳失敗");
+    } finally {
+      setUploading(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  }
 
   return (
     <div className="space-y-1.5">
@@ -84,7 +114,11 @@ export default function RichTextEditor({
         <Btn active={editor.isActive("orderedList")} onClick={() => editor.chain().focus().toggleOrderedList().run()} title="編號清單"><ListOrdered className="h-4 w-4" /></Btn>
         <span className="mx-0.5 h-5 w-px bg-slate-200 dark:bg-slate-600" />
         <Btn active={editor.isActive("link")} onClick={addLink} title="連結"><LinkIcon className="h-4 w-4" /></Btn>
-        <Btn onClick={addImage} title="圖片"><ImageIcon className="h-4 w-4" /></Btn>
+        <Btn onClick={addImage} title="圖片網址"><ImageIcon className="h-4 w-4" /></Btn>
+        <Btn onClick={() => fileRef.current?.click()} title="上傳檔案(圖片/影片/音樂/任意)">
+          {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
+        </Btn>
+        <input ref={fileRef} type="file" hidden onChange={onFile} />
 
         <div className="relative">
           <Btn active={showEmoji} onClick={() => { setShowEmoji((s) => !s); setShowGif(false); }} title="表情"><Smile className="h-4 w-4" /></Btn>

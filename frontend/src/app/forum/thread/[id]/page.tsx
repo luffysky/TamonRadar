@@ -9,7 +9,8 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
-import Markdown from "@/components/Markdown";
+import RichContent from "@/components/social/RichContent";
+import RichTextEditor from "@/components/social/RichTextEditor";
 
 export default function ThreadPage({ params }: { params: { id: string } }) {
   const id = Number(params.id);
@@ -65,7 +66,7 @@ export default function ThreadPage({ params }: { params: { id: string } }) {
         <p className="mt-1 text-xs text-slate-400">
           {thread.author} · {thread.created_at ? new Date(thread.created_at).toLocaleString("zh-TW") : ""}
         </p>
-        <div className="mt-3"><Markdown>{thread.content ?? ""}</Markdown></div>
+        <div className="mt-3"><RichContent html={thread.content ?? ""} /></div>
         {canManage(thread.author_id) && (
           <button onClick={removeThread} className="mt-3 text-xs text-rose-500 hover:underline">刪除主題</button>
         )}
@@ -76,7 +77,7 @@ export default function ThreadPage({ params }: { params: { id: string } }) {
         {thread.replies?.map((r) => (
           <div key={r.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
             <p className="text-xs text-slate-400">{r.author} · {r.created_at ? new Date(r.created_at).toLocaleString("zh-TW") : ""}</p>
-            <div className="mt-1"><Markdown>{r.content}</Markdown></div>
+            <div className="mt-1"><RichContent html={r.content} /></div>
             {canManage(r.author_id) && (
               <button onClick={() => removeReply(r.id)} className="mt-1 text-xs text-rose-500 hover:underline">刪除</button>
             )}
@@ -86,7 +87,7 @@ export default function ThreadPage({ params }: { params: { id: string } }) {
 
       {user ? (
         <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-          <textarea value={reply} onChange={(e) => setReply(e.target.value)} rows={3} placeholder="回覆…(支援 Markdown)" className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-brand-500 focus:outline-none dark:border-slate-600" />
+          <RichTextEditor content={reply} onChange={setReply} placeholder="回覆…" />
           <button onClick={submitReply} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">送出回覆</button>
         </div>
       ) : (

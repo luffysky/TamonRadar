@@ -84,6 +84,15 @@ export interface HealthInfo {
   default_provider: string;
 }
 
+export async function uploadFile(file: File): Promise<{ url: string; name: string; type: string }> {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`${API_BASE}/api/upload`, { method: "POST", headers: authHeaders(), body: fd });
+  check401(res);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "上傳失敗");
+  return res.json();
+}
+
 export async function getHealth(): Promise<HealthInfo> {
   const res = await fetch(`${API_BASE}/api/health`);
   if (!res.ok) throw new Error("無法連線後端");

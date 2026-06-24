@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { API_BASE, type BlogPost } from "@/lib/api";
-import Markdown from "@/components/Markdown";
+import RichContent from "@/components/social/RichContent";
 
 const SITE = process.env.NEXT_PUBLIC_SITE_URL ?? "https://tamonradar.snowrealm.pet";
 
@@ -63,7 +63,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
         <img src={post.cover_image} alt={post.title} className="mt-4 w-full rounded-xl object-cover" />
       )}
       <div className="mt-6">
-        <Markdown>{post.content ?? ""}</Markdown>
+        <RichContent html={post.content ?? ""} />
       </div>
     </article>
   );

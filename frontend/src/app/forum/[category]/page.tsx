@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
+import RichTextEditor from "@/components/social/RichTextEditor";
 
 export default function ForumCategoryPage({ params }: { params: { category: string } }) {
   const { user } = useAuth();
@@ -62,7 +63,7 @@ export default function ForumCategoryPage({ params }: { params: { category: stri
       {showForm && user && (
         <div className="space-y-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="標題" className={field} />
-          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={5} placeholder="想說什麼…(支援 Markdown)" className={field} />
+          <RichTextEditor content={content} onChange={setContent} placeholder="想說什麼…" />
           <button onClick={submit} className="rounded-lg bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700">送出</button>
         </div>
       )}

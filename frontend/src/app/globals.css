@@ -81,6 +81,8 @@ body {
 .markdown pre { @apply my-3 overflow-auto rounded-lg bg-slate-900 p-3 text-sm text-slate-100; }
 .markdown pre code { @apply bg-transparent p-0; }
 .markdown img { @apply my-3 max-w-full rounded-lg; }
+.markdown video { @apply my-3 max-w-full rounded-lg; }
+.markdown audio { @apply my-3 w-full; }
 .markdown table { @apply my-3 w-full border-collapse text-sm; }
 .markdown th, .markdown td { @apply border border-slate-200 px-2 py-1 dark:border-slate-700; }
 

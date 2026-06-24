@@ -8,7 +8,7 @@ import io
 import json
 import os
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -23,6 +23,7 @@ import ai
 import mailer
 import notify
 import scheduler
+import uploader
 from oauth_google import router as google_router
 from oauth_google import _frontend as _frontend_url
 from jobs import manager
@@ -214,6 +215,24 @@ def root():
         "status": "ok",
         "hint": "這是後端 API,請從前端網站使用。健康檢查:/api/health,文件:/docs",
     }
+
+
+MAX_UPLOAD = 50 * 1024 * 1024  # 50MB
+
+
+@app.post("/api/upload")
+async def upload_file(file: UploadFile = File(...), user=Depends(auth.get_current_user)):
+    """上傳任意檔案到 R2,回傳公開網址(圖片/影片/音樂/檔案皆可)。"""
+    if not uploader.r2_available():
+        raise HTTPException(503, "後端尚未設定 R2 儲存(R2_* 環境變數)")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD:
+        raise HTTPException(413, "檔案太大(上限 50MB)")
+    try:
+        url = uploader.upload(file.filename or "file", data, file.content_type or "")
+    except Exception as e:
+        raise HTTPException(500, f"上傳失敗:{e}")
+    return {"url": url, "name": file.filename, "type": file.content_type}
 
 
 @app.post("/api/assistant")

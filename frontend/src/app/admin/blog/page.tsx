@@ -8,6 +8,7 @@ import {
 } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
+import RichTextEditor from "@/components/social/RichTextEditor";
 
 const EMPTY: PostInput = {
   title: "", slug: "", excerpt: "", content: "", cover_image: "", category: "", tags: [], published: false,
@@ -85,7 +86,7 @@ export default function AdminBlogPage() {
         </div>
         <input value={form.cover_image} onChange={(e) => setForm({ ...form, cover_image: e.target.value })} placeholder="封面圖網址(選填)" className={field} />
         <input value={form.excerpt} onChange={(e) => setForm({ ...form, excerpt: e.target.value })} placeholder="摘要(列表/SEO 用)" className={field} />
-        <textarea value={form.content} onChange={(e) => setForm({ ...form, content: e.target.value })} rows={12} placeholder="內文(支援 Markdown)" className={`${field} font-mono`} />
+        <RichTextEditor content={form.content} onChange={(html) => setForm({ ...form, content: html })} placeholder="內文…" />
         <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
           <input type="checkbox" checked={form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} />
           發布(打勾才會公開顯示)
