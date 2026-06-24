@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 import { ADMIN_BASE } from "@/lib/admin";
@@ -211,6 +212,21 @@ export default function AdminOpsPage() {
               <div className="text-xs text-slate-500">輸出 tokens</div>
             </div>
           </div>
+
+          {aiCosts.trend && aiCosts.trend.length > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+              <h3 className="mb-2 text-sm font-semibold text-slate-700 dark:text-slate-200">近 30 天成本趨勢(USD)</h3>
+              <div style={{ width: "100%", height: 180 }}><ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={aiCosts.trend}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
+                  <XAxis dataKey="date" stroke="#94a3b8" fontSize={10} interval={4} />
+                  <YAxis stroke="#94a3b8" fontSize={10} />
+                  <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} />
+                  <Area type="monotone" dataKey="cost" name="成本" stroke="#2f5597" fill="#2f5597" fillOpacity={0.2} />
+                </AreaChart>
+              </ResponsiveContainer></div>
+            </div>
+          )}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm dark:border-slate-700 dark:bg-slate-800">
               <p className="mb-2 font-semibold text-slate-700 dark:text-slate-200">各模型成本</p>

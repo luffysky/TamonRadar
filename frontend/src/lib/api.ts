@@ -734,6 +734,7 @@ export interface AiCosts {
   by_model: { model: string; calls: number; cost: number }[];
   recent: { email: string; provider: string; model: string; in_tokens: number; out_tokens: number; cost: number; created_at: string | null }[];
   top_users: { email: string; cost: number }[];
+  trend?: { date: string; cost: number }[];
 }
 export async function getAiCosts(): Promise<AiCosts> {
   const res = await fetch(`${API_BASE}/api/admin/ai-costs`, { headers: authHeaders() });

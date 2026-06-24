@@ -1061,9 +1061,20 @@ def admin_ai_costs(limit: int = 50) -> dict:
         top = [{"email": e, "cost": round(float(c or 0), 4)} for e, c in s.execute(
             select(User.email, func.sum(AiCost.cost_usd)).join(User, AiCost.user_id == User.id)
             .group_by(User.email).order_by(func.sum(AiCost.cost_usd).desc()).limit(5)).all()]
+        from datetime import timedelta
+        since = _now() - timedelta(days=30)
+        cost_rows = s.execute(select(AiCost.created_at, AiCost.cost_usd).where(AiCost.created_at >= since)).all()
+    tb: dict = {}
+    for dt, c in cost_rows:
+        if dt:
+            k = dt.strftime("%Y-%m-%d")
+            tb[k] = tb.get(k, 0.0) + float(c or 0)
+    from datetime import timedelta as _td
+    day_keys = [( _now() - _td(days=30) + _td(days=i)).strftime("%Y-%m-%d") for i in range(31)]
+    trend = [{"date": d[5:], "cost": round(tb.get(d, 0.0), 4)} for d in day_keys]
     return {
         "total_cost": round(float(total_cost), 4), "total_in": int(total_in), "total_out": int(total_out),
-        "by_model": by_model, "recent": recent, "top_users": top,
+        "by_model": by_model, "recent": recent, "top_users": top, "trend": trend,
     }
 
 
