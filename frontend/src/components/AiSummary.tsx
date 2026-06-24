@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Sparkles } from "lucide-react";
 import { summarize } from "@/lib/api";
 
 export default function AiSummary({ runId }: { runId: string }) {
@@ -24,7 +25,7 @@ export default function AiSummary({ runId }: { runId: string }) {
   return (
     <div className="rounded-xl border border-violet-200 bg-violet-50/60 p-4 shadow-sm dark:border-violet-900 dark:bg-violet-950/30">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-violet-700">✨ AI 情報摘要</h3>
+        <h3 className="flex items-center gap-1.5 text-sm font-semibold text-violet-700"><Sparkles className="h-4 w-4" /> AI 情報摘要</h3>
         <button
           onClick={run}
           disabled={loading}
