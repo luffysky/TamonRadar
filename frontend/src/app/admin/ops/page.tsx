@@ -29,6 +29,8 @@ export default function AdminOpsPage() {
   const [appForm, setAppForm] = useState({ key: "", value: "" });
   const [aiCosts, setAiCosts] = useState<AiCosts | null>(null);
   const [botChats, setBotChats] = useState<BotChat[]>([]);
+  const [botPlatform, setBotPlatform] = useState("");
+  const [botQuery, setBotQuery] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -203,13 +205,27 @@ export default function AdminOpsPage() {
       {tab === "bot" && (
         <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
           <p className="text-xs text-slate-400">使用者在 Telegram / Discord 跟 AI bot 的對話紀錄。</p>
-          {botChats.length === 0 ? <p className="text-sm text-slate-400">尚無紀錄</p> : botChats.map((c) => (
+          <div className="flex flex-wrap gap-2">
+            <select value={botPlatform} onChange={(e) => setBotPlatform(e.target.value)} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900">
+              <option value="">全部平台</option>
+              <option value="telegram">Telegram</option>
+              <option value="discord">Discord</option>
+            </select>
+            <input value={botQuery} onChange={(e) => setBotQuery(e.target.value)} placeholder="搜尋使用者 / 問題 / 回答…" className="flex-1 rounded-lg border border-slate-300 px-3 py-1.5 text-sm dark:border-slate-600 dark:bg-slate-900" />
+          </div>
+          {(() => {
+            const q = botQuery.trim().toLowerCase();
+            const filtered = botChats.filter((c) =>
+              (!botPlatform || c.platform === botPlatform) &&
+              (!q || `${c.platform_user} ${c.question} ${c.answer}`.toLowerCase().includes(q)));
+            return filtered.length === 0 ? <p className="text-sm text-slate-400">無符合的紀錄</p> : filtered.map((c) => (
             <div key={c.id} className="rounded-lg border border-slate-100 p-2 text-sm dark:border-slate-700">
               <p className="text-[10px] text-slate-400">{c.platform} · {c.platform_user} · {c.created_at ? new Date(c.created_at).toLocaleString("zh-TW") : ""}</p>
               <p className="mt-0.5 font-medium text-slate-700 dark:text-slate-200">問:{c.question}</p>
               <p className="mt-0.5 whitespace-pre-wrap text-slate-600 dark:text-slate-300">答:{c.answer}</p>
             </div>
-          ))}
+            ));
+          })()}
         </div>
       )}
 

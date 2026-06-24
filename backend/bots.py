@@ -74,11 +74,19 @@ def telegram_set_webhook(base_url: str) -> dict:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         return {"ok": False, "error": "未設定 TELEGRAM_BOT_TOKEN"}
+    if not base_url.startswith("https://"):
+        return {"ok": False, "error": f"webhook 必須是 https,目前 base={base_url};請設 OAUTH_REDIRECT_BASE 為後端 https 網址"}
     secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "tamon")
     url = f"{base_url.rstrip('/')}/api/telegram/webhook/{secret}"
     try:
-        r = requests.post(f"https://api.telegram.org/bot{token}/setWebhook", json={"url": url}, timeout=20)
-        return {"ok": True, "webhook": url, "telegram": r.json()}
+        r = requests.post(
+            f"https://api.telegram.org/bot{token}/setWebhook",
+            json={"url": url, "allowed_updates": ["message"], "drop_pending_updates": True},
+            timeout=20,
+        )
+        info = requests.get(f"https://api.telegram.org/bot{token}/getWebhookInfo", timeout=15).json()
+        res = r.json()
+        return {"ok": bool(res.get("ok")), "webhook": url, "setWebhook": res, "info": info.get("result", {})}
     except Exception as e:
         return {"ok": False, "error": str(e)[:200]}
 

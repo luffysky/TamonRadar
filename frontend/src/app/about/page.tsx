@@ -123,6 +123,24 @@ export default function AboutPage() {
         </ul>
       </Card>
 
+      <Card title="爬蟲規範與合規(我們的原則)">
+        <p className="mb-3 text-sm text-slate-600 dark:text-slate-300">
+          TamonRadar 以「彙整公開資訊、導流回原網站」為目的,並遵守以下規範:
+        </p>
+        <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-200">
+          <li>🤖 <strong>尊重 robots.txt</strong> — 每個網域抓取前先讀並快取其 robots 規則,<strong>明文禁止的路徑一律不爬</strong>。</li>
+          <li>🐢 <strong>低頻、慢速</strong> — 動作間隨機間隔、限制頁數與深度,避免造成對方伺服器負擔;請勿設過短的監看間隔。</li>
+          <li>📰 <strong>只取公開資料</strong> — 抓取公開頁面的標題、價格、縮圖、結構化資料(JSON-LD / RSS / 公開 API);不破解付費牆、不竊取隱私資料。</li>
+          <li>🔗 <strong>導流而非取代</strong> — 結果一律附上原始連結與來源,鼓勵使用者前往原網站完成購買/閱讀。</li>
+          <li>🔐 <strong>登入內容</strong> — 僅在你本人擁有合法存取權、且符合該站條款的前提下進行;不會散布或轉售他人受保護內容。</li>
+          <li>🚫 <strong>不做違法用途</strong> — 不用於 DDoS、大量帳號攻擊、繞過防護或任何違反法律與網站條款的行為。</li>
+          <li>📩 <strong>移除請求</strong> — 網站方若希望不被收錄,可透過 robots.txt 封鎖,或來信告知,我們會配合下架。</li>
+        </ul>
+        <p className="mt-4 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300">
+          使用者亦須遵守:請依各網站服務條款與當地法律使用本工具,並對自己設定的爬取/監看行為負責。
+        </p>
+      </Card>
+
       <Card title="技術架構">
         <div className="grid gap-3 sm:grid-cols-2 text-sm">
           <div className="rounded-lg bg-slate-50 dark:bg-slate-900 p-3">
