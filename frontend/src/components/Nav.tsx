@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Menu, X } from "lucide-react";
 import { useAuth } from "./AuthProvider";
 import ThemeToggle from "./ThemeToggle";
 
@@ -69,44 +70,46 @@ export default function Nav() {
         <div className="flex items-center gap-1 md:hidden">
           <ThemeToggle />
           <button
-            onClick={() => setOpen((o) => !o)}
+            onClick={() => setOpen(true)}
             aria-label="選單"
             aria-expanded={open}
             className="grid h-9 w-9 place-items-center rounded-md text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
           >
-            {open ? "✕" : "☰"}
+            <Menu className="h-5 w-5" />
           </button>
         </div>
       </div>
 
-      {/* 手機展開選單 — 平滑展開(grid-rows 0fr→1fr) */}
-      <div className={`grid overflow-hidden transition-all duration-300 ease-out md:hidden ${open ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}>
-        <div className="overflow-hidden">
-          <nav className="border-t border-slate-200 bg-white px-4 py-2 text-sm dark:border-slate-700 dark:bg-slate-900">
-            <div className="flex flex-col gap-0.5">
-              {visible.map((l, i) => (
-                <Link
-                  key={l.href}
-                  href={l.href}
-                  onClick={() => setOpen(false)}
-                  style={{ transitionDelay: open ? `${i * 25}ms` : "0ms" }}
-                  className={`${linkCls(l.href)} transition-all ${open ? "translate-x-0 opacity-100" : "-translate-x-2 opacity-0"}`}
-                >
-                  {l.label}
-                </Link>
-              ))}
-              <div className="my-1 border-t border-slate-100 dark:border-slate-700" />
-              {user ? (
-                <button onClick={() => { setOpen(false); signOut(); }} className="rounded-md px-3 py-1.5 text-left text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
-                  登出({user.email})
-                </button>
-              ) : (
-                <Link href="/login" onClick={() => setOpen(false)} className="rounded-md bg-brand-600 px-3 py-1.5 text-center text-white hover:bg-brand-700">登入</Link>
-              )}
-            </div>
-          </nav>
+      {/* 手機側邊抽屜:從右往左滑入、滿視口高 */}
+      <div
+        onClick={() => setOpen(false)}
+        className={`fixed inset-0 z-40 bg-black/40 transition-opacity duration-300 md:hidden ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+      />
+      <aside
+        className={`fixed right-0 top-0 z-50 flex h-[100dvh] w-72 max-w-[82vw] transform flex-col border-l border-slate-200 bg-white shadow-2xl transition-transform duration-300 ease-out md:hidden dark:border-slate-700 dark:bg-slate-900 ${open ? "translate-x-0" : "translate-x-full"}`}
+      >
+        <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+          <span className="font-bold text-brand-600 dark:text-brand-300">選單</span>
+          <button onClick={() => setOpen(false)} aria-label="關閉" className="grid h-9 w-9 place-items-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
+            <X className="h-5 w-5" />
+          </button>
         </div>
-      </div>
+        <div className="flex flex-1 flex-col gap-0.5 overflow-auto p-3 text-sm">
+          {visible.map((l) => (
+            <Link key={l.href} href={l.href} onClick={() => setOpen(false)} className={`${linkCls(l.href)} py-2.5`}>
+              {l.label}
+            </Link>
+          ))}
+          <div className="my-2 border-t border-slate-100 dark:border-slate-700" />
+          {user ? (
+            <button onClick={() => { setOpen(false); signOut(); }} className="rounded-md px-3 py-2.5 text-left text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700">
+              登出({user.email})
+            </button>
+          ) : (
+            <Link href="/login" onClick={() => setOpen(false)} className="rounded-md bg-brand-600 px-3 py-2.5 text-center text-white hover:bg-brand-700">登入</Link>
+          )}
+        </div>
+      </aside>
     </header>
   );
 }

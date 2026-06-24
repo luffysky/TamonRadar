@@ -7,6 +7,8 @@ import os
 from datetime import datetime, timezone
 from pathlib import Path
 
+import crypto
+
 from sqlalchemy import (
     JSON, DateTime, ForeignKey, String, Text, create_engine, func, inspect, select, text,
 )
@@ -307,7 +309,17 @@ def get_settings(user_id: int) -> dict:
         st = s.get(Settings, user_id)
         if st is None:
             return {k: "" for k in fields}
-        return {k: (getattr(st, k) or "") for k in fields}
+        return {
+            k: (crypto.decrypt(getattr(st, k)) if k in _SECRET_FIELDS else (getattr(st, k) or ""))
+            for k in fields
+        }
+
+
+# 需要加密儲存的敏感欄位
+_SECRET_FIELDS = {
+    "discord_webhook", "telegram_token", "telegram_chat_id",
+    "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key",
+}
 
 
 def save_settings(user_id: int, data: dict) -> None:
@@ -320,7 +332,8 @@ def save_settings(user_id: int, data: dict) -> None:
             s.add(st)
         for key in fields:
             if key in data and data[key] is not None:
-                setattr(st, key, data[key])
+                value = crypto.encrypt(data[key]) if key in _SECRET_FIELDS else data[key]
+                setattr(st, key, value)
         s.commit()
 
 

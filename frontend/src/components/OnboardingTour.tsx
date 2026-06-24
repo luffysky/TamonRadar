@@ -78,17 +78,18 @@ export default function OnboardingTour() {
     ? { top: rect.top - pad, left: rect.left - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }
     : null;
 
-  // 提示卡位置:目標下方,空間不夠就放上方;沒有目標就置中
+  // 提示卡位置:夾在視窗內,目標下方優先,空間不夠放上方;沒有目標就置中
+  const vw = typeof window !== "undefined" ? window.innerWidth : 400;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const cardW = Math.min(320, vw - 24);
   let card: React.CSSProperties;
   if (spot) {
+    const left = Math.min(Math.max(12, spot.left), vw - cardW - 12);
     const below = spot.top + spot.height + 12;
-    const above = spot.top - 12;
-    card = below + 200 < vh
-      ? { position: "fixed", top: below, left: Math.max(12, spot.left), maxWidth: "calc(100vw - 24px)" }
-      : { position: "fixed", top: Math.max(12, above - 180), left: Math.max(12, spot.left), maxWidth: "calc(100vw - 24px)" };
+    const top = below + 220 < vh ? below : Math.max(12, spot.top - 232);
+    card = { position: "fixed", top, left, width: cardW };
   } else {
-    card = { position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)" };
+    card = { position: "fixed", top: "50%", left: "50%", width: cardW, transform: "translate(-50%,-50%)" };
   }
 
   return (

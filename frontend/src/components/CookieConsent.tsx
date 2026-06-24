@@ -27,7 +27,7 @@ export default function CookieConsent() {
   }
 
   return (
-    <div className="animate-slide-up fixed bottom-4 left-1/2 z-50 w-[min(34rem,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
+    <div className="animate-slide-up fixed inset-x-3 bottom-3 z-50 mx-auto max-w-lg rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl dark:border-slate-700 dark:bg-slate-800">
       <div className="flex items-start gap-3">
         <Cookie className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
         <div className="text-sm text-slate-600 dark:text-slate-300">
