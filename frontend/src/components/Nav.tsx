@@ -49,7 +49,7 @@ export default function Nav() {
       <div className="mx-auto flex max-w-6xl items-center justify-between gap-2 px-4 py-3">
         <Link href="/" onClick={() => setOpen(false)} className="flex shrink-0 items-center gap-2 font-bold text-brand-600 dark:text-brand-300">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo-mark.png" alt="TamonRadar" className="h-9 w-9 rounded-lg object-cover shadow-sm ring-1 ring-slate-200 dark:ring-slate-700" />
+          <img src="/logo-mark.png" alt="TamonRadar" className="h-9 w-9 rounded-full object-cover shadow-sm ring-1 ring-slate-200 dark:ring-slate-700" />
           <span>TamonRadar</span>
         </Link>
 

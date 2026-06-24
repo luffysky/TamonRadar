@@ -94,19 +94,42 @@ def _structured_price(soup: BeautifulSoup) -> str:
     return ""
 
 
+def _fmt_num(v) -> str:
+    """把 12345.0 顯示成 12345。"""
+    try:
+        f = float(v)
+        return str(int(f)) if f == int(f) else str(f)
+    except Exception:
+        return str(v)
+
+
 def _walk_jsonld_prices(data) -> list[str]:
     found = []
     if isinstance(data, dict):
         offers = data.get("offers")
         if isinstance(offers, dict):
-            price = offers.get("price")
             currency = offers.get("priceCurrency", "")
-            if price:
-                found.append(f"{currency} {price}".strip())
+            low, high = offers.get("lowPrice"), offers.get("highPrice")
+            # AggregateOffer:用真實的價格區間(low–high)
+            if low and high and str(low) != str(high):
+                found.append(f"{currency} {_fmt_num(low)}–{_fmt_num(high)}".strip())
+            elif offers.get("price"):
+                found.append(f"{currency} {_fmt_num(offers.get('price'))}".strip())
+            elif low:
+                found.append(f"{currency} {_fmt_num(low)}".strip())
         elif isinstance(offers, list):
-            for off in offers:
-                if isinstance(off, dict) and off.get("price"):
-                    found.append(f"{off.get('priceCurrency', '')} {off.get('price')}".strip())
+            prices = [o.get("price") for o in offers if isinstance(o, dict) and o.get("price")]
+            cur = next((o.get("priceCurrency", "") for o in offers if isinstance(o, dict) and o.get("priceCurrency")), "")
+            nums = []
+            for p in prices:
+                try:
+                    nums.append(float(p))
+                except Exception:
+                    pass
+            if len(nums) >= 2 and min(nums) != max(nums):
+                found.append(f"{cur} {_fmt_num(min(nums))}–{_fmt_num(max(nums))}".strip())
+            elif prices:
+                found.append(f"{cur} {_fmt_num(prices[0])}".strip())
         for value in data.values():
             found.extend(_walk_jsonld_prices(value))
     elif isinstance(data, list):
