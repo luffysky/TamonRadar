@@ -23,7 +23,9 @@ def _client():
         aws_access_key_id=os.environ["R2_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["R2_SECRET_ACCESS_KEY"],
         region_name="auto",
-        config=Config(signature_version="s3v4", s3={"addressing_style": "path"}),
+        # R2 不支援 boto3 預設的 CRC 校驗標頭,只在必要時才帶
+        config=Config(signature_version="s3v4", s3={"addressing_style": "path"},
+                      request_checksum_calculation="when_required", response_checksum_validation="when_required"),
     )
 
 

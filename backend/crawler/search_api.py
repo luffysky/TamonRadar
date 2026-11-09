@@ -59,10 +59,16 @@ _BRAVE_MIN_INTERVAL = 1.1
 
 
 def _brave_throttle() -> None:
+    """跨 Function 實例的節流:用 DB 限流器搶每 1.1 秒一個名額,搶不到才等;最多等約 8 秒就放行。"""
     global _brave_last_call
     wait = _BRAVE_MIN_INTERVAL - (time.monotonic() - _brave_last_call)
     if wait > 0:
         time.sleep(wait)
+    import ratelimit
+    for _ in range(40):
+        if ratelimit.hit("brave:global", 1, _BRAVE_MIN_INTERVAL):
+            break
+        time.sleep(0.2)
     _brave_last_call = time.monotonic()
 
 

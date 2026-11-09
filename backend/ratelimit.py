@@ -66,7 +66,7 @@ def _hit_db(key: str, limit: int, window_seconds: int) -> bool:
     return allowed
 
 
-def hit(key: str, limit: int, window_seconds: int) -> bool:
+def hit(key: str, limit: int, window_seconds: float) -> bool:
     """記一次;回傳是否仍在限制內。超限的這次不計入。"""
     if limit <= 0:
         return False

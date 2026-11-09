@@ -477,6 +477,7 @@ def test_presign_signs_type_and_length(client, user, bearer, r2_env):
     data = r.json()
     assert data["url"].startswith("https://cdn.example.com/uploads/") and data["url"].endswith(".png")
     assert "content-length" in data["upload_url"].lower() and "content-type" in data["upload_url"].lower()
+    assert "checksum" not in data["upload_url"].lower()  # R2 不接受 boto3 預設的 CRC 參數
 
 
 def test_presign_rejects_over_50mb(client, user, bearer, r2_env):
@@ -537,7 +538,6 @@ def test_rate_limit_falls_back_when_db_down(monkeypatch):
 def test_selenium_not_imported_on_web_path():
     for name in ("selenium", "webdriver_manager", "apscheduler", "sse_starlette"):
         assert name not in sys.modules, name
-    runner.google_search if False else None
 
 
 def test_no_threads_started_on_job_create(user, monkeypatch):
