@@ -4,12 +4,12 @@
 """
 import hmac
 import os
-import threading
 
 import requests
 
 import ai
 import db
+import jobs
 import ratelimit
 from knowledge import KNOWLEDGE
 
@@ -67,14 +67,21 @@ def _handle_telegram(update: dict) -> None:
         _ok, msg = db.consume_bind_code(code, "telegram", str(chat_id))
         telegram_send(chat_id, msg)
         return
-    ans = answer(text, f"telegram:{chat_id}")
+    # 需要呼叫 AI 的走工作佇列:webhook 立刻回應,回覆由工作者送出
     uname = (msg.get("from", {}).get("username") or msg.get("from", {}).get("first_name") or str(chat_id))
-    db.add_bot_chat_log("telegram", uname, text, ans)
-    telegram_send(chat_id, ans)
+    update_id = update.get("update_id")
+    jobs.enqueue("bot_telegram", config={"chat_id": chat_id, "text": text, "uname": uname},
+                 dedupe_key=f"tg:{update_id}" if update_id is not None else None, priority=10, max_attempts=1)
 
 
-def handle_telegram_async(update: dict) -> None:
-    threading.Thread(target=_handle_telegram, args=(update,), daemon=True).start()
+def handle_telegram(update: dict) -> None:
+    _handle_telegram(update)
+
+
+def run_telegram(cfg: dict) -> None:
+    ans = answer(cfg["text"], f"telegram:{cfg['chat_id']}")
+    db.add_bot_chat_log("telegram", cfg.get("uname", ""), cfg["text"], ans)
+    telegram_send(cfg["chat_id"], ans)
 
 
 def telegram_webhook_secret_ok(secret: str) -> bool:
@@ -134,12 +141,16 @@ def _discord_followup(app_id: str, token: str, content: str) -> None:
         pass
 
 
-def handle_discord_command_async(app_id: str, token: str, question: str, user: str = "") -> None:
-    def _run():
-        ans = answer(question, f"discord:{user or token[:12]}")
-        db.add_bot_chat_log("discord", user, question, ans)
-        _discord_followup(app_id, token, ans)
-    threading.Thread(target=_run, daemon=True).start()
+def enqueue_discord_command(interaction_id: str, app_id: str, token: str, question: str, user: str = "") -> None:
+    """Discord 要求 3 秒內回應:先 defer,實際回答由工作者用 followup 編輯。"""
+    jobs.enqueue("bot_discord", config={"app_id": app_id, "token": token, "question": question, "user": user},
+                 dedupe_key=f"dc:{interaction_id}" if interaction_id else None, priority=10, max_attempts=1)
+
+
+def run_discord(cfg: dict) -> None:
+    ans = answer(cfg["question"], f"discord:{cfg.get('user') or cfg['token'][:12]}")
+    db.add_bot_chat_log("discord", cfg.get("user", ""), cfg["question"], ans)
+    _discord_followup(cfg["app_id"], cfg["token"], ans)
 
 
 def discord_register_command() -> dict:
