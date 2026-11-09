@@ -1,9 +1,8 @@
 """TamonRadar(多聞情報雷達) — FastAPI 後端。
 
-把原本的 CLI 爬蟲包成 Web API:前端送關鍵字 → 背景爬 → SSE 即時回報 →
+把原本的 CLI 爬蟲包成 Web API:前端送關鍵字 → 建立佇列工作 → 工作者執行 → 前端輪詢進度 →
 回傳結構化結果 → 提供篩選用資料、匯出、AI 摘要、歷史紀錄。
 """
-import asyncio
 import io
 import json
 import os
@@ -13,12 +12,12 @@ import appconfig
 # 正式環境缺密鑰就直接拒絕啟動(必須在匯入 auth / db 之前)
 appconfig.assert_production_config()
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sse_starlette.sse import EventSourceResponse
 
 from crawler.config import CrawlConfig, DEFAULT_KEYWORDS
 from crawler.reporter import to_dataframe, save_excel, save_markdown_report
@@ -33,6 +32,9 @@ import notify
 import scheduler
 import uploader
 import bots
+import jobs
+import worker
+from internal_routes import router as internal_router
 import insights as insights_mod
 from oauth_google import router as google_router
 from oauth_google import _frontend as _frontend_url
@@ -40,6 +42,7 @@ from jobs import manager
 
 app = FastAPI(title="TamonRadar API", version="2.0")
 app.include_router(google_router)
+app.include_router(internal_router)
 
 
 @app.exception_handler(ratelimit.RateLimited)
@@ -49,15 +52,11 @@ def _rate_limited(_request: Request, exc: ratelimit.RateLimited):
 
 @app.on_event("startup")
 def _startup():
-    # 即使 DB 連不上也別讓服務崩潰重啟(才看得到 log、health 仍可回應)
+    # 只有本機 SQLite 才在啟動時建表;Postgres 的結構由 migrate.py 管理,冷啟動不跑 DDL
     try:
         db.init_db()
     except Exception as e:
         print(f"[startup] ⚠️ 資料庫初始化失敗,請檢查 DATABASE_URL:{e}")
-    try:
-        scheduler.start()
-    except Exception as e:
-        print(f"[startup] ⚠️ 排程啟動失敗:{e}")
 
 # 允許跨來源的前端網址,可用環境變數 CORS_ORIGINS(逗號分隔)覆寫。
 # 去掉結尾斜線:瀏覽器送的 Origin 不含斜線,帶斜線會比對失敗。
@@ -346,19 +345,24 @@ def root():
 MAX_UPLOAD = 50 * 1024 * 1024  # 50MB
 
 
-@app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...), user=Depends(auth.get_current_user)):
-    """上傳任意檔案到 R2,回傳公開網址(圖片/影片/音樂/檔案皆可)。"""
+class PresignRequest(BaseModel):
+    filename: str
+    content_type: str = ""
+    size: int
+
+
+@app.post("/api/upload/presign")
+def presign_upload(req: PresignRequest, user=Depends(auth.get_current_user)):
+    """簽發直傳 R2 的網址:檔案不經過 Function(請求上限 4.5 MB),回傳公開網址(圖片/影片/音樂/檔案皆可)。"""
     if not uploader.r2_available():
         raise HTTPException(503, "後端尚未設定 R2 儲存(R2_* 環境變數)")
-    data = await file.read()
-    if len(data) > MAX_UPLOAD:
+    ratelimit.enforce(f"upload:{user.id}", 60, 3600, "上傳太頻繁,請稍後再試。")
+    if req.size <= 0 or req.size > MAX_UPLOAD:
         raise HTTPException(413, "檔案太大(上限 50MB)")
     try:
-        url = uploader.upload(file.filename or "file", data, file.content_type or "")
+        return uploader.presign_upload(req.filename or "file", req.content_type or "", req.size)
     except Exception as e:
-        raise HTTPException(500, f"上傳失敗:{e}")
-    return {"url": url, "name": file.filename, "type": file.content_type}
+        raise HTTPException(500, f"無法建立上傳連結:{e}")
 
 
 @app.post("/api/telegram/webhook/{secret}")
@@ -366,7 +370,8 @@ async def telegram_webhook(secret: str, request: Request):
     if not bots.telegram_webhook_secret_ok(secret):
         raise HTTPException(403, "invalid secret")
     update = await request.json()
-    bots.handle_telegram_async(update)
+    await run_in_threadpool(bots.handle_telegram, update)
+    await run_in_threadpool(worker.trigger)
     return {"ok": True}
 
 
@@ -396,8 +401,10 @@ async def discord_interactions(request: Request):
             msg = bots.discord_bind(code, str(u.get("id", "")))
             return {"type": 4, "data": {"content": msg, "flags": 64}}
         q = next((o.get("value", "") for o in opts if o.get("name") == "question"), "")
-        bots.handle_discord_command_async(data.get("application_id"), data.get("token"), q, uname)
-        return {"type": 5}  # 先 defer,背景算完再 followup 編輯回覆
+        await run_in_threadpool(bots.enqueue_discord_command, str(data.get("id") or ""), data.get("application_id"),
+                                data.get("token"), q, uname)
+        await run_in_threadpool(worker.trigger, 0.7, 0.2)  # Discord 只給 3 秒,觸發等待要夠短
+        return {"type": 5}  # 先 defer,工作者算完再 followup 編輯回覆
     return {"type": 4, "data": {"content": "?"}}
 
 
@@ -578,7 +585,7 @@ class SiteCrawlRequest(BaseModel):
 
 @app.post("/api/crawl-site")
 def start_site_crawl(req: SiteCrawlRequest, user=Depends(auth.get_current_user)):
-    """整站爬(背景任務):跟著同網域連結遞迴抓取,進度走同一套 SSE。"""
+    """整站爬(佇列工作):跟著同網域連結遞迴抓取,進度走同一套輪詢。"""
     url = _safe_url(req.url)
     caps = quota.caps_for(user)
     _clean_keywords(req.keywords, 20)
@@ -595,6 +602,7 @@ def start_site_crawl(req: SiteCrawlRequest, user=Depends(auth.get_current_user))
         path_includes=req.path_includes,
     )
     job = manager.create(config, user.id, max_active=caps.concurrent_jobs)
+    worker.trigger()
     return {"job_id": job.id, "status": job.status}
 
 
@@ -614,6 +622,7 @@ def start_crawl(req: CrawlRequest, user=Depends(auth.get_current_user)):
         vertical=req.vertical,
     )
     job = manager.create(config, user.id, max_active=caps.concurrent_jobs)
+    worker.trigger()
     return {"job_id": job.id, "status": job.status}
 
 
@@ -624,50 +633,38 @@ def get_crawl(job_id: str, user=Depends(auth.get_current_user)):
         "job_id": job.id,
         "status": job.status,
         "error": job.error,
-        "result": job.result,
-        "events": job.events,
+        "result": _fit_result(jobs.result_of(job)) if job.finished else None,
+        "events": jobs.events_since(job.id, limit=2000),
     }
 
 
 @app.post("/api/crawl/{job_id}/stop")
 def stop_crawl(job_id: str, user=Depends(auth.get_current_user)):
     job = _owned_job(job_id, user)
-    job.request_stop()
-    return {"job_id": job.id, "status": "stopping"}
+    status = manager.stop(job.id)
+    if status == "stopping":
+        worker.trigger()
+    return {"job_id": job.id, "status": status}
 
 
-@app.post("/api/crawl/{job_id}/stream-ticket")
-def crawl_stream_ticket(job_id: str, user=Depends(auth.get_current_user)):
-    """EventSource 無法帶 Authorization 標頭,改用短效票證(不把長效 JWT 放進網址)。"""
+@app.get("/api/crawl/{job_id}/events")
+def crawl_events(job_id: str, after: int = -1, limit: int = 200, user=Depends(auth.get_current_user)):
+    """前端輪詢進度:回傳 seq 大於 after 的事件;全部事件送完且工作結束時才帶結果。"""
     job = _owned_job(job_id, user)
-    return {"ticket": auth.create_stream_ticket(job.id, user.id)}
-
-
-@app.get("/api/crawl/{job_id}/stream")
-async def stream_crawl(job_id: str, ticket: str = ""):
-    job = manager.get(job_id)
-    if not job or auth.verify_stream_ticket(ticket, job_id) is None:
-        raise HTTPException(404, "找不到這個任務")
-
-    async def event_generator():
-        sent = 0
-        while True:
-            new_events = job.events_since(sent)
-            for event in new_events:
-                sent += 1
-                yield {"event": "progress", "data": json.dumps(event, ensure_ascii=False)}
-            if job.finished and sent >= len(job.events):
-                yield {
-                    "event": "end",
-                    "data": json.dumps(
-                        {"status": job.status, "result": job.result, "error": job.error},
-                        ensure_ascii=False,
-                    ),
-                }
-                break
-            await asyncio.sleep(0.3)
-
-    return EventSourceResponse(event_generator())
+    limit = max(1, min(limit, 500))
+    events = jobs.events_since(job.id, after, limit)
+    finished = job.finished and len(events) < limit
+    body = {
+        "job_id": job.id,
+        "status": job.status,
+        "error": job.error,
+        "events": events,
+        "last_seq": events[-1]["seq"] if events else after,
+        "finished": finished,
+    }
+    if finished:
+        body["result"] = _fit_result(jobs.result_of(job))
+    return body
 
 
 # ---------- history ----------
@@ -682,7 +679,7 @@ def get_history_run(run_id: str, user=Depends(auth.get_current_user)):
     run = db.get_run(run_id, user.id)
     if not run:
         raise HTTPException(404, "找不到這筆歷史紀錄")
-    return run
+    return _fit_result(run)
 
 
 class ShareRequest(BaseModel):
@@ -701,7 +698,7 @@ def public_share(run_id: str):
     run = db.get_shared_run(run_id)
     if not run:
         raise HTTPException(404, "這個分享連結不存在或已關閉")
-    return run
+    return _fit_result(run)
 
 
 @app.get("/api/history/{run_id}/diff")
@@ -739,9 +736,6 @@ def _records_for(run_id: str) -> list[dict]:
             return list(db.iter_crawl_items(run_id))
     except Exception:
         pass
-    job = manager.get(run_id)
-    if job and job.result:
-        return job.result.get("records", [])
     run = db.get_run(run_id)
     if run:
         return run.get("records", [])
@@ -755,11 +749,7 @@ def export_csv(run_id: str, user=Depends(auth.get_optional_user)):
     buf = io.StringIO()
     df.to_csv(buf, index=False)
     data = "﻿" + buf.getvalue()  # BOM 讓 Excel 正確顯示中文
-    return Response(
-        content=data.encode("utf-8"),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="tammon_{run_id}.csv"'},
-    )
+    return _export_response(data.encode("utf-8"), "text/csv; charset=utf-8", f"tammon_{run_id}.csv")
 
 
 @app.get("/api/export/{run_id}.xlsx")
@@ -772,11 +762,8 @@ def export_xlsx(run_id: str, user=Depends(auth.get_optional_user)):
     tmp = Path(tempfile.gettempdir())
     path = save_excel(df, str(tmp), name=f"tammon_{run_id}.xlsx")
     data = path.read_bytes()
-    return Response(
-        content=data,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="tammon_{run_id}.xlsx"'},
-    )
+    path.unlink(missing_ok=True)   # Function 的 /tmp 會在實例間重用,用完就清
+    return _export_response(data, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", f"tammon_{run_id}.xlsx")
 
 
 @app.get("/api/export/{run_id}.md")
@@ -789,20 +776,14 @@ def export_md(run_id: str, user=Depends(auth.get_optional_user)):
     tmp = Path(tempfile.gettempdir())
     path = save_markdown_report(df, str(tmp), name=f"tammon_{run_id}.md")
     data = path.read_text(encoding="utf-8")
-    return Response(
-        content=data.encode("utf-8"),
-        media_type="text/markdown; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="tammon_{run_id}.md"'},
-    )
+    path.unlink(missing_ok=True)
+    return _export_response(data.encode("utf-8"), "text/markdown; charset=utf-8", f"tammon_{run_id}.md")
 
 
 # ---------- AI ----------
 
 def _user_records(run_id: str, user) -> list[dict]:
-    """取得屬於該使用者的某次結果(進行中的 job 或資料庫歷史)。"""
-    job = manager.get(run_id)
-    if job and job.result and getattr(job, "user_id", None) == user.id:
-        return job.result.get("records", [])
+    """取得屬於該使用者的某次結果(資料庫歷史)。"""
     run = db.get_run(run_id, user.id)
     if run:
         return run.get("records", [])
@@ -884,6 +865,41 @@ def _clean_keywords(keywords: list[str], cap: int) -> list[str]:
     if len(cleaned) > cap:
         raise HTTPException(400, f"一次最多 {cap} 個關鍵字(目前 {len(cleaned)} 個)")
     return cleaned
+
+
+# Function 回應上限 4.5 MB(含標頭與 JSON 包裝);超過就截斷筆數,完整資料走匯出 / 分頁
+_RESPONSE_LIMIT = 4_000_000
+
+
+def _fit_result(result: dict | None) -> dict | None:
+    """避免結果超過回應上限:留下放得下的前段 records,並標記 truncated。"""
+    if not result or not result.get("records"):
+        return result
+    records = result["records"]
+    size = len(json.dumps(records, ensure_ascii=False).encode("utf-8"))
+    if size <= _RESPONSE_LIMIT:
+        return result
+    keep, used = 0, 2
+    for rec in records:
+        used += len(json.dumps(rec, ensure_ascii=False).encode("utf-8")) + 1
+        if used > _RESPONSE_LIMIT:
+            break
+        keep += 1
+    return {**result, "records": records[:keep], "truncated": True, "total": result.get("total") or len(records)}
+
+
+def _export_response(data: bytes, media_type: str, filename: str):
+    """小檔直接回應;超過回應上限時放到 R2,回傳短效簽名網址讓前端直接下載。"""
+    if len(data) <= _RESPONSE_LIMIT:
+        return Response(content=data, media_type=media_type,
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+    if not uploader.r2_available():
+        raise HTTPException(413, "檔案太大,且後端尚未設定 R2 儲存,無法匯出")
+    try:
+        url = uploader.store_export(filename, data, media_type)
+    except Exception as e:
+        raise HTTPException(500, f"匯出失敗:{e}")
+    return JSONResponse({"download_url": url, "expires_in": uploader.EXPORT_LINK_SECONDS, "filename": filename})
 
 
 def _check_job_slot(user, caps: quota.Caps) -> None:
@@ -1164,9 +1180,7 @@ def create_schedule(req: ScheduleRequest, user=Depends(auth.get_current_user)):
     caps = quota.caps_for(user)
     if len(db.list_schedules(user.id)) >= caps.schedules:
         raise quota.QuotaExceeded(f"排程數已達上限({caps.schedules} 個),請先刪除不用的排程。")
-    sc = db.create_schedule(user.id, _schedule_payload(req, user))
-    scheduler.sync(sc)
-    return sc
+    return db.create_schedule(user.id, _schedule_payload(req, user))
 
 
 @app.patch("/api/schedules/{schedule_id}")
@@ -1177,7 +1191,6 @@ def patch_schedule(schedule_id: int, req: ScheduleRequest, user=Depends(auth.get
     sc = db.update_schedule(schedule_id, user.id, _schedule_payload(req, user, existing["keywords"]))
     if not sc:
         raise HTTPException(404, "找不到這個排程")
-    scheduler.sync(sc)
     return sc
 
 
@@ -1185,18 +1198,17 @@ def patch_schedule(schedule_id: int, req: ScheduleRequest, user=Depends(auth.get
 def delete_schedule(schedule_id: int, user=Depends(auth.get_current_user)):
     if not db.delete_schedule(schedule_id, user.id):
         raise HTTPException(404, "找不到這個排程")
-    scheduler.remove(schedule_id)
     return {"ok": True}
 
 
 @app.post("/api/schedules/{schedule_id}/run")
 def run_schedule_now(schedule_id: int, user=Depends(auth.get_current_user)):
-    import threading
     sc = db.get_schedule(schedule_id, user.id)
     if not sc:
         raise HTTPException(404, "找不到這個排程")
-    threading.Thread(target=scheduler.run_now, args=(schedule_id,), daemon=True).start()
-    return {"ok": True, "message": "已在背景開始執行,完成後會依設定推播"}
+    scheduler.enqueue_schedule_run(schedule_id, user.id)
+    worker.trigger()
+    return {"ok": True, "message": "已排入佇列,完成後會依設定推播"}
 
 
 # ---------- 監看(到貨/開賣通知)----------
@@ -1260,9 +1272,7 @@ def create_watch(req: WatchRequest, user=Depends(auth.get_current_user)):
     caps = quota.caps_for(user)
     if len(db.list_watches(user.id)) >= caps.watches:
         raise quota.QuotaExceeded(f"監看數已達上限({caps.watches} 個),請先刪除不用的監看。")
-    w = db.create_watch(user.id, {**_watch_payload(req, user), "url": url})
-    scheduler.sync_watch(w)
-    return w
+    return db.create_watch(user.id, {**_watch_payload(req, user), "url": url})
 
 
 @app.patch("/api/watches/{watch_id}")
@@ -1270,7 +1280,6 @@ def patch_watch(watch_id: int, req: WatchRequest, user=Depends(auth.get_current_
     w = db.update_watch(watch_id, user.id, {**_watch_payload(req, user), "url": _safe_url(req.url)})
     if not w:
         raise HTTPException(404, "找不到這個監看")
-    scheduler.sync_watch(w)
     return w
 
 
@@ -1278,18 +1287,17 @@ def patch_watch(watch_id: int, req: WatchRequest, user=Depends(auth.get_current_
 def delete_watch(watch_id: int, user=Depends(auth.get_current_user)):
     if not db.delete_watch(watch_id, user.id):
         raise HTTPException(404, "找不到這個監看")
-    scheduler.remove_watch(watch_id)
     return {"ok": True}
 
 
 @app.post("/api/watches/{watch_id}/check")
 def check_watch_now(watch_id: int, user=Depends(auth.get_current_user)):
-    import threading
     if not db.get_watch(watch_id, user.id):
         raise HTTPException(404, "找不到這個監看")
     ratelimit.enforce(f"watch-check:{user.id}", 10, 60, "檢查太頻繁,請稍後再試。")
-    threading.Thread(target=scheduler.check_watch_now, args=(watch_id,), daemon=True).start()
-    return {"ok": True, "message": "已在背景檢查一次"}
+    scheduler.enqueue_watch_check(watch_id, user.id)
+    worker.trigger()
+    return {"ok": True, "message": "已排入檢查佇列"}
 
 
 # ---------- 管理員後台 ----------
@@ -1335,6 +1343,7 @@ def admin_env_check(admin=Depends(auth.get_admin)):
         "核心(必填)": {
             "DATABASE_URL": has("DATABASE_URL"), "JWT_SECRET": has("JWT_SECRET"),
             "CORS_ORIGINS": has("CORS_ORIGINS"), "ADMIN_EMAILS": has("ADMIN_EMAILS"),
+            "CRON_SECRET(排程/工作者)": has("CRON_SECRET"),
         },
         "建議": {
             "ENCRYPTION_KEY": has("ENCRYPTION_KEY"), "OWNER_EMAILS": has("OWNER_EMAILS"),

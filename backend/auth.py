@@ -74,29 +74,7 @@ def _user_from_token(token: str) -> User | None:
     return user
 
 
-# ---------- 短效存取票證(EventSource 無法帶 Authorization 標頭時用)----------
-
-def create_stream_ticket(job_id: str, user_id: int) -> str:
-    payload = {
-        "sub": str(user_id),
-        "typ": "job_stream",
-        "jid": job_id,
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=5),
-    }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGO)
-
-
-def verify_stream_ticket(ticket: str, job_id: str) -> int | None:
-    try:
-        payload = jwt.decode(ticket, JWT_SECRET, algorithms=[JWT_ALGO])
-        if payload.get("typ") != "job_stream" or payload.get("jid") != job_id:
-            return None
-        return int(payload["sub"])
-    except Exception:
-        return None
-
-
-# ---------- OAuth state(防 CSRF 的短效簽章值)----------
+# ---------- OAuth state ----------
 
 def create_state() -> str:
     payload = {
