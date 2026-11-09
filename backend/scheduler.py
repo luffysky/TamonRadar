@@ -176,8 +176,7 @@ def _run(schedule_id: int) -> None:
     )
 
     # 抓上次結果供比較(在寫入新結果之前)
-    prev_runs = db.list_runs(sc["user_id"])
-    prev = db.get_run(prev_runs[0]["id"], sc["user_id"]) if prev_runs else None
+    prev = db.previous_run(sc["user_id"], datetime.now(timezone.utc).isoformat(), "", sc["keywords"])
 
     jobs._slots.acquire()
     try:

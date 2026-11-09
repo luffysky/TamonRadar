@@ -710,7 +710,7 @@ def history_diff(run_id: str, user=Depends(auth.get_current_user)):
     run = db.get_run(run_id, user.id)
     if not run:
         raise HTTPException(404, "找不到這筆歷史紀錄")
-    prev = db.previous_run(user.id, run.get("finished_at") or "", run_id)
+    prev = db.previous_run(user.id, run.get("finished_at") or "", run_id, run.get("keywords") or [])
     if not prev:
         return {"has_previous": False}
     return {

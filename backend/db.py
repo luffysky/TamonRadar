@@ -663,8 +663,14 @@ def list_runs(user_id: int) -> list[dict]:
         } for r in rows]
 
 
-def previous_run(user_id: int, before_iso: str, exclude_id: str) -> dict | None:
-    """同一使用者、比指定時間更早完成的最近一次成功爬蟲(給價格雷達比較用)。"""
+def previous_run(user_id: int, before_iso: str, exclude_id: str, keywords: list[str]) -> dict | None:
+    """同一使用者、關鍵字有重疊、比指定時間更早完成的最近一次成功爬蟲(給價格雷達比較用)。
+
+    沒有關鍵字重疊的搜尋是不同主題,比較只會產生假的「新品/下架」,所以不列入。
+    """
+    wanted = {k.strip().lower() for k in (keywords or []) if k and k.strip()}
+    if not wanted:
+        return None
     with SessionLocal() as s:
         rows = s.scalars(
             select(Run)
@@ -673,7 +679,8 @@ def previous_run(user_id: int, before_iso: str, exclude_id: str) -> dict | None:
         ).all()
         for r in rows:
             iso = r.finished_at.isoformat() if r.finished_at else ""
-            if iso < before_iso:
+            same_topic = wanted & {str(k).strip().lower() for k in (r.keywords or [])}
+            if iso < before_iso and same_topic:
                 return {
                     "id": r.id,
                     "finished_at": iso,
