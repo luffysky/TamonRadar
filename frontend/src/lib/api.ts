@@ -121,13 +121,24 @@ export interface HealthInfo {
   default_provider: string;
 }
 
+/** 上傳:先向後端要預簽網址,再由瀏覽器直傳 R2(不經過 API,突破 4.5 MB 上限)。 */
 export async function uploadFile(file: File): Promise<{ url: string; name: string; type: string }> {
-  const fd = new FormData();
-  fd.append("file", file);
-  const res = await fetch(`${API_BASE}/api/upload`, { method: "POST", headers: authHeaders(), body: fd });
+  const contentType = file.type || "application/octet-stream";
+  const res = await fetch(`${API_BASE}/api/upload/presign`, {
+    method: "POST",
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ filename: file.name, content_type: contentType, size: file.size }),
+  });
   check401(res);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "上傳失敗");
-  return res.json();
+  const presigned = await res.json();
+  const put = await fetch(presigned.upload_url, {
+    method: "PUT",
+    headers: presigned.headers,
+    body: file,
+  });
+  if (!put.ok) throw new Error("上傳到儲存空間失敗");
+  return { url: presigned.url, name: file.name, type: contentType };
 }
 
 export async function getHealth(): Promise<HealthInfo> {
@@ -172,83 +183,54 @@ export async function getCrawl(jobId: string) {
   return res.json();
 }
 
-/** EventSource 不能帶 Authorization 標頭,先換一張短效票證放在網址上。 */
-async function getStreamTicket(jobId: string): Promise<string> {
-  const res = await fetch(`${API_BASE}/api/crawl/${jobId}/stream-ticket`, { method: "POST", headers: authHeaders() });
-  check401(res);
-  if (!res.ok) throw new Error("讀取任務失敗");
-  return (await res.json()).ticket;
-}
-
-/** 用 SSE 訂閱進度,對斷線有韌性:短暫斷線自動重連、已完成則補抓結果、真的沒了才報錯。 */
-export function streamCrawl(
+/** 輪詢進度事件:網路小失敗會自動重試;工作結束且事件都讀完才呼叫 onEnd。 */
+export function watchCrawl(
   jobId: string,
   onProgress: (e: ProgressEvent) => void,
   onEnd: (payload: { status: string; result: CrawlResult | null; error: string | null }) => void,
   onError: () => void
 ): () => void {
   let closed = false;
-  let retries = 0;
-  let es: EventSource | null = null;
+  let after = -1;
+  let failures = 0;
+  let idle = 0;
+  let timer: ReturnType<typeof setTimeout> | null = null;
 
-  const open = async () => {
-    let ticket: string;
-    try {
-      ticket = await getStreamTicket(jobId);
-    } catch {
-      if (!closed) onError();
-      return;
-    }
+  const poll = async () => {
     if (closed) return;
-    es = new EventSource(`${API_BASE}/api/crawl/${jobId}/stream?ticket=${encodeURIComponent(ticket)}`);
-
-    es.addEventListener("progress", (ev) => {
-      try {
-        onProgress(JSON.parse((ev as MessageEvent).data));
-      } catch {
-        /* ignore */
+    try {
+      const res = await fetch(`${API_BASE}/api/crawl/${jobId}/events?after=${after}`, { headers: authHeaders() });
+      check401(res);
+      if (!res.ok) throw new Error(String(res.status));
+      const data = await res.json();
+      failures = 0;
+      for (const e of data.events as ProgressEvent[]) {
+        if (closed) return;
+        onProgress(e);
       }
-    });
-
-    es.addEventListener("end", (ev) => {
-      closed = true;
-      try {
-        onEnd(JSON.parse((ev as MessageEvent).data));
-      } catch {
-        /* ignore */
+      after = data.last_seq;
+      if (data.finished) {
+        closed = true;
+        onEnd({ status: data.status, result: data.result ?? null, error: data.error ?? null });
+        return;
       }
-      es?.close();
-    });
-
-    es.onerror = async () => {
-      es?.close();
+      idle = data.events.length ? 0 : idle + 1;
+    } catch {
       if (closed) return;
-      // 嘗試從狀態端點補救:已完成就直接給結果,還在跑就重連
-      try {
-        const r = await fetch(`${API_BASE}/api/crawl/${jobId}`, { headers: authHeaders() });
-        if (r.ok) {
-          const data = await r.json();
-          if (["done", "error", "stopped"].includes(data.status)) {
-            closed = true;
-            onEnd({ status: data.status, result: data.result, error: data.error });
-            return;
-          }
-          if (retries++ < 6) {
-            setTimeout(open, 2000); // 還在跑 → 2 秒後重連
-            return;
-          }
-        }
-      } catch {
-        /* ignore */
+      if (++failures > 8) {
+        closed = true;
+        onError();
+        return;
       }
-      onError();
-    };
+    }
+    // 有新事件就快一點;一直沒動靜(排隊中)才放慢
+    timer = setTimeout(poll, failures ? 2000 : idle > 10 ? 2500 : 900);
   };
 
-  open();
+  poll();
   return () => {
     closed = true;
-    es?.close();
+    if (timer) clearTimeout(timer);
   };
 }
 
@@ -281,7 +263,13 @@ export async function summarize(runId: string): Promise<{ available: boolean; su
 export async function downloadExport(runId: string, fmt: "csv" | "xlsx" | "md"): Promise<void> {
   const res = await fetch(`${API_BASE}/api/export/${runId}.${fmt}`, { headers: authHeaders() });
   check401(res);
-  if (!res.ok) throw new Error("匯出失敗");
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "匯出失敗");
+  if ((res.headers.get("content-type") ?? "").includes("application/json")) {
+    // 檔案超過 API 回應上限:後端放到 R2,回傳短效簽名網址
+    const { download_url } = await res.json();
+    window.location.assign(download_url);
+    return;
+  }
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement("a");
   a.href = url;

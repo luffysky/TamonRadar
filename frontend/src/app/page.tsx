@@ -6,7 +6,7 @@ import {
   Home as HomeIcon, Briefcase, BookOpen, HeartPulse, Laptop, Car, Recycle,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { startCrawl, streamCrawl, stopCrawl, getHealth, aiKeywords, scrapePage, startSiteCrawl } from "@/lib/api";
+import { startCrawl, watchCrawl, stopCrawl, getHealth, aiKeywords, scrapePage, startSiteCrawl } from "@/lib/api";
 import type { HealthInfo } from "@/lib/api";
 import type { CrawlResult, ProgressEvent } from "@/lib/types";
 
@@ -91,7 +91,7 @@ export default function HomePage() {
       });
       setJobId(job_id);
 
-      closeRef.current = streamCrawl(
+      closeRef.current = watchCrawl(
         job_id,
         (e) => setEvents((prev) => [...prev, e]),
         (payload) => {
@@ -101,12 +101,12 @@ export default function HomePage() {
         },
         () => {
           setRunning(false);
-          setError("連線中斷(後端可能正在重新部署)。已完成的搜尋會出現在「歷史」;若沒有,稍候再重新搜尋一次。");
+          setError("暫時讀不到進度,任務仍在背景進行。已完成的搜尋會出現在「歷史」。");
         }
       );
     } catch {
       setRunning(false);
-      setError("無法啟動爬蟲,請確認後端 (http://127.0.0.1:8000) 是否已啟動。");
+      setError("無法啟動爬蟲,請稍後再試。");
     }
   }
 
@@ -139,11 +139,11 @@ export default function HomePage() {
       const paths = sitePaths.split(/[,,\s]+/).map((k) => k.trim()).filter(Boolean);
       const { job_id } = await startSiteCrawl(url, Math.max(1, sitePages || 40), Math.max(1, siteDepth || 2), kws, paths);
       setJobId(job_id);
-      closeRef.current = streamCrawl(
+      closeRef.current = watchCrawl(
         job_id,
         (e) => setEvents((prev) => [...prev, e]),
         (payload) => { setRunning(false); if (payload.result) setResult(payload.result); if (payload.status === "error") setError(payload.error ?? "整站爬發生錯誤"); },
-        () => { setRunning(false); setError("連線中斷,已完成的會在「歷史」。"); }
+        () => { setRunning(false); setError("暫時讀不到進度,任務仍在背景進行,完成後會出現在「歷史」。"); }
       );
     } catch (e) {
       setRunning(false);
