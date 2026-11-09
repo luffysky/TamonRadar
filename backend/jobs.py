@@ -112,6 +112,10 @@ class JobManager:
                 job.status = "error"
                 job.error = str(e)
                 job.add_event({"type": "error", "message": f"爬蟲發生錯誤:{e}"})
+                try:
+                    db.save_run(job, job.user_id)  # 失敗的任務也要留紀錄,歷史才看得到
+                except Exception as save_err:
+                    job.add_event({"type": "warning", "message": f"歷史存檔失敗:{save_err}"})
         finally:
             _slots.release()
 

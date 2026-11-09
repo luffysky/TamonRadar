@@ -206,6 +206,7 @@ def run_crawl(
         else:
             targets = deduped[: config.max_detail_pages]
             records = []
+            processed = 0  # 實際處理到第幾筆搜尋結果(列表頁多抓的商品不算,不能用 len(records))
             total = len(targets)
             on_event({
                 "type": "phase", "phase": "detail",
@@ -219,6 +220,7 @@ def run_crawl(
                     driver=driver, item=item,
                     min_sleep=config.min_sleep, max_sleep=config.max_sleep,
                 )
+                processed = i
                 extra = detail.pop("_extra_products", []) if isinstance(detail, dict) else []
                 records.append(detail)
                 if extra:
@@ -231,7 +233,7 @@ def run_crawl(
                     "message": f"[{i}/{total}] {item.get('title', '')}",
                 })
             # 沒抓到詳細頁的剩餘搜尋結果也帶上(只有標題/摘要層級資料)
-            for item in deduped[len(records):]:
+            for item in deduped[processed:]:
                 records.append(classify_search_only(item))
 
         # 領域感知分類:非購物領域,把「其他/空」的分類改成該領域標籤(避免全落「其他」)
