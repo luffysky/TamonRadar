@@ -1,12 +1,27 @@
 """推播通知:Discord Webhook 與 Telegram Bot。"""
 import os
+from urllib.parse import urlsplit
 
 import requests
+
+_DISCORD_HOSTS = {"discord.com", "discordapp.com", "ptb.discord.com", "canary.discord.com"}
+
+
+def is_discord_webhook(url: str) -> bool:
+    """webhook 是使用者填的網址,只允許真正的 Discord webhook,不能拿來打任意內部位址。"""
+    try:
+        parts = urlsplit((url or "").strip())
+    except ValueError:
+        return False
+    return (parts.scheme == "https" and parts.hostname in _DISCORD_HOSTS
+            and parts.path.startswith("/api/webhooks/") and parts.username is None)
 
 
 def send_discord(webhook: str, content: str = "", embed: dict | None = None) -> tuple[bool, str]:
     if not webhook:
         return False, "未設定 Discord webhook"
+    if not is_discord_webhook(webhook):
+        return False, "Discord webhook 網址不正確"
     payload: dict = {}
     if content:
         payload["content"] = content[:1900]

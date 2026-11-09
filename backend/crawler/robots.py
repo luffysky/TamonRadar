@@ -3,7 +3,7 @@ import os
 import urllib.robotparser
 from urllib.parse import urlparse
 
-import requests
+from safe_fetch import safe_get
 
 UA = "TamonRadarBot"
 _cache: dict[str, urllib.robotparser.RobotFileParser] = {}
@@ -25,7 +25,7 @@ def blocked(url: str) -> bool:
 def _load(base: str) -> urllib.robotparser.RobotFileParser:
     rp = urllib.robotparser.RobotFileParser()
     try:
-        r = requests.get(base + "/robots.txt", timeout=8, headers={"User-Agent": UA})
+        r = safe_get(base + "/robots.txt", timeout=8, headers={"User-Agent": UA}, max_bytes=512 * 1024)
         if r.status_code >= 400 or not r.text.strip():
             rp.parse([])          # 沒有 robots.txt → 全部允許
         else:

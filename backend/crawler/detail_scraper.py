@@ -3,11 +3,11 @@ import json
 import re
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 from .utils import clean_text, extract_price, classify_item, sleep_random, looks_like_block_page, is_listing_url, get_domain
 from .characters import detect_character
+from safe_fetch import safe_get, validate_url
 
 _LIGHT_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -22,7 +22,7 @@ def _light_fetch_one(url: str) -> dict:
     if not robots.allowed(url):
         return {}
     try:
-        r = requests.get(url, headers=_LIGHT_HEADERS, timeout=8)
+        r = safe_get(url, headers=_LIGHT_HEADERS, timeout=8)
         if r.status_code >= 400 or not r.text:
             return {}
         soup = BeautifulSoup(r.text, "lxml")
@@ -126,7 +126,7 @@ def _items_from_api(soup: BeautifulSoup, html: str, base_url: str) -> list[dict]
     rows: list = []
     for api in uniq[:3]:  # 最多探 3 個,避免太慢
         try:
-            r = requests.get(api, headers={**_LIGHT_HEADERS, "Accept": "application/json"}, timeout=10)
+            r = safe_get(api, headers={**_LIGHT_HEADERS, "Accept": "application/json"}, timeout=10)
             if r.status_code >= 400 or "json" not in (r.headers.get("content-type", "")):
                 continue
             _json_price_rows(r.json(), rows)
@@ -263,7 +263,7 @@ def _feed_items(soup: BeautifulSoup, base_url: str) -> list[dict]:
     if not feed_url:
         return []
     try:
-        fr = requests.get(feed_url, headers=_LIGHT_HEADERS, timeout=12)
+        fr = safe_get(feed_url, headers=_LIGHT_HEADERS, timeout=12)
         if fr.status_code >= 400:
             return []
         fsoup = BeautifulSoup(fr.text, "xml")
@@ -297,7 +297,7 @@ def scrape_full_page(url: str) -> list[dict]:
         raise RuntimeError("此網站在封鎖清單(登入牆/禁止自動抓取)")
     if not robots.allowed(url):
         raise RuntimeError("該網站的 robots.txt 不允許抓取此頁")
-    r = requests.get(url, headers=_LIGHT_HEADERS, timeout=15)
+    r = safe_get(url, headers=_LIGHT_HEADERS, timeout=15)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "lxml")
     out = items_from_soup(soup, url)
@@ -493,6 +493,7 @@ def scrape_detail_page(driver, item: dict, min_sleep: float = 2, max_sleep: floa
     }
 
     try:
+        validate_url(url)
         driver.get(url)
         sleep_random(min_sleep, max_sleep)
 

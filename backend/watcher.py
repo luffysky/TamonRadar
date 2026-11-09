@@ -5,13 +5,13 @@
 """
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 import db
 import money
 import notify
 from crawler.utils import extract_price
+from safe_fetch import safe_get
 
 
 # CTA 按鈕常見字眼(結帳/預購/到貨通知…),比庫存關鍵字更廣
@@ -115,7 +115,7 @@ def check_watch(watch_id: int) -> dict:
     name = w["name"] or w["url"]
     from crawler.detail_scraper import items_from_soup
     try:
-        resp = requests.get(w["url"], headers=_HEADERS, timeout=20)
+        resp = safe_get(w["url"], headers=_HEADERS, timeout=20)
         soup = BeautifulSoup(resp.text, "lxml")
         text = soup.get_text(" ", strip=True)
     except Exception as e:

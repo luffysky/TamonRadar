@@ -6,13 +6,13 @@ import os
 import time
 from urllib.parse import urljoin
 
-import requests
 from bs4 import BeautifulSoup
 
 from .detail_scraper import items_from_soup, _LIGHT_HEADERS
 from .reporter import to_dataframe, build_summary, COLUMN_ORDER
 from .utils import get_domain
 from . import robots
+from safe_fetch import safe_get
 
 
 PREVIEW_CAP = 1000   # 回傳給前端 / 存 run.records 的預覽筆數上限
@@ -83,7 +83,7 @@ def run_site_crawl(config, on_event=lambda e: None, should_stop=lambda: False, o
             on_event({"type": "warning", "message": f"robots/封鎖清單禁止,略過:{url}"})
             continue
         try:
-            r = requests.get(url, headers=_LIGHT_HEADERS, timeout=12)
+            r = safe_get(url, headers=_LIGHT_HEADERS, timeout=12)
             ctype = r.headers.get("content-type", "")
             if r.status_code >= 400 or "html" not in ctype:
                 continue

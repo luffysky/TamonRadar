@@ -27,6 +27,7 @@ import auth
 import ai
 import quota
 import ratelimit
+import safe_fetch
 import mailer
 import notify
 import scheduler
@@ -539,15 +540,14 @@ class ScrapePageRequest(BaseModel):
 @app.post("/api/scrape-page")
 def scrape_page(req: ScrapePageRequest, user=Depends(auth.get_current_user)):
     """整頁抓取:給一個網址,抓出該頁所有表格列/商品(股票排行、列表頁適用)。"""
+    url = _safe_url(req.url)
     _clean_keywords(req.keywords, 20)
     _enforce_quota(user, "search")
-    if not req.url.strip().startswith("http"):
-        raise HTTPException(400, "請貼有效的網址(http/https)")
     import uuid
     from crawler.detail_scraper import scrape_full_page
     from crawler.reporter import to_dataframe, build_summary
     try:
-        recs = scrape_full_page(req.url.strip())
+        recs = scrape_full_page(url)
     except Exception as e:
         raise HTTPException(400, f"抓取失敗:{e}")
     kws = [k.strip() for k in (req.keywords or []) if k.strip()]
@@ -559,7 +559,7 @@ def scrape_page(req: ScrapePageRequest, user=Depends(auth.get_current_user)):
     summary = build_summary(df)
     records = df.to_dict(orient="records")
     rid = uuid.uuid4().hex[:12]
-    db.create_run_record(user.id, rid, [req.url.strip()], {"records": records, "summary": summary})
+    db.create_run_record(user.id, rid, [url], {"records": records, "summary": summary})
     return {"run_id": rid, "records": records, "summary": summary}
 
 
@@ -574,17 +574,16 @@ class SiteCrawlRequest(BaseModel):
 @app.post("/api/crawl-site")
 def start_site_crawl(req: SiteCrawlRequest, user=Depends(auth.get_current_user)):
     """整站爬(背景任務):跟著同網域連結遞迴抓取,進度走同一套 SSE。"""
+    url = _safe_url(req.url)
     caps = quota.caps_for(user)
     _clean_keywords(req.keywords, 20)
     if len(req.path_includes) > 20:
         raise HTTPException(400, "路徑條件最多 20 個")
     _check_job_slot(user, caps)
     _enforce_quota(user, "search")
-    if not req.url.strip().startswith("http"):
-        raise HTTPException(400, "請貼有效的網址(http/https)")
     config = CrawlConfig(
-        keywords=[req.url.strip()],
-        site_url=req.url.strip(),
+        keywords=[url],
+        site_url=url,
         site_max_pages=max(1, min(req.max_pages, caps.site_pages)),
         site_max_depth=max(0, min(req.max_depth, caps.site_depth)),
         filter_keywords=req.keywords,
@@ -824,6 +823,14 @@ def _enforce_quota(user, kind: str) -> None:
 
 _MAX_QUESTION_CHARS = 2000
 _MAX_CLIENT_RECORDS = 2000
+
+
+def _safe_url(url: str, resolve: bool = True) -> str:
+    """使用者送來要讓後端抓的網址一律過這裡(阻擋內網/保留網段,見 safe_fetch)。"""
+    try:
+        return safe_fetch.validate_url(url, resolve=resolve)
+    except safe_fetch.UnsafeURLError as e:
+        raise HTTPException(400, str(e))
 
 
 def _require_max_len(value: str | None, limit: int, label: str) -> None:
@@ -1081,6 +1088,8 @@ def bind_code(user=Depends(auth.get_current_user)):
 
 @app.put("/api/settings")
 def put_settings(req: SettingsRequest, user=Depends(auth.get_current_user)):
+    if req.discord_webhook.strip() and not notify.is_discord_webhook(req.discord_webhook):
+        raise HTTPException(400, "Discord webhook 網址不正確")
     db.save_settings(user.id, {
         "discord_webhook": req.discord_webhook.strip(),
         "discord_user_id": req.discord_user_id.strip(),
@@ -1181,9 +1190,8 @@ def get_favorites(user=Depends(auth.get_current_user)):
 
 @app.post("/api/favorites")
 def add_favorite(req: FavoriteRequest, user=Depends(auth.get_current_user)):
-    if not req.url.strip().startswith("http"):
-        raise HTTPException(400, "網址不正確")
-    return db.add_favorite(user.id, req.model_dump())
+    _safe_url(req.url, resolve=False)  # 真正抓取時才查 DNS;收藏不因暫時解析失敗而失敗
+    return db.add_favorite(user.id, {**req.model_dump(), "url": req.url.strip()})
 
 
 @app.patch("/api/favorites/{fav_id}")
@@ -1213,19 +1221,18 @@ def get_price_history(url: str, user=Depends(auth.get_current_user)):
 
 @app.post("/api/watches")
 def create_watch(req: WatchRequest, user=Depends(auth.get_current_user)):
-    if not req.url.strip().startswith("http"):
-        raise HTTPException(400, "請輸入有效的網址(http/https)")
+    url = _safe_url(req.url)
     caps = quota.caps_for(user)
     if len(db.list_watches(user.id)) >= caps.watches:
         raise quota.QuotaExceeded(f"監看數已達上限({caps.watches} 個),請先刪除不用的監看。")
-    w = db.create_watch(user.id, _watch_payload(req, user))
+    w = db.create_watch(user.id, {**_watch_payload(req, user), "url": url})
     scheduler.sync_watch(w)
     return w
 
 
 @app.patch("/api/watches/{watch_id}")
 def patch_watch(watch_id: int, req: WatchRequest, user=Depends(auth.get_current_user)):
-    w = db.update_watch(watch_id, user.id, _watch_payload(req, user))
+    w = db.update_watch(watch_id, user.id, {**_watch_payload(req, user), "url": _safe_url(req.url)})
     if not w:
         raise HTTPException(404, "找不到這個監看")
     scheduler.sync_watch(w)
