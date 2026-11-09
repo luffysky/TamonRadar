@@ -367,6 +367,7 @@ def _check_watch(watch_id: int) -> dict:
     # 2) 目標價
     target = w.get("target_price")
     cur_twd = _page_price_twd(page) if target else None
+    db.add_price_observation(w["user_id"], w["url"], cur_twd or _page_price_twd(page), "watch", watch_id)
     prev_twd = w.get("last_price_twd")
     if target and cur_twd and cur_twd <= target and (prev_twd is None or prev_twd > target):
         lines.append(f"💰 降到目標價 NT${cur_twd}(目標 {target})")
@@ -432,6 +433,7 @@ def check_favorite(fav: dict) -> dict:
     target = fav.get("target_twd")
     prev = fav.get("last_price_twd")
     db.set_favorite_check(fav["id"], price_twd=twd)
+    db.add_price_observation(fav["user_id"], fav["url"], twd, "favorite", fav["id"])
     if not target or twd > target or (prev is not None and prev <= target):
         return {"ok": True, "price_twd": twd, "notified": False}
 
@@ -445,14 +447,14 @@ def check_favorite(fav: dict) -> dict:
     return {"ok": True, "price_twd": twd, "notified": True}
 
 
-def check_due_favorites(pause_seconds: float = 1.0) -> int:
-    """排程呼叫:檢查到期的目標價收藏(受每人上限與每輪上限約束)。回傳實際檢查數。"""
+def check_due_favorites(pause_seconds: float = 1.0, budget_left=lambda: True) -> int:
+    """排程呼叫:檢查到期的目標價收藏(受每人上限、每輪上限與時間預算約束)。回傳實際檢查數。"""
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=FAVORITE_RECHECK_MINUTES)
     caps: dict[int, int] = {}
     used: dict[int, int] = {}
     checked = 0
     for fav in db.list_due_favorites(cutoff):
-        if checked >= FAVORITE_BATCH_LIMIT:
+        if checked >= FAVORITE_BATCH_LIMIT or not budget_left():
             break
         uid = fav["user_id"]
         if uid not in caps:

@@ -1,8 +1,11 @@
-"""排程:定時自動爬蟲,跑完跟上次比較,有變化就推播給使用者。"""
-import uuid
-from datetime import datetime, timezone
+"""排程派發器:每分鐘由 Vercel Cron 呼叫一次,把到期的排程/監看/推播/彙整原子地轉成工作。
 
-from apscheduler.schedulers.background import BackgroundScheduler
+每一項都用 next_run_at + FOR UPDATE SKIP LOCKED 在同一個交易裡「推進下次時間 + 建立工作」,
+所以重疊或重試的 cron 都不會重複觸發,服務重啟也不會把全部重跑一次。
+"""
+from datetime import datetime, timedelta, timezone
+
+from sqlalchemy import or_, select, update
 
 from crawler.config import CrawlConfig
 from crawler.runner import run_crawl
@@ -13,40 +16,141 @@ import quota
 import radar
 import watcher
 
-_sched = BackgroundScheduler(timezone="UTC")
-_started = False
+BATCH = 200
+CLAIM_LEASE = timedelta(minutes=30)   # 認領後工作一直沒結束時,超過這段時間才允許再派一次
+FAVORITES_EVERY = timedelta(minutes=15)
+MAINTENANCE_EVERY = timedelta(hours=1)
+DIGEST_HOUR_UTC = 1   # 01:00 UTC ≈ 台灣 09:00
 
 
-def start() -> None:
-    global _started
-    if _started:
-        return
-    _sched.start()
-    _started = True
-    for sc in db.list_enabled_schedules():
-        _add(sc)
-    for w in db.list_enabled_watches():
-        add_watch(w)
-    # 每日彙整(01:00 UTC ≈ 台灣 09:00)
-    _sched.add_job(_daily_digest, "cron", hour=1, minute=0, id="daily-digest", replace_existing=True)
-    # 每分鐘檢查到期的排程推播
-    _sched.add_job(_run_due_broadcasts, "interval", minutes=1, id="due-broadcasts", replace_existing=True)
-    # 目標價收藏:每 15 分鐘掃一次到期的(同一個收藏最短間隔見 watcher.FAVORITE_RECHECK_MINUTES)
-    _sched.add_job(watcher.check_due_favorites, "interval", minutes=15, id="favorite-targets",
-                   replace_existing=True, max_instances=1, coalesce=True)
+def _aware(dt: datetime | None) -> datetime | None:
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
-def _run_due_broadcasts() -> None:
-    try:
-        db.run_due_broadcasts()
-    except Exception as e:
-        print(f"[scheduler] 排程推播失敗:{e}")
+def _next_digest(now: datetime) -> datetime:
+    at = now.replace(hour=DIGEST_HOUR_UTC, minute=0, second=0, microsecond=0)
+    return at if at > now else at + timedelta(days=1)
 
 
-def _daily_digest() -> None:
-    for uid in db.list_digest_user_ids():
+def _caps(s, user_id: int) -> tuple[quota.Caps, bool]:
+    user = s.get(db.User, user_id)
+    return (quota.caps_for(user) if user is not None else quota.FREE_CAPS), bool(user is None or user.banned)
+
+
+def _dispatch_rows(s, model, now: datetime, interval_of, kind: str, id_field: str) -> int:
+    """推進到期列的 next_run_at 並建立工作;在同一個交易內完成。"""
+    # 尚未有下次時間(剛匯入舊資料)→ 依上次執行推算,不要全部一次爆發
+    last_field = model.last_run if model is db.Schedule else model.last_checked
+    for row in s.scalars(select(model).where(model.enabled == True, model.next_run_at.is_(None))  # noqa: E712
+                         .with_for_update(skip_locked=True).limit(BATCH)).all():
+        caps, _banned = _caps(s, row.user_id)
+        base = _aware(getattr(row, last_field.key))
+        row.next_run_at = max(now, base + interval_of(row, caps)) if base else now
+    s.flush()
+
+    due = s.scalars(
+        select(model)
+        .where(model.enabled == True, model.next_run_at <= now,  # noqa: E712
+               or_(model.claimed_at.is_(None), model.claimed_at < now - CLAIM_LEASE))
+        .order_by(model.next_run_at).limit(BATCH).with_for_update(skip_locked=True)
+    ).all()
+    fired = 0
+    for row in due:
+        caps, banned = _caps(s, row.user_id)
+        fire_at = _aware(row.next_run_at)
+        row.next_run_at = now + interval_of(row, caps)
+        if banned:
+            continue
+        jid = jobs._add_job(s, kind, user_id=row.user_id, config={id_field: row.id},
+                            dedupe_key=f"{kind}:{row.id}:{int(fire_at.timestamp())}",
+                            max_attempts=3 if kind == "schedule" else 2)
+        if jid:
+            row.claimed_at = now
+            row.claim_job_id = jid
+            fired += 1
+    return fired
+
+
+def _schedule_interval(sc, caps: quota.Caps) -> timedelta:
+    return timedelta(hours=max(caps.min_schedule_hours, int(sc.interval_hours)))
+
+
+def _watch_interval(w, caps: quota.Caps) -> timedelta:
+    return timedelta(minutes=max(caps.min_watch_minutes, int(w.interval_minutes)))
+
+
+def _dispatch_broadcasts(s, now: datetime) -> int:
+    fired = 0
+    for bid in db.due_broadcast_ids(s, now, lock=True):
+        s.execute(update(db.ScheduledBroadcast).where(db.ScheduledBroadcast.id == bid).values(sent=True))
+        if jobs._add_job(s, "broadcast", config={"broadcast_id": bid}, dedupe_key=f"broadcast:{bid}", max_attempts=1):
+            fired += 1
+    return fired
+
+
+def _claim_singleton(s, name: str, now: datetime, next_at: datetime, first_at: datetime | None = None) -> bool:
+    """全站單例排程:UPDATE ... WHERE next_run_at <= now 只有一個交易會成功。"""
+    s.execute(db.dialect_insert(db.CronState).values(name=name, next_run_at=first_at or now)
+              .on_conflict_do_nothing(index_elements=["name"]))
+    return s.execute(update(db.CronState).where(db.CronState.name == name, db.CronState.next_run_at <= now)
+                     .values(next_run_at=next_at, last_run_at=now)).rowcount == 1
+
+
+def _dispatch_singletons(s, now: datetime) -> dict:
+    out = {}
+    if _claim_singleton(s, "daily_digest", now, _next_digest(now), first_at=_next_digest(now)):
+        out["digest"] = bool(jobs._add_job(s, "digest", dedupe_key=f"digest:{now:%Y-%m-%d}"))
+    if _claim_singleton(s, "favorites", now, now + FAVORITES_EVERY):
+        out["favorites"] = bool(jobs._add_job(s, "favorites", max_attempts=1))
+    if _claim_singleton(s, "maintenance", now, now + MAINTENANCE_EVERY):
+        out["maintenance"] = bool(jobs._add_job(s, "maintenance", max_attempts=1))
+    return out
+
+
+def fired_anything(counts: dict) -> bool:
+    for v in counts.values():
+        if isinstance(v, dict) and any(v.values()):
+            return True
+        if isinstance(v, int) and v:
+            return True
+    return False
+
+
+def dispatch(now: datetime | None = None) -> dict:
+    """派發一輪;各類別各自一個交易,一類失敗不影響其他類。"""
+    now = now or db._now()
+    counts: dict = {}
+    steps = (
+        ("schedules", lambda s: _dispatch_rows(s, db.Schedule, now, _schedule_interval, "schedule", "schedule_id")),
+        ("watches", lambda s: _dispatch_rows(s, db.Watch, now, _watch_interval, "watch", "watch_id")),
+        ("broadcasts", lambda s: _dispatch_broadcasts(s, now)),
+        ("singletons", lambda s: _dispatch_singletons(s, now)),
+    )
+    for name, fn in steps:
+        try:
+            with db.SessionLocal() as s:
+                counts[name] = fn(s)
+                s.commit()
+        except Exception as e:
+            print(f"[dispatch] {name} 失敗:{e}")
+            counts[name] = f"error: {str(e)[:120]}"
+    return counts
+
+
+# ---------- 工作處理(由 worker 呼叫)----------
+
+def _daily_digest(handle=None) -> None:
+    done_up_to = int((handle.cursor if handle else {}).get("after_uid", 0))
+    for uid in sorted(db.list_digest_user_ids()):
+        if uid <= done_up_to:
+            continue
+        if handle is not None and not handle.keepalive():
+            raise jobs.BudgetExhausted()
+        if handle is not None:
+            handle.checkpoint({"after_uid": uid})   # 先記再寄:崩潰時寧可少寄一人,不重複寄
         settings = db.get_settings(uid)
-        has_channel = notify.has_channel(settings)
         favs = db.list_favorites(uid)
         watches = db.list_watches(uid)
         avail = [w for w in watches if w.get("last_status") == "available"]
@@ -57,82 +161,11 @@ def _daily_digest() -> None:
                 lines.append(f"・{w['name'] or w['url']}")
         body = "\n".join(lines)
         db.add_notification(uid, "📬 每日彙整", body)  # 站內一定存
-        if has_channel:
+        if notify.has_channel(settings):
             try:
                 notify.notify_all(settings, "📬 TamonRadar 每日彙整\n" + body)
             except Exception:
                 pass
-
-
-def _job_id(schedule_id: int) -> str:
-    return f"sch-{schedule_id}"
-
-
-def _add(sc: dict) -> None:
-    _sched.add_job(
-        _run, "interval",
-        hours=max(quota.caps_for_id(sc["user_id"]).min_schedule_hours, int(sc["interval_hours"])),
-        id=_job_id(sc["id"]),
-        args=[sc["id"]],
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-        next_run_time=datetime.now(timezone.utc),  # 建立後很快先跑一次
-    )
-
-
-def sync(sc: dict) -> None:
-    """建立/更新排程後呼叫:依 enabled 加入或移除。"""
-    remove(sc["id"])
-    if sc.get("enabled"):
-        _add(sc)
-
-
-def remove(schedule_id: int) -> None:
-    try:
-        _sched.remove_job(_job_id(schedule_id))
-    except Exception:
-        pass
-
-
-def run_now(schedule_id: int) -> None:
-    _run(schedule_id)
-
-
-# ---------- 監看任務 ----------
-
-def _watch_job_id(watch_id: int) -> str:
-    return f"watch-{watch_id}"
-
-
-def add_watch(w: dict) -> None:
-    _sched.add_job(
-        watcher.check_watch, "interval",
-        minutes=max(quota.caps_for_id(w["user_id"]).min_watch_minutes, int(w["interval_minutes"])),
-        id=_watch_job_id(w["id"]),
-        args=[w["id"]],
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-        next_run_time=datetime.now(timezone.utc),
-    )
-
-
-def sync_watch(w: dict) -> None:
-    remove_watch(w["id"])
-    if w.get("enabled"):
-        add_watch(w)
-
-
-def remove_watch(watch_id: int) -> None:
-    try:
-        _sched.remove_job(_watch_job_id(watch_id))
-    except Exception:
-        pass
-
-
-def check_watch_now(watch_id: int) -> None:
-    watcher.check_watch(watch_id)
 
 
 def _build_message(sc: dict, result: dict, prev: dict | None) -> str:
@@ -153,45 +186,69 @@ def _build_message(sc: dict, result: dict, prev: dict | None) -> str:
     return "\n".join(lines)
 
 
+def run_schedule_job(h) -> None:
+    """排程工作:扣額度 → 爬(可續跑)→ 存歷史 → 通知(先記 notified 再發,崩潰也不重發)。"""
+    sc = db.get_schedule(h.config["schedule_id"])
+    if not sc or (not sc.get("enabled") and not h.config.get("manual")):
+        h.finish("done", save_run=False)
+        return
+
+    state = dict(h.cursor)
+    if not state.get("charged"):
+        # 排程也算搜尋用量;額度用完就跳過這次並告知使用者
+        try:
+            quota.enforce_by_id(sc["user_id"], "search")
+        except quota.QuotaExceeded as e:
+            db.add_notification(sc["user_id"], "📡 排程略過", e.message)
+            h.finish("done", save_run=False)
+            return
+        state["charged"] = True
+        h.checkpoint(state)
+
+    if not state.get("saved"):
+        caps = quota.caps_for_id(sc["user_id"])
+        config = CrawlConfig(
+            keywords=sc["keywords"][:caps.keywords],
+            google_pages_per_keyword=min(sc["pages"], caps.pages),
+            max_detail_pages=min(sc["max_detail"], caps.detail_pages),
+            scrape_details=sc["scrape_details"],
+            search_provider=sc["provider"],
+        )
+        result = run_crawl(
+            config, on_event=h.add_event, should_stop=h.should_stop, cursor=state.get("crawl"),
+            checkpoint=lambda c: h.checkpoint({**state, "crawl": c}), budget_left=h.budget_left,
+        )
+        # 抓上次結果供比較(在寫入新結果之前)
+        prev = db.previous_run(sc["user_id"], db._now().isoformat(), h.id, sc["keywords"])
+        db.upsert_run(h.id, sc["user_id"], "done", sc["keywords"], result)
+        db.touch_schedule(sc["id"])
+        state = {"charged": True, "saved": True, "message": _build_message(sc, result, prev)}
+        h.checkpoint(state)
+
+    if not state.get("notified"):
+        msg = state.get("message", "")
+        state["notified"] = True
+        h.checkpoint(state)
+        settings = db.get_settings(sc["user_id"])
+        db.add_notification(sc["user_id"], f"📡 排程更新:{'、'.join(sc['keywords'])[:40]}", msg)
+        if notify.has_channel(settings):
+            notify.notify_all(settings, msg)
+
+    h.finish("done", save_run=False)
+
+
+def enqueue_schedule_run(schedule_id: int, user_id: int) -> str | None:
+    return jobs.enqueue("schedule", user_id=user_id, config={"schedule_id": schedule_id, "manual": True}, priority=3)
+
+
+def enqueue_watch_check(watch_id: int, user_id: int) -> str | None:
+    return jobs.enqueue("watch", user_id=user_id, config={"watch_id": watch_id}, priority=3, max_attempts=2)
+
+
 def _run(schedule_id: int) -> None:
+    """同步跑一次指定排程(本機/測試用)。"""
+    import worker
     sc = db.get_schedule(schedule_id)
-    if not sc or not sc.get("enabled"):
-        remove(schedule_id)
+    if not sc:
         return
-
-    # 排程也算搜尋用量;額度用完就跳過這次並告知使用者
-    try:
-        quota.enforce_by_id(sc["user_id"], "search")
-    except quota.QuotaExceeded as e:
-        db.add_notification(sc["user_id"], "📡 排程略過", e.message)
-        return
-
-    caps = quota.caps_for_id(sc["user_id"])
-    config = CrawlConfig(
-        keywords=sc["keywords"][:caps.keywords],
-        google_pages_per_keyword=min(sc["pages"], caps.pages),
-        max_detail_pages=min(sc["max_detail"], caps.detail_pages),
-        scrape_details=sc["scrape_details"],
-        search_provider=sc["provider"],
-    )
-
-    # 抓上次結果供比較(在寫入新結果之前)
-    prev = db.previous_run(sc["user_id"], datetime.now(timezone.utc).isoformat(), "", sc["keywords"])
-
-    jobs._slots.acquire()
-    try:
-        result = run_crawl(config)
-    except Exception:
-        jobs._slots.release()
-        return
-    jobs._slots.release()
-
-    run_id = uuid.uuid4().hex[:12]
-    db.create_run_record(sc["user_id"], run_id, sc["keywords"], result)
-    db.touch_schedule(schedule_id)
-
-    settings = db.get_settings(sc["user_id"])
-    _msg = _build_message(sc, result, prev)
-    db.add_notification(sc["user_id"], f"📡 排程更新:{'、'.join(sc['keywords'])[:40]}", _msg)
-    if notify.has_channel(settings):
-        notify.notify_all(settings, _msg)
+    worker.run_job(enqueue_schedule_run(schedule_id, sc["user_id"]))
