@@ -11,12 +11,13 @@ import crypto
 import money
 
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, create_engine, delete, func, inspect, select, text,
-    update,
+    JSON, BigInteger, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, create_engine, delete,
+    func, select, update,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker,
 )
+from sqlalchemy.pool import NullPool
 
 
 def _build_url() -> tuple[str, dict]:
@@ -45,10 +46,45 @@ def _build_url() -> tuple[str, dict]:
 
 
 _url, _connect_args = _build_url()
-engine = create_engine(_url, pool_pre_ping=True, connect_args=_connect_args)
+IS_SQLITE = _url.startswith("sqlite")
+
+
+def _engine_options() -> dict:
+    """Serverless 連線策略。
+
+    - DATABASE_URL 用 Neon pooled(PgBouncer transaction 模式)網址,應用層只留極小的連線池:
+      Fluid Compute 一個實例會同時處理多個請求,但實例隨時可能被凍結。
+    - 關掉 psycopg 自動 prepared statement,避免 transaction 模式下跨交易找不到語句。
+    - pool_pre_ping + pool_recycle:凍結回來的連線若已失效,用之前會先換掉。
+    - DB_POOL_SIZE=0 可改用 NullPool(每次新連線)。
+    """
+    if IS_SQLITE:
+        return {"pool_pre_ping": True, "connect_args": _connect_args}
+    connect_args = {"prepare_threshold": None, "connect_timeout": int(os.environ.get("DB_CONNECT_TIMEOUT", "10"))}
+    if ".neon.tech" in _url and "sslmode=" not in _url:
+        connect_args["sslmode"] = "require"
+    opts: dict = {"pool_pre_ping": True, "connect_args": connect_args}
+    size = int(os.environ.get("DB_POOL_SIZE", "1"))
+    if size <= 0:
+        opts["poolclass"] = NullPool
+    else:
+        opts.update(pool_size=size, max_overflow=int(os.environ.get("DB_MAX_OVERFLOW", "4")),
+                    pool_timeout=15, pool_recycle=300)
+    return opts
+
+
+engine = create_engine(_url, **_engine_options())
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
-IS_SQLITE = _url.startswith("sqlite")
+# 只有在 Postgres 上才有 BIGSERIAL;SQLite 的自增主鍵必須是 INTEGER
+_BigPk = BigInteger().with_variant(Integer, "sqlite")
+
+
+def dialect_insert(model):
+    """回傳目前方言的 INSERT(兩種方言都支援 on_conflict_*)。"""
+    from sqlalchemy.dialects.postgresql import insert as pg_insert
+    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+    return (sqlite_insert if IS_SQLITE else pg_insert)(model)
 
 
 class Base(DeclarativeBase):
@@ -128,6 +164,9 @@ class Schedule(Base):
     interval_hours: Mapped[int] = mapped_column(default=24)
     enabled: Mapped[bool] = mapped_column(default=True)
     last_run: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)  # 派發器依此認領
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)   # 已派工、尚未完成
+    claim_job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -152,6 +191,9 @@ class Watch(Base):
     cta_text: Mapped[str] = mapped_column(String(60), default="")         # 對方頁面 CTA 文字(立即購買/加入購物車)
     cta_url: Mapped[str] = mapped_column(String(1000), default="")        # CTA 連結
     last_error: Mapped[str] = mapped_column(Text, default="")             # 上次檢查失敗原因(成功時清空)
+    next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    claim_job_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -297,9 +339,11 @@ class Report(Base):
 
 class CrawlItem(Base):
     __tablename__ = "tr_crawl_items"
+    __table_args__ = (Index("ux_crawl_items_dedupe", "run_id", "dedupe_key", unique=True),)
     id: Mapped[int] = mapped_column(primary_key=True)
     run_id: Mapped[str] = mapped_column(String(32), index=True)
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
+    dedupe_key: Mapped[str | None] = mapped_column(String(40), nullable=True)  # 同一任務同一項目只收一次(重試不重複)
 
 
 class ScheduledBroadcast(Base):
@@ -400,170 +444,117 @@ class Usage(Base):
     search: Mapped[int] = mapped_column(default=0)
 
 
+class Job(Base):
+    """可持久化的工作:排隊、認領、心跳、斷點(cursor)全部在資料庫,不依賴任何行程記憶體。"""
+    __tablename__ = "tr_jobs"
+    __table_args__ = (
+        Index("ix_jobs_claim", "status", "priority", "available_at"),
+        Index("ix_jobs_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(32), primary_key=True)     # 同時也是 tr_runs.id
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("tr_users.id"), nullable=True)   # 機器人/系統工作沒有 user
+    kind: Mapped[str] = mapped_column(String(20))                     # crawl|site_crawl|schedule|watch|bot_telegram|bot_discord|favorites|digest|broadcast|maintenance
+    status: Mapped[str] = mapped_column(String(16), default="queued")  # queued|running|done|error|stopped
+    priority: Mapped[int] = mapped_column(default=0)
+    config: Mapped[dict] = mapped_column(JSON, default=dict)          # 工作參數
+    cursor: Mapped[dict] = mapped_column(JSON, default=dict)          # 斷點
+    error: Mapped[str] = mapped_column(Text, default="")
+    stop_requested: Mapped[bool] = mapped_column(default=False)
+    attempts: Mapped[int] = mapped_column(default=0)                  # 工作者崩潰而重試的次數
+    max_attempts: Mapped[int] = mapped_column(default=3)
+    claimed_by: Mapped[str] = mapped_column(String(40), default="")
+    claim_token: Mapped[str | None] = mapped_column(String(32), nullable=True)  # 圍欄:舊工作者不能再寫入
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    available_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    dedupe_key: Mapped[str | None] = mapped_column(String(120), nullable=True, unique=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+
+
+class JobEvent(Base):
+    """進度事件(前端輪詢);由保留期清理排程刪除。"""
+    __tablename__ = "tr_job_events"
+    __table_args__ = (UniqueConstraint("job_id", "seq", name="uq_job_event_seq"),)
+    id: Mapped[int] = mapped_column(_BigPk, primary_key=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("tr_jobs.id", ondelete="CASCADE"))
+    seq: Mapped[int] = mapped_column(default=0)
+    event: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class CrawlFrontier(Base):
+    """整站爬的待抓佇列(同時是 seen 集合):url_hash 唯一,重試/續跑不重複。"""
+    __tablename__ = "tr_crawl_frontier"
+    __table_args__ = (
+        UniqueConstraint("job_id", "url_hash", name="uq_frontier_url"),
+        Index("ix_frontier_next", "job_id", "status", "id"),
+    )
+    id: Mapped[int] = mapped_column(_BigPk, primary_key=True)
+    job_id: Mapped[str] = mapped_column(ForeignKey("tr_jobs.id", ondelete="CASCADE"))
+    url_hash: Mapped[str] = mapped_column(String(40))
+    url: Mapped[str] = mapped_column(Text)
+    depth: Mapped[int] = mapped_column(default=0)
+    status: Mapped[str] = mapped_column(String(10), default="pending")  # pending|done|skip
+
+
+class PriceObservation(Base):
+    """監看/收藏/搜尋結果每次觀測到的價格(台幣)。"""
+    __tablename__ = "tr_price_observations"
+    __table_args__ = (Index("ix_price_obs_lookup", "user_id", "url_hash", "observed_at"),)
+    id: Mapped[int] = mapped_column(_BigPk, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("tr_users.id"), nullable=True)
+    url: Mapped[str] = mapped_column(String(1000))
+    url_hash: Mapped[str] = mapped_column(String(40))
+    source: Mapped[str] = mapped_column(String(16), default="")       # watch|favorite|crawl
+    source_id: Mapped[str] = mapped_column(String(40), default="")
+    price_twd: Mapped[int] = mapped_column(default=0)
+    observed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, index=True)
+
+
+class RateLimitBucket(Base):
+    """跨實例共用的限流計數(固定視窗,從第一次命中起算)。"""
+    __tablename__ = "tr_rate_limits"
+    key: Mapped[str] = mapped_column(String(255), primary_key=True)
+    hits: Mapped[int] = mapped_column(default=0)
+    expires_at: Mapped[float] = mapped_column(Float, default=0.0, index=True)  # epoch 秒
+
+
+class CronState(Base):
+    """全站單例排程(每日彙整、目標價掃描、清理)的下次執行時間。"""
+    __tablename__ = "tr_cron_state"
+    name: Mapped[str] = mapped_column(String(40), primary_key=True)
+    next_run_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
 def init_db() -> None:
-    Base.metadata.create_all(engine)
-    _ensure_columns()
-
-
-def _ensure_columns() -> None:
-    """相容既有資料庫:補上後來新增的欄位(create_all 不會改既有表)。"""
-    insp = inspect(engine)
-    tables = set(insp.get_table_names())
-
-    if "tr_users" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_users")}
-        for col, ddl in (
-            ("provider", "ALTER TABLE tr_users ADD COLUMN provider VARCHAR(32) DEFAULT 'local'"),
-            ("plan", "ALTER TABLE tr_users ADD COLUMN plan VARCHAR(20) DEFAULT 'free'"),
-            ("ai_used", "ALTER TABLE tr_users ADD COLUMN ai_used INTEGER DEFAULT 0"),
-            ("admin_note", "ALTER TABLE tr_users ADD COLUMN admin_note TEXT DEFAULT ''"),
-            ("tags", "ALTER TABLE tr_users ADD COLUMN tags JSON"),
-            ("username", "ALTER TABLE tr_users ADD COLUMN username VARCHAR(60) DEFAULT ''"),
-            ("privileged", "ALTER TABLE tr_users ADD COLUMN privileged BOOLEAN DEFAULT false"),
-            ("banned", "ALTER TABLE tr_users ADD COLUMN banned BOOLEAN DEFAULT false"),
-            ("email_verified", "ALTER TABLE tr_users ADD COLUMN email_verified BOOLEAN DEFAULT false"),
-            ("token_version", "ALTER TABLE tr_users ADD COLUMN token_version INTEGER DEFAULT 0"),
-        ):
-            if col not in cols:
-                with engine.begin() as conn:
-                    conn.execute(text(ddl))
-
-    if "tr_threads" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_threads")}
-        if "likes" not in cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE tr_threads ADD COLUMN likes INTEGER DEFAULT 0"))
-
-    if "tr_post_comments" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_post_comments")}
-        for col, ddl in (
-            ("parent_id", "ALTER TABLE tr_post_comments ADD COLUMN parent_id INTEGER"),
-            ("like_count", "ALTER TABLE tr_post_comments ADD COLUMN like_count INTEGER DEFAULT 0"),
-        ):
-            if col not in cols:
-                try:
-                    with engine.begin() as conn:
-                        conn.execute(text(ddl))
-                except Exception:
-                    pass
-
-    if "tr_audit" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_audit")}
-        is_pg = engine.dialect.name == "postgresql"
-        json_type = "JSONB" if is_pg else "JSON"
-        for col, ddl in (
-            ("target_type", "ALTER TABLE tr_audit ADD COLUMN target_type VARCHAR(40) DEFAULT ''"),
-            ("changes", f"ALTER TABLE tr_audit ADD COLUMN changes {json_type}"),
-            ("ip", "ALTER TABLE tr_audit ADD COLUMN ip VARCHAR(64) DEFAULT ''"),
-        ):
-            if col not in cols:
-                try:
-                    with engine.begin() as conn:
-                        conn.execute(text(ddl))
-                except Exception:
-                    pass
-
-    if "tr_posts" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_posts")}
-        for col, ddl in (
-            ("series", "ALTER TABLE tr_posts ADD COLUMN series VARCHAR(100) DEFAULT ''"),
-            ("featured", "ALTER TABLE tr_posts ADD COLUMN featured BOOLEAN DEFAULT false"),
-            ("likes", "ALTER TABLE tr_posts ADD COLUMN likes INTEGER DEFAULT 0"),
-            ("views", "ALTER TABLE tr_posts ADD COLUMN views INTEGER DEFAULT 0"),
-            ("password", "ALTER TABLE tr_posts ADD COLUMN password VARCHAR(100) DEFAULT ''"),
-            ("preview_token", "ALTER TABLE tr_posts ADD COLUMN preview_token VARCHAR(40) DEFAULT ''"),
-        ):
-            if col not in cols:
-                with engine.begin() as conn:
-                    conn.execute(text(ddl))
-
-    if "tr_runs" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_runs")}
-        if "shared" not in cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE tr_runs ADD COLUMN shared BOOLEAN DEFAULT false"))
-
-    if "tr_watches" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_watches")}
-        for col, ddl in (
-            ("target_price", "ALTER TABLE tr_watches ADD COLUMN target_price INTEGER"),
-            ("last_price_twd", "ALTER TABLE tr_watches ADD COLUMN last_price_twd INTEGER"),
-            ("mode", "ALTER TABLE tr_watches ADD COLUMN mode VARCHAR(20) DEFAULT 'stock'"),
-            ("snapshot", "ALTER TABLE tr_watches ADD COLUMN snapshot JSON"),
-            ("notify_on", "ALTER TABLE tr_watches ADD COLUMN notify_on JSON"),
-            ("cta_text", "ALTER TABLE tr_watches ADD COLUMN cta_text VARCHAR(60) DEFAULT ''"),
-            ("cta_url", "ALTER TABLE tr_watches ADD COLUMN cta_url VARCHAR(1000) DEFAULT ''"),
-            ("last_error", "ALTER TABLE tr_watches ADD COLUMN last_error TEXT DEFAULT ''"),
-        ):
-            if col not in cols:
-                with engine.begin() as conn:
-                    conn.execute(text(ddl))
-
-    if "tr_favorites" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_favorites")}
-        ts_type = "TIMESTAMPTZ" if engine.dialect.name == "postgresql" else "TIMESTAMP"
-        for col, ddl in (
-            ("last_price_twd", "ALTER TABLE tr_favorites ADD COLUMN last_price_twd INTEGER"),
-            ("last_checked", f"ALTER TABLE tr_favorites ADD COLUMN last_checked {ts_type}"),
-            ("last_error", "ALTER TABLE tr_favorites ADD COLUMN last_error TEXT DEFAULT ''"),
-        ):
-            if col not in cols:
-                with engine.begin() as conn:
-                    conn.execute(text(ddl))
-
-    if "tr_ai_cost" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_ai_cost")}
-        if "actor" not in cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE tr_ai_cost ADD COLUMN actor VARCHAR(80) DEFAULT ''"))
-        if engine.dialect.name == "postgresql":  # 機器人成本沒有 user_id(SQLite 改不了 NOT NULL,僅本機開發受影響)
-            try:
-                with engine.begin() as conn:
-                    conn.execute(text("ALTER TABLE tr_ai_cost ALTER COLUMN user_id DROP NOT NULL"))
-            except Exception:
-                pass
-
-    if "tr_user_settings" in tables:
-        cols = {c["name"] for c in insp.get_columns("tr_user_settings")}
-        for col, ddl in (
-            ("openai_key", "ALTER TABLE tr_user_settings ADD COLUMN openai_key VARCHAR(255) DEFAULT ''"),
-            ("anthropic_key", "ALTER TABLE tr_user_settings ADD COLUMN anthropic_key VARCHAR(255) DEFAULT ''"),
-            ("gemini_key", "ALTER TABLE tr_user_settings ADD COLUMN gemini_key VARCHAR(255) DEFAULT ''"),
-            ("groq_key", "ALTER TABLE tr_user_settings ADD COLUMN groq_key VARCHAR(255) DEFAULT ''"),
-            ("openrouter_key", "ALTER TABLE tr_user_settings ADD COLUMN openrouter_key VARCHAR(255) DEFAULT ''"),
-            ("ai_provider", "ALTER TABLE tr_user_settings ADD COLUMN ai_provider VARCHAR(20) DEFAULT ''"),
-            ("daily_digest", "ALTER TABLE tr_user_settings ADD COLUMN daily_digest BOOLEAN DEFAULT false"),
-            ("discord_user_id", "ALTER TABLE tr_user_settings ADD COLUMN discord_user_id VARCHAR(40) DEFAULT ''"),
-        ):
-            if col not in cols:
-                with engine.begin() as conn:
-                    conn.execute(text(ddl))
-        # 加密後的密文常超過 VARCHAR(255) → 在 Postgres 把這些欄位放寬成 TEXT(SQLite 不限長,免處理)
-        if engine.dialect.name == "postgresql":
-            for c in ("discord_webhook", "telegram_token", "telegram_chat_id",
-                      "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key"):
-                try:
-                    with engine.begin() as conn:
-                        conn.execute(text(f"ALTER TABLE tr_user_settings ALTER COLUMN {c} TYPE TEXT"))
-                except Exception:
-                    pass
+    """只給本機 SQLite 與測試用。Postgres 的結構一律由 migrate.py 管理(冷啟動不跑 DDL)。"""
+    if IS_SQLITE:
+        Base.metadata.create_all(engine)
 
 
 # ---------- Run 持久化 ----------
 
-def save_run(job, user_id: int) -> None:
-    result = job.result or {"records": [], "summary": {}}
+def store_run(s, run_id: str, user_id: int, status: str, keywords: list, result: dict | None) -> None:
+    """在呼叫端的交易內寫入/覆寫一筆 Run(依 run_id 冪等,重試不會多一筆)。"""
+    result = result or {"records": [], "summary": {}}
+    run = s.get(Run, run_id)
+    if run is None:
+        run = Run(id=run_id, user_id=user_id)
+        s.add(run)
+    run.user_id = user_id
+    run.status = status
+    run.finished_at = _now()
+    run.keywords = list(keywords)
+    run.summary = result.get("summary", {})
+    run.records = result.get("records", [])
+
+
+def upsert_run(run_id: str, user_id: int, status: str, keywords: list, result: dict | None) -> None:
     with SessionLocal() as s:
-        run = s.get(Run, job.id)
-        if run is None:
-            run = Run(id=job.id, user_id=user_id)
-            s.add(run)
-        run.user_id = user_id
-        run.status = job.status
-        run.finished_at = _now()
-        run.keywords = list(job.config.keywords)
-        run.summary = result.get("summary", {})
-        run.records = result.get("records", [])
+        store_run(s, run_id, user_id, status, keywords, result)
         s.commit()
 
 
@@ -869,6 +860,7 @@ def create_schedule(user_id: int, data: dict) -> dict:
             scrape_details=data.get("scrape_details", False),
             interval_hours=data.get("interval_hours", 24),
             enabled=data.get("enabled", True),
+            next_run_at=_now() if data.get("enabled", True) else None,  # 建立後很快先跑一次
         )
         s.add(sc)
         s.commit()
@@ -881,9 +873,14 @@ def update_schedule(schedule_id: int, user_id: int, data: dict) -> dict | None:
         sc = s.get(Schedule, schedule_id)
         if sc is None or sc.user_id != user_id:
             return None
+        before = sc.interval_hours
         for key in ("keywords", "provider", "pages", "max_detail", "scrape_details", "interval_hours", "enabled"):
             if key in data and data[key] is not None:
                 setattr(sc, key, data[key])
+        if not sc.enabled:
+            sc.next_run_at = None
+        elif sc.next_run_at is None or sc.interval_hours != before:
+            sc.next_run_at = _now()  # 重新啟用或改間隔:很快先跑一次,之後依新間隔
         s.commit()
         s.refresh(sc)
         return _schedule_dict(sc)
@@ -965,6 +962,7 @@ def create_watch(user_id: int, data: dict) -> dict:
             target_price=data.get("target_price"),
             mode=data.get("mode", "stock"),
             notify_on=data.get("notify_on") or ["new", "removed", "price", "restock"],
+            next_run_at=_now() if data.get("enabled", True) else None,
         )
         s.add(w)
         s.commit()
@@ -977,9 +975,14 @@ def update_watch(watch_id: int, user_id: int, data: dict) -> dict | None:
         w = s.get(Watch, watch_id)
         if w is None or w.user_id != user_id:
             return None
+        before = w.interval_minutes
         for key in ("name", "url", "available_keywords", "unavailable_keywords", "interval_minutes", "enabled", "target_price", "mode", "notify_on"):
             if key in data:
                 setattr(w, key, data[key])
+        if not w.enabled:
+            w.next_run_at = None
+        elif w.next_run_at is None or w.interval_minutes != before:
+            w.next_run_at = _now()
         s.commit()
         s.refresh(w)
         return _watch_dict(w)
@@ -1065,13 +1068,17 @@ def delete_user(user_id: int) -> bool:
         s.execute(delete(Thread).where(Thread.author_id == user_id))
 
         run_ids = list(s.scalars(select(Run.id).where(Run.user_id == user_id)).all())
-        if run_ids:
-            s.execute(delete(CrawlItem).where(CrawlItem.run_id.in_(run_ids)))
+        job_ids = list(s.scalars(select(Job.id).where(Job.user_id == user_id)).all())
+        if run_ids or job_ids:
+            s.execute(delete(CrawlItem).where(CrawlItem.run_id.in_(run_ids + job_ids)))
+        if job_ids:
+            s.execute(delete(JobEvent).where(JobEvent.job_id.in_(job_ids)))
+            s.execute(delete(CrawlFrontier).where(CrawlFrontier.job_id.in_(job_ids)))
         s.execute(delete(Subscription).where(
             (Subscription.subscriber_id == user_id) | (Subscription.author_id == user_id)))
         s.execute(delete(Report).where(Report.reporter_id == user_id))
         for model in (PostLike, PostCommentLike, PostReaction, Favorite, Watch, Schedule, Run, Settings,
-                      AiChatLog, BindCode, PushSub, Notification, AiCost, Usage):
+                      AiChatLog, BindCode, PushSub, Notification, AiCost, Usage, Job, PriceObservation):
             s.execute(delete(model).where(model.user_id == user_id))
         s.delete(u)
         s.commit()
@@ -1581,7 +1588,7 @@ def user_ids_by_segment(segment: str) -> list[int]:
         return [r for r in s.scalars(select(User.id)).all()]
 
 
-def broadcast(title: str, body: str, url: str, channels: list[str], segment: str = "all") -> dict:
+def broadcast(title: str, body: str, url: str, channels: list[str], segment: str = "all", on_tick=None) -> dict:
     """推播給指定分群。channels 可含 inapp(含 web push)/ tg / discord。回傳各管道計數。"""
     import notify as _notify
     counts = {"inapp": 0, "tg": 0, "discord": 0}
@@ -1591,6 +1598,8 @@ def broadcast(title: str, body: str, url: str, channels: list[str], segment: str
     want_tg = "tg" in channels
     want_discord = "discord" in channels
     for uid in ids:
+        if on_tick:
+            on_tick()
         if want_inapp:
             add_notification(uid, title, body, url)  # 含 web push
             counts["inapp"] += 1
@@ -1651,20 +1660,64 @@ def delete_scheduled_broadcast(bid: int) -> None:
             s.commit()
 
 
-def run_due_broadcasts() -> int:
-    """排程器每分鐘呼叫:送出到期的排程推播。"""
+def due_broadcast_ids(s, now: datetime | None = None, lock: bool = False) -> list[int]:
+    """到期未送的排程推播。派發器傳 lock=True,在同一交易內認領(FOR UPDATE SKIP LOCKED)。"""
     from datetime import timezone
-    now = _now()
-    sent = 0
+    now = now or _now()
+    q = select(ScheduledBroadcast).where(ScheduledBroadcast.sent == False)  # noqa: E712
+    if lock:
+        q = q.with_for_update(skip_locked=True)
+    out = []
+    for b in s.scalars(q).all():
+        ra = b.run_at
+        if ra is not None and ra.tzinfo is None:
+            ra = ra.replace(tzinfo=timezone.utc)
+        if ra and ra <= now:
+            out.append(b.id)
+    return out
+
+
+def send_broadcast(bid: int, on_tick=None) -> dict:
+    """送出一則已認領的排程推播(sent 已先設為 True,崩潰後不會重送)。on_tick 用來維持工作心跳。"""
     with SessionLocal() as s:
-        due = s.scalars(select(ScheduledBroadcast).where(ScheduledBroadcast.sent == False)).all()  # noqa: E712
-        targets = []
-        for b in due:
-            ra = b.run_at
-            if ra is not None and ra.tzinfo is None:
-                ra = ra.replace(tzinfo=timezone.utc)
-            if ra and ra <= now:
-                targets.append(b.id)
+        b = s.get(ScheduledBroadcast, bid)
+        if b is None:
+            return {"error": "not found"}
+        title, body, url, channels, segment = b.title, b.body, b.url, b.channels or [], b.segment
+    try:
+        res = broadcast(title, body, url, channels, segment, on_tick=on_tick)
+    except Exception as e:
+        print(f"[broadcast] {bid} 發送失敗:{e}")
+        res = {"error": str(e)[:200]}
+    if "email" in channels:
+        try:
+            import mailer
+            if mailer.mail_available():
+                html = f"<h3>{title}</h3>" + body.replace("\n", "<br>")
+                n = 0
+                for e in emails_by_segment(segment):
+                    try:
+                        ok, _ = mailer.send_email(e, title, html); n += 1 if ok else 0
+                    except Exception:
+                        pass
+                    if on_tick:
+                        on_tick()
+                res["email"] = n
+        except Exception:
+            pass
+    with SessionLocal() as s:
+        b = s.get(ScheduledBroadcast, bid)
+        if b:
+            b.result = res
+            s.commit()
+    return res
+
+
+def run_due_broadcasts() -> int:
+    """同步送出到期推播(本機/測試用);正式環境由派發器認領後交給工作者。"""
+    with SessionLocal() as s:
+        targets = due_broadcast_ids(s)
+    sent = 0
     for bid in targets:
         # 先原子地把 sent 設為 True(認領)才開始寄,兩個排程同時跑也只有一個會成功
         with SessionLocal() as s:
@@ -1674,34 +1727,9 @@ def run_due_broadcasts() -> int:
                 .values(sent=True)
             ).rowcount
             s.commit()
-            if claimed != 1:
-                continue
-            b = s.get(ScheduledBroadcast, bid)
-            title, body, url, channels, segment = b.title, b.body, b.url, b.channels or [], b.segment
-        try:
-            res = broadcast(title, body, url, channels, segment)
-        except Exception as e:
-            print(f"[broadcast] {bid} 發送失敗:{e}")
-            res = {"error": str(e)[:200]}
-        if "email" in channels:
-            try:
-                import mailer
-                if mailer.mail_available():
-                    html = f"<h3>{title}</h3>" + body.replace("\n", "<br>")
-                    n = 0
-                    for e in emails_by_segment(segment):
-                        try:
-                            ok, _ = mailer.send_email(e, title, html); n += 1 if ok else 0
-                        except Exception:
-                            pass
-                    res["email"] = n
-            except Exception:
-                pass
-        with SessionLocal() as s:
-            b = s.get(ScheduledBroadcast, bid)
-            if b:
-                b.result = res
-                s.commit()
+        if claimed != 1:
+            continue
+        send_broadcast(bid)
         sent += 1
     return sent
 
@@ -2087,7 +2115,30 @@ def price_history(user_id: int, url: str) -> list[dict]:
                             "price_twd": twd, "price": rec.get("price", ""),
                         })
                     break
+        # 監看 / 收藏每次檢查留下的觀測(搜尋結果的價格已在上面的 runs 裡)
+        for o in s.scalars(select(PriceObservation).where(PriceObservation.user_id == user_id,
+                                                          PriceObservation.url_hash == url_hash(url))).all():
+            out.append({"date": o.observed_at.isoformat() if o.observed_at else None,
+                        "price_twd": o.price_twd, "price": f"NT${o.price_twd}"})
+    out.sort(key=lambda r: r["date"] or "")
     return out
+
+
+def url_hash(url: str) -> str:
+    import hashlib
+    return hashlib.sha256((url or "").encode("utf-8", "replace")).hexdigest()[:40]
+
+
+def add_price_observation(user_id: int | None, url: str, price_twd: int | None, source: str, source_id="") -> None:
+    if not price_twd or not url:
+        return
+    try:
+        with SessionLocal() as s:
+            s.add(PriceObservation(user_id=user_id, url=url[:1000], url_hash=url_hash(url), source=source,
+                                   source_id=str(source_id)[:40], price_twd=int(price_twd)))
+            s.commit()
+    except Exception as e:
+        print(f"[price-obs] 寫入失敗:{e}")  # 歷史資料失敗不影響監看本身
 
 
 def list_favorites_with_target(user_id: int) -> list[dict]:
