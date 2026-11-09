@@ -66,6 +66,9 @@ import auth  # noqa: E402
 import ratelimit  # noqa: E402
 
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+if _PG_URL:   # 真實 Postgres 模式:psycopg 用 Python 解析主機名,要放行資料庫這一台
+    from urllib.parse import urlsplit
+    _LOOPBACK.add(urlsplit(_PG_URL).hostname)
 _real_connect = socket.socket.connect
 _real_getaddrinfo = socket.getaddrinfo
 
