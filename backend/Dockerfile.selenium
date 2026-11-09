@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # 告訴 runner.py 用系統的 chromium / chromedriver,不再走 webdriver-manager 下載
 ENV CHROME_BIN=/usr/bin/chromium
 ENV CHROMEDRIVER=/usr/bin/chromedriver
-ENV PYTHONUNBUFFERED=1
+ENV APP_ENV=production PYTHONUNBUFFERED=1
 
 WORKDIR /app
 

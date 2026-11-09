@@ -353,7 +353,7 @@ def _check_watch(watch_id: int) -> dict:
         # 只記錯誤,不動 last_status:補貨判斷才能跨過這次失敗,接回上一次的已知狀態
         db.set_watch_error(watch_id, error)
         return {"ok": False, "status": "error", "reason": error}
-    soup, text = page.soup, page.text
+    soup = page.soup
 
     on = set(w.get("notify_on") or ["new", "removed", "price", "restock"])
     lines: list[str] = []

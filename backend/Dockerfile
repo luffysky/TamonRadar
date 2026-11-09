@@ -6,7 +6,8 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    DISABLE_BROWSER=1
+    DISABLE_BROWSER=1 \
+    APP_ENV=production
 # DISABLE_BROWSER=1:此映像無 Chromium,直接停用瀏覽器(只用搜尋 API),
 # 避免 chromedriver 啟動失敗(status 127)的錯誤與等待。
 
