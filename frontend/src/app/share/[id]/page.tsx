@@ -14,7 +14,8 @@ async function fetchShared(id: string) {
   }
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const data = await fetchShared(params.id);
   if (!data) return { title: "分享的搜尋結果 | TamonRadar" };
   const kw = (data.keywords || []).join("、") || "搜尋結果";
@@ -30,6 +31,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default function SharePage({ params }: { params: { id: string } }) {
+export default async function SharePage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return <ShareView id={params.id} />;
 }

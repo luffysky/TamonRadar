@@ -13,7 +13,8 @@ async function fetchThread(id: string) {
   }
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const t = await fetchThread(params.id);
   if (!t) return { title: "討論主題 | TamonRadar" };
   const desc = (t.content || "").replace(/<[^>]+>/g, "").slice(0, 100) || `${t.author} 發起的討論`;
@@ -24,6 +25,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default function ThreadPage({ params }: { params: { id: string } }) {
+export default async function ThreadPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   return <ThreadView id={Number(params.id)} />;
 }

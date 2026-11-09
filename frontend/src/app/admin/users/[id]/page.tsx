@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { getAdminUserDetail, setUserNote, setUserPlan, setUserPrivilege, setUserBanned, type AdminUserDetail } from "@/lib/api";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 import { ADMIN_BASE } from "@/lib/admin";
 
-export default function AdminUserDetailPage({ params }: { params: { id: string } }) {
+export default function AdminUserDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const id = Number(params.id);
   const { user, ready } = useRequireAuth();
   const toast = useToast();

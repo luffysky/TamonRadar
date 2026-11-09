@@ -35,7 +35,8 @@ async function getTaxonomy(): Promise<{ categories: { name: string; count: numbe
 
 const PER = 12;
 
-export default async function BlogPage({ searchParams }: { searchParams?: { page?: string; category?: string; tag?: string } }) {
+export default async function BlogPage({ searchParams: searchParamsPromise }: { searchParams?: Promise<{ page?: string; category?: string; tag?: string }> }) {
+  const searchParams = await searchParamsPromise;
   const category = searchParams?.category || "";
   const tag = searchParams?.tag || "";
   const params = new URLSearchParams();

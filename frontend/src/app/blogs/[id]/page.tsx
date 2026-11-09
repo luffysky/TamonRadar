@@ -18,7 +18,8 @@ async function fetchAuthor(id: string): Promise<AuthorBlog | null> {
   }
 }
 
-export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const d = await fetchAuthor(params.id);
   if (!d) return { title: "作者部落格 | TamonRadar" };
   return {
@@ -27,7 +28,8 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
   };
 }
 
-export default async function AuthorBlogPage({ params }: { params: { id: string } }) {
+export default async function AuthorBlogPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   const d = await fetchAuthor(params.id);
   if (!d) {
     return (

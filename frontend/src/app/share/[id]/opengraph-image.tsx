@@ -6,7 +6,8 @@ export const contentType = "image/png";
 
 const API = (process.env.NEXT_PUBLIC_API_BASE || "").replace(/\/+$/, "");
 
-export default async function Image({ params }: { params: { id: string } }) {
+export default async function Image({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = await paramsPromise;
   let kw = "搜尋結果";
   let total = 0;
   try {

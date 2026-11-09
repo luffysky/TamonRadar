@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
 import { useRequireAuth } from "@/components/AuthProvider";
 import PostEditor from "@/components/PostEditor";
 import { getMyPost, myUpdatePost, getPreviewToken, type BlogPost } from "@/lib/api";
 
-export default function EditPostPage({ params }: { params: { id: string } }) {
+export default function EditPostPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const id = Number(params.id);
   const { user, ready } = useRequireAuth();
   const router = useRouter();

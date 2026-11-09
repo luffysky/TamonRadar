@@ -19,7 +19,8 @@ async function getPost(slug: string): Promise<BlogPost | null> {
   }
 }
 
-export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+export async function generateMetadata({ params: paramsPromise }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const params = await paramsPromise;
   const post = await getPost(params.slug);
   if (!post) return { title: "找不到文章" };
   return {
@@ -54,7 +55,8 @@ function readingMinutes(html: string): number {
   return Math.max(1, Math.ceil(text.length / 400));
 }
 
-export default async function ArticlePage({ params }: { params: { slug: string } }) {
+export default async function ArticlePage({ params: paramsPromise }: { params: Promise<{ slug: string }> }) {
+  const params = await paramsPromise;
   const post = await getPost(params.slug);
   if (!post) notFound();
 

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { API_BASE, type BlogPost } from "@/lib/api";
 import RichContent from "@/components/social/RichContent";
 
-export default function PreviewPage({ params }: { params: { token: string } }) {
+export default function PreviewPage({ params: paramsPromise }: { params: Promise<{ token: string }> }) {
+  const params = use(paramsPromise);
   const [post, setPost] = useState<BlogPost | null>(null);
   const [err, setErr] = useState("");
 

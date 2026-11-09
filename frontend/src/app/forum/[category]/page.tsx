@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import {
   getForumCategories, getForumThreads, createThread,
@@ -10,7 +10,8 @@ import { useAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 import RichTextEditor from "@/components/social/RichTextEditor";
 
-export default function ForumCategoryPage({ params }: { params: { category: string } }) {
+export default function ForumCategoryPage({ params: paramsPromise }: { params: Promise<{ category: string }> }) {
+  const params = use(paramsPromise);
   const { user } = useAuth();
   const toast = useToast();
   const [cat, setCat] = useState<ForumCategory | null>(null);

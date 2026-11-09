@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { getAdminRun } from "@/lib/api";
@@ -8,7 +8,8 @@ import type { CrawlResult } from "@/lib/types";
 import ResultsView from "@/components/ResultsView";
 import { ADMIN_BASE } from "@/lib/admin";
 
-export default function AdminRunPage({ params }: { params: { id: string } }) {
+export default function AdminRunPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const { user, ready } = useRequireAuth();
   const [data, setData] = useState<(CrawlResult & { keywords: string[] }) | null>(null);
   const [err, setErr] = useState<string | null>(null);

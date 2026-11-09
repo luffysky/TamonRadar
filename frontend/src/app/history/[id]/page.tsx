@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { Share2 } from "lucide-react";
 import { getHistoryRun, setRunShared } from "@/lib/api";
@@ -10,7 +10,8 @@ import RadarPanel from "@/components/RadarPanel";
 import { useRequireAuth } from "@/components/AuthProvider";
 import { useToast } from "@/components/Toast";
 
-export default function HistoryDetailPage({ params }: { params: { id: string } }) {
+export default function HistoryDetailPage({ params: paramsPromise }: { params: Promise<{ id: string }> }) {
+  const params = use(paramsPromise);
   const { user, ready } = useRequireAuth();
   const toast = useToast();
   const [data, setData] = useState<(CrawlResult & { keywords: string[]; shared?: boolean }) | null>(null);
