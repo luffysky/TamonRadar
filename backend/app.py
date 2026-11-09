@@ -1635,7 +1635,7 @@ def admin_broadcast(req: BroadcastRequest, request: Request, admin=Depends(auth.
     if "email" in req.channels:
         import mailer
         if mailer.mail_available():
-            emails = db.all_user_emails()
+            emails = db.emails_by_segment(req.segment)
             html = (f"<h3>{req.title}</h3>" + req.body.replace("\n", "<br>")
                     + (f'<p><a href="{req.url}">前往</a></p>' if req.url else ""))
             sent = 0

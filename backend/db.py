@@ -1611,6 +1611,18 @@ def broadcast(title: str, body: str, url: str, channels: list[str], segment: str
     return {"recipients": len(ids), **counts}
 
 
+def emails_by_segment(segment: str) -> list[str]:
+    """分群對應的 email(排除停權帳號)。"""
+    if segment not in ("privileged", "verified", "telegram", "discord"):
+        return all_user_emails()
+    ids = user_ids_by_segment(segment)
+    if not ids:
+        return []
+    with SessionLocal() as s:
+        return [e for (e,) in s.execute(
+            select(User.email).where(User.id.in_(ids), User.banned == False, User.email != "")).all()]  # noqa: E712
+
+
 def schedule_broadcast(title: str, body: str, url: str, channels: list, segment: str, run_at) -> int:
     from datetime import datetime as _dt
     if isinstance(run_at, str):
@@ -1654,19 +1666,30 @@ def run_due_broadcasts() -> int:
             if ra and ra <= now:
                 targets.append(b.id)
     for bid in targets:
+        # 先原子地把 sent 設為 True(認領)才開始寄,兩個排程同時跑也只有一個會成功
         with SessionLocal() as s:
-            b = s.get(ScheduledBroadcast, bid)
-            if not b or b.sent:
+            claimed = s.execute(
+                update(ScheduledBroadcast)
+                .where(ScheduledBroadcast.id == bid, ScheduledBroadcast.sent == False)  # noqa: E712
+                .values(sent=True)
+            ).rowcount
+            s.commit()
+            if claimed != 1:
                 continue
+            b = s.get(ScheduledBroadcast, bid)
             title, body, url, channels, segment = b.title, b.body, b.url, b.channels or [], b.segment
-        res = broadcast(title, body, url, channels, segment)
+        try:
+            res = broadcast(title, body, url, channels, segment)
+        except Exception as e:
+            print(f"[broadcast] {bid} 發送失敗:{e}")
+            res = {"error": str(e)[:200]}
         if "email" in channels:
             try:
                 import mailer
                 if mailer.mail_available():
                     html = f"<h3>{title}</h3>" + body.replace("\n", "<br>")
                     n = 0
-                    for e in all_user_emails():
+                    for e in emails_by_segment(segment):
                         try:
                             ok, _ = mailer.send_email(e, title, html); n += 1 if ok else 0
                         except Exception:
@@ -1677,7 +1700,6 @@ def run_due_broadcasts() -> int:
         with SessionLocal() as s:
             b = s.get(ScheduledBroadcast, bid)
             if b:
-                b.sent = True
                 b.result = res
                 s.commit()
         sent += 1
