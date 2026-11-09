@@ -7,6 +7,10 @@ import os
 from dataclasses import dataclass, field
 
 
+class BudgetExhausted(Exception):
+    """這一輪的時間預算用完;進度已寫入斷點,工作放回佇列由下一輪接續。"""
+
+
 # 預設關鍵字(前端沒帶關鍵字時使用)
 DEFAULT_KEYWORDS = [
     "多聞 週邊",

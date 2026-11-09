@@ -2,20 +2,17 @@
 
 差別:
 - 不再寫死設定,改吃 CrawlConfig。
-- 每個階段透過 on_event callback 即時回報進度(給 SSE 串流用)。
+- 每個階段透過 on_event callback 回報進度(寫進 DB 給前端輪詢)。
+- 可續跑:每完成一個關鍵字/詳細頁就寫斷點,時間預算用完時丟 BudgetExhausted 由下一輪接續。
 - 回傳結構化結果(records + summary),而不是只寫檔。
 """
+import importlib.util
 import os
 from dataclasses import replace
 from pathlib import Path
 from typing import Callable
 
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
-from .config import CrawlConfig, SKIP_EXTENSIONS
+from .config import BudgetExhausted, CrawlConfig, SKIP_EXTENSIONS
 from .google_search import search_google, BlockedError
 from .search_api import search_api, SearchApiError, resolve_order, API_PROVIDERS
 from .detail_scraper import scrape_detail_page, classify_search_only, light_enrich
@@ -29,7 +26,12 @@ def _noop(event: dict) -> None:
     pass
 
 
-def build_driver(headless: bool) -> webdriver.Chrome:
+def build_driver(headless: bool):
+    # selenium 只裝在本機/Docker 環境(requirements-selenium.txt),部署到 Vercel 的路徑絕不匯入
+    from selenium import webdriver
+    from selenium.webdriver.chrome.options import Options
+    from selenium.webdriver.chrome.service import Service
+
     options = Options()
     if headless:
         options.add_argument("--headless=new")
@@ -53,6 +55,7 @@ def build_driver(headless: bool) -> webdriver.Chrome:
     if driver_path:
         service = Service(driver_path)
     else:
+        from webdriver_manager.chrome import ChromeDriverManager
         service = Service(ChromeDriverManager().install())
 
     return webdriver.Chrome(service=service, options=options)
@@ -72,16 +75,29 @@ def dedupe_results(items: list[dict]) -> list[dict]:
     return final
 
 
+def _browser_disabled() -> bool:
+    """Vercel 或沒裝 selenium 的環境沒有瀏覽器。"""
+    if os.environ.get("DISABLE_BROWSER") == "1" or os.environ.get("VERCEL"):
+        return True
+    return importlib.util.find_spec("selenium") is None
+
+
 def run_crawl(
     config: CrawlConfig,
     on_event: EventCallback = _noop,
     should_stop: Callable[[], bool] = lambda: False,
+    *,
+    cursor: dict | None = None,
+    checkpoint: Callable[[dict], None] | None = None,
+    budget_left: Callable[[], bool] = lambda: True,
 ) -> dict:
-    """執行一次完整爬蟲。回傳 {records, summary}。"""
+    """執行一次完整爬蟲。回傳 {records, summary};cursor 由 checkpoint 存下,下一輪從這裡接著跑。"""
     config = config.normalized()
+    cursor = dict(cursor or {})
+    save = checkpoint or (lambda state: None)
     use_api = config.search_provider in API_PROVIDERS
     # 雲端輕量映像沒有 Chrome:設 DISABLE_BROWSER=1 就完全不嘗試開瀏覽器(避免 chromedriver 127 錯誤與等待)
-    browser_disabled = os.environ.get("DISABLE_BROWSER") == "1"
+    browser_disabled = _browser_disabled()
     if browser_disabled and config.scrape_details:
         on_event({"type": "warning", "message": "此環境未安裝瀏覽器(DISABLE_BROWSER=1),已自動關閉「進詳細頁」,只用搜尋結果。"})
         config = replace(config, scrape_details=False)
@@ -110,17 +126,20 @@ def run_crawl(
             on_event({"type": "phase", "phase": "starting",
                       "message": f"使用搜尋 API:{config.search_provider}"})
 
-        all_search_results: list[dict] = []
+        all_search_results: list[dict] = list(cursor.get("results") or [])
 
         # 搜尋 API 的嘗試順序(例:serpapi→brave),額度用完的會被標記跳過
         api_order = resolve_order(config.search_provider) if use_api else []
-        api_dead: set[str] = set()
+        api_dead: set[str] = set(cursor.get("api_dead") or [])
 
         total_kw = len(config.keywords)
-        for idx, keyword in enumerate(config.keywords, start=1):
+        start_kw = int(cursor.get("next_keyword") or 0)
+        for idx, keyword in enumerate(config.keywords[start_kw:], start=start_kw + 1):
             if should_stop():
                 on_event({"type": "stopped", "message": "已被使用者停止"})
                 break
+            if not budget_left():
+                raise BudgetExhausted()
             on_event({
                 "type": "search_keyword",
                 "message": f"搜尋關鍵字:{keyword}",
@@ -180,6 +199,7 @@ def run_crawl(
                 "found": len(results), "message": f"「{keyword}」找到 {len(results)} 筆",
             })
             all_search_results.extend(results)
+            save({"next_keyword": idx, "results": all_search_results, "api_dead": sorted(api_dead)})
 
         deduped = dedupe_results(all_search_results)
         # 相關性過濾:濾掉標題/摘要/網址完全沒提到關鍵字的結果
@@ -205,17 +225,19 @@ def run_crawl(
                 pass
         else:
             targets = deduped[: config.max_detail_pages]
-            records = []
-            processed = 0  # 實際處理到第幾筆搜尋結果(列表頁多抓的商品不算,不能用 len(records))
+            records = list(cursor.get("records") or [])
+            processed = int(cursor.get("next_detail") or 0)  # 實際處理到第幾筆搜尋結果(列表頁多抓的商品不算,不能用 len(records))
             total = len(targets)
             on_event({
                 "type": "phase", "phase": "detail",
                 "message": f"開始抓詳細資訊,共 {total} 筆",
             })
-            for i, item in enumerate(targets, start=1):
+            for i, item in enumerate(targets[processed:], start=processed + 1):
                 if should_stop():
                     on_event({"type": "stopped", "message": "已被使用者停止"})
                     break
+                if not budget_left():
+                    raise BudgetExhausted()
                 detail = scrape_detail_page(
                     driver=driver, item=item,
                     min_sleep=config.min_sleep, max_sleep=config.max_sleep,
@@ -232,6 +254,8 @@ def run_crawl(
                     "price": detail.get("price", ""),
                     "message": f"[{i}/{total}] {item.get('title', '')}",
                 })
+                save({"next_keyword": total_kw, "results": all_search_results, "api_dead": sorted(api_dead),
+                      "next_detail": i, "records": records})
             # 沒抓到詳細頁的剩餘搜尋結果也帶上(只有標題/摘要層級資料)
             for item in deduped[processed:]:
                 records.append(classify_search_only(item))

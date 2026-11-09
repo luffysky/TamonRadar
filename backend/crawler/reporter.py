@@ -1,22 +1,9 @@
 from pathlib import Path
 
 import pandas as pd
-import matplotlib
-
-matplotlib.use("Agg")  # 伺服器無畫面,用非互動後端
-import matplotlib.pyplot as plt
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
-
-# 讓圖表能顯示中文(找不到字型就退回預設,不會壞)
-for _font in ["Microsoft JhengHei", "Microsoft YaHei", "SimHei", "PingFang TC", "Noto Sans CJK TC"]:
-    try:
-        matplotlib.rcParams["font.sans-serif"] = [_font]
-        matplotlib.rcParams["axes.unicode_minus"] = False
-        break
-    except Exception:
-        continue
 
 COLUMN_ORDER = [
     "keyword", "category", "character", "title", "url", "domain", "snippet", "price",
@@ -104,6 +91,20 @@ def beautify_excel(path: Path) -> None:
 
 
 def save_charts(df: pd.DataFrame, output_dir: str) -> list[Path]:
+    import matplotlib
+
+    matplotlib.use("Agg")  # 伺服器無畫面,用非互動後端
+    import matplotlib.pyplot as plt
+
+    # 讓圖表能顯示中文(找不到字型就退回預設,不會壞)
+    for _font in ["Microsoft JhengHei", "Microsoft YaHei", "SimHei", "PingFang TC", "Noto Sans CJK TC"]:
+        try:
+            matplotlib.rcParams["font.sans-serif"] = [_font]
+            matplotlib.rcParams["axes.unicode_minus"] = False
+            break
+        except Exception:
+            continue
+
     _, charts = ensure_output_dirs(output_dir)
     chart_paths: list[Path] = []
 

@@ -1,4 +1,3 @@
-from selenium.webdriver.common.by import By
 from urllib.parse import quote_plus
 
 from .utils import (
@@ -21,6 +20,8 @@ def search_google(
     min_sleep: float = 2,
     max_sleep: float = 5,
 ) -> list[dict]:
+    from selenium.webdriver.common.by import By   # 只在真的開瀏覽器時才載入(部署環境沒有 selenium)
+
     results = []
 
     for page in range(pages):
