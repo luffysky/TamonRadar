@@ -9,6 +9,7 @@ from crawler.runner import run_crawl
 import db
 import jobs
 import notify
+import quota
 import radar
 import watcher
 
@@ -69,7 +70,7 @@ def _job_id(schedule_id: int) -> str:
 def _add(sc: dict) -> None:
     _sched.add_job(
         _run, "interval",
-        hours=max(1, int(sc["interval_hours"])),
+        hours=max(quota.caps_for_id(sc["user_id"]).min_schedule_hours, int(sc["interval_hours"])),
         id=_job_id(sc["id"]),
         args=[sc["id"]],
         replace_existing=True,
@@ -106,7 +107,7 @@ def _watch_job_id(watch_id: int) -> str:
 def add_watch(w: dict) -> None:
     _sched.add_job(
         watcher.check_watch, "interval",
-        minutes=max(1, int(w["interval_minutes"])),
+        minutes=max(quota.caps_for_id(w["user_id"]).min_watch_minutes, int(w["interval_minutes"])),
         id=_watch_job_id(w["id"]),
         args=[w["id"]],
         replace_existing=True,
@@ -157,10 +158,18 @@ def _run(schedule_id: int) -> None:
         remove(schedule_id)
         return
 
+    # 排程也算搜尋用量;額度用完就跳過這次並告知使用者
+    try:
+        quota.enforce_by_id(sc["user_id"], "search")
+    except quota.QuotaExceeded as e:
+        db.add_notification(sc["user_id"], "📡 排程略過", e.message)
+        return
+
+    caps = quota.caps_for_id(sc["user_id"])
     config = CrawlConfig(
-        keywords=sc["keywords"],
-        google_pages_per_keyword=sc["pages"],
-        max_detail_pages=sc["max_detail"],
+        keywords=sc["keywords"][:caps.keywords],
+        google_pages_per_keyword=min(sc["pages"], caps.pages),
+        max_detail_pages=min(sc["max_detail"], caps.detail_pages),
         scrape_details=sc["scrape_details"],
         search_provider=sc["provider"],
     )

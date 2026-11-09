@@ -11,10 +11,15 @@ from datetime import datetime, timezone
 from crawler.config import CrawlConfig
 from crawler.runner import run_crawl
 import db
+import quota
 
 # 同時最多幾個爬蟲在跑;其餘排隊等待
 MAX_CONCURRENT = int(os.environ.get("MAX_CONCURRENT_CRAWLS", "2"))
 _slots = threading.Semaphore(MAX_CONCURRENT)
+
+
+class TooManyJobs(quota.QuotaExceeded):
+    """這個使用者同時進行中的爬蟲任務已達上限。"""
 
 
 class Job:
@@ -55,9 +60,16 @@ class JobManager:
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
 
-    def create(self, config: CrawlConfig, user_id: int) -> Job:
+    def active_count(self, user_id: int) -> int:
+        with self._lock:
+            return sum(1 for j in self._jobs.values() if j.user_id == user_id and not j.finished)
+
+    def create(self, config: CrawlConfig, user_id: int, max_active: int | None = None) -> Job:
         job = Job(config, user_id)
         with self._lock:
+            active = sum(1 for j in self._jobs.values() if j.user_id == user_id and not j.finished)
+            if max_active is not None and active >= max_active:
+                raise TooManyJobs(f"你已有 {active} 個爬蟲進行中(上限 {max_active} 個),請等它跑完或先停止。")
             self._jobs[job.id] = job
         threading.Thread(target=self._run, args=(job,), daemon=True).start()
         return job

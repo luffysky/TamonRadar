@@ -539,6 +539,7 @@ class ScrapePageRequest(BaseModel):
 @app.post("/api/scrape-page")
 def scrape_page(req: ScrapePageRequest, user=Depends(auth.get_current_user)):
     """整頁抓取:給一個網址,抓出該頁所有表格列/商品(股票排行、列表頁適用)。"""
+    _clean_keywords(req.keywords, 20)
     _enforce_quota(user, "search")
     if not req.url.strip().startswith("http"):
         raise HTTPException(400, "請貼有效的網址(http/https)")
@@ -573,34 +574,42 @@ class SiteCrawlRequest(BaseModel):
 @app.post("/api/crawl-site")
 def start_site_crawl(req: SiteCrawlRequest, user=Depends(auth.get_current_user)):
     """整站爬(背景任務):跟著同網域連結遞迴抓取,進度走同一套 SSE。"""
+    caps = quota.caps_for(user)
+    _clean_keywords(req.keywords, 20)
+    if len(req.path_includes) > 20:
+        raise HTTPException(400, "路徑條件最多 20 個")
+    _check_job_slot(user, caps)
     _enforce_quota(user, "search")
     if not req.url.strip().startswith("http"):
         raise HTTPException(400, "請貼有效的網址(http/https)")
     config = CrawlConfig(
         keywords=[req.url.strip()],
         site_url=req.url.strip(),
-        site_max_pages=req.max_pages,
-        site_max_depth=req.max_depth,
+        site_max_pages=max(1, min(req.max_pages, caps.site_pages)),
+        site_max_depth=max(0, min(req.max_depth, caps.site_depth)),
         filter_keywords=req.keywords,
         path_includes=req.path_includes,
     )
-    job = manager.create(config, user.id)
+    job = manager.create(config, user.id, max_active=caps.concurrent_jobs)
     return {"job_id": job.id, "status": job.status}
 
 
 @app.post("/api/crawl")
 def start_crawl(req: CrawlRequest, user=Depends(auth.get_current_user)):
+    caps = quota.caps_for(user)
+    keywords = _clean_keywords(req.keywords, caps.keywords)
+    _check_job_slot(user, caps)
     _enforce_quota(user, "search")
     config = CrawlConfig(
-        keywords=req.keywords,
-        google_pages_per_keyword=req.google_pages_per_keyword,
-        max_detail_pages=req.max_detail_pages,
+        keywords=keywords,
+        google_pages_per_keyword=max(1, min(req.google_pages_per_keyword, caps.pages)),
+        max_detail_pages=max(0, min(req.max_detail_pages, caps.detail_pages)),
         headless=req.headless,
         scrape_details=req.scrape_details,
         search_provider=req.search_provider or CrawlConfig().search_provider,
         vertical=req.vertical,
     )
-    job = manager.create(config, user.id)
+    job = manager.create(config, user.id, max_active=caps.concurrent_jobs)
     return {"job_id": job.id, "status": job.status}
 
 
@@ -825,6 +834,43 @@ def _require_max_len(value: str | None, limit: int, label: str) -> None:
 def _require_max_records(records: list | None) -> None:
     if records is not None and len(records) > _MAX_CLIENT_RECORDS:
         raise HTTPException(400, f"資料筆數太多(上限 {_MAX_CLIENT_RECORDS} 筆)")
+
+
+def _clean_keywords(keywords: list[str], cap: int) -> list[str]:
+    cleaned = [k.strip() for k in (keywords or []) if k and k.strip()]
+    for k in cleaned:
+        _require_max_len(k, 200, "關鍵字")
+    if len(cleaned) > cap:
+        raise HTTPException(400, f"一次最多 {cap} 個關鍵字(目前 {len(cleaned)} 個)")
+    return cleaned
+
+
+def _check_job_slot(user, caps: quota.Caps) -> None:
+    """先確認還能開新任務,再扣搜尋額度,避免被擋下來的請求白白扣額度。"""
+    if manager.active_count(user.id) >= caps.concurrent_jobs:
+        raise quota.QuotaExceeded(f"你已有爬蟲進行中(上限 {caps.concurrent_jobs} 個),請等它跑完或先停止。")
+
+
+def _schedule_payload(req: "ScheduleRequest", user, existing_keywords: list[str] | None = None) -> dict:
+    caps = quota.caps_for(user)
+    keywords = [k.strip() for k in req.keywords if k and k.strip()]
+    if keywords != existing_keywords:  # 既有超量的排程仍可單純啟用/停用
+        _clean_keywords(keywords, caps.keywords)
+    data = req.model_dump()
+    data["keywords"] = keywords
+    data["pages"] = max(1, min(req.pages, caps.pages))
+    data["max_detail"] = max(0, min(req.max_detail, caps.detail_pages))
+    data["interval_hours"] = max(caps.min_schedule_hours, min(req.interval_hours, 168))
+    return data
+
+
+def _watch_payload(req: "WatchRequest", user) -> dict:
+    caps = quota.caps_for(user)
+    if len(req.available_keywords) > 30 or len(req.unavailable_keywords) > 30:
+        raise HTTPException(400, "判斷字眼最多 30 個")
+    data = req.model_dump()
+    data["interval_minutes"] = max(caps.min_watch_minutes, min(req.interval_minutes, 1440))
+    return data
 
 
 def _history_text(history: list[dict] | None) -> str:
@@ -1071,14 +1117,20 @@ def get_schedules(user=Depends(auth.get_current_user)):
 def create_schedule(req: ScheduleRequest, user=Depends(auth.get_current_user)):
     if not [k for k in req.keywords if k.strip()]:
         raise HTTPException(400, "請至少設定一個關鍵字")
-    sc = db.create_schedule(user.id, req.model_dump())
+    caps = quota.caps_for(user)
+    if len(db.list_schedules(user.id)) >= caps.schedules:
+        raise quota.QuotaExceeded(f"排程數已達上限({caps.schedules} 個),請先刪除不用的排程。")
+    sc = db.create_schedule(user.id, _schedule_payload(req, user))
     scheduler.sync(sc)
     return sc
 
 
 @app.patch("/api/schedules/{schedule_id}")
 def patch_schedule(schedule_id: int, req: ScheduleRequest, user=Depends(auth.get_current_user)):
-    sc = db.update_schedule(schedule_id, user.id, req.model_dump())
+    existing = db.get_schedule(schedule_id, user.id)
+    if not existing:
+        raise HTTPException(404, "找不到這個排程")
+    sc = db.update_schedule(schedule_id, user.id, _schedule_payload(req, user, existing["keywords"]))
     if not sc:
         raise HTTPException(404, "找不到這個排程")
     scheduler.sync(sc)
@@ -1136,6 +1188,11 @@ def add_favorite(req: FavoriteRequest, user=Depends(auth.get_current_user)):
 
 @app.patch("/api/favorites/{fav_id}")
 def set_favorite_target(fav_id: int, req: TargetRequest, user=Depends(auth.get_current_user)):
+    if req.target_twd is not None:
+        caps = quota.caps_for(user)
+        targeted = {f["id"] for f in db.list_favorites_with_target(user.id)}
+        if fav_id not in targeted and len(targeted) >= caps.favorite_targets:
+            raise quota.QuotaExceeded(f"目標價追蹤已達上限({caps.favorite_targets} 個)。")
     f = db.set_favorite_target(fav_id, user.id, req.target_twd)
     if not f:
         raise HTTPException(404, "找不到收藏")
@@ -1158,14 +1215,17 @@ def get_price_history(url: str, user=Depends(auth.get_current_user)):
 def create_watch(req: WatchRequest, user=Depends(auth.get_current_user)):
     if not req.url.strip().startswith("http"):
         raise HTTPException(400, "請輸入有效的網址(http/https)")
-    w = db.create_watch(user.id, req.model_dump())
+    caps = quota.caps_for(user)
+    if len(db.list_watches(user.id)) >= caps.watches:
+        raise quota.QuotaExceeded(f"監看數已達上限({caps.watches} 個),請先刪除不用的監看。")
+    w = db.create_watch(user.id, _watch_payload(req, user))
     scheduler.sync_watch(w)
     return w
 
 
 @app.patch("/api/watches/{watch_id}")
 def patch_watch(watch_id: int, req: WatchRequest, user=Depends(auth.get_current_user)):
-    w = db.update_watch(watch_id, user.id, req.model_dump())
+    w = db.update_watch(watch_id, user.id, _watch_payload(req, user))
     if not w:
         raise HTTPException(404, "找不到這個監看")
     scheduler.sync_watch(w)
@@ -1185,6 +1245,7 @@ def check_watch_now(watch_id: int, user=Depends(auth.get_current_user)):
     import threading
     if not db.get_watch(watch_id, user.id):
         raise HTTPException(404, "找不到這個監看")
+    ratelimit.enforce(f"watch-check:{user.id}", 10, 60, "檢查太頻繁,請稍後再試。")
     threading.Thread(target=scheduler.check_watch_now, args=(watch_id,), daemon=True).start()
     return {"ok": True, "message": "已在背景檢查一次"}
 
