@@ -602,3 +602,12 @@ def test_budget_exhausted_is_not_failure(user, monkeypatch):
 
 def test_caps_helper_used(user):
     assert quota.caps_for(user).concurrent_jobs == 1
+
+
+def test_stop_seen_even_when_checkpoints_are_frequent(user):
+    """每次存斷點都會更新心跳時間;停止旗標必須在存斷點時一併讀到。"""
+    j = manager.create(_cfg("a", "b"), user.id)
+    h = jobs.claim_next("w", far())
+    manager.stop(j.id)
+    h.checkpoint({"next_keyword": 1})
+    assert h.should_stop() is True

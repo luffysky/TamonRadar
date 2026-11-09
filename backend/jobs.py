@@ -75,7 +75,7 @@ def _add_job(s, kind: str, *, user_id: int | None = None, config: dict | None = 
                   available_at=now, dedupe_key=dedupe_key, created_at=now)
     stmt = db.dialect_insert(db.Job).values(**values)
     stmt = stmt.on_conflict_do_nothing(index_elements=["dedupe_key"]) if dedupe_key else stmt
-    return jid if s.execute(stmt).rowcount == 1 else None
+    return s.execute(stmt.returning(db.Job.id)).scalar()   # rowcount 在 Postgres 的 RETURNING 下不可靠
 
 
 def enqueue(kind: str, **kw) -> str | None:
@@ -338,11 +338,13 @@ class JobHandle:
     # 斷點 / 收尾 ----------
     def checkpoint(self, cursor: dict) -> None:
         with db.SessionLocal() as s:
-            n = s.execute(update(db.Job).where(*self._fenced()).values(cursor=cursor, heartbeat_at=db._now())).rowcount
+            row = s.execute(update(db.Job).where(*self._fenced()).values(cursor=cursor, heartbeat_at=db._now())
+                            .returning(db.Job.stop_requested)).first()
             s.commit()
-        if n != 1:
+        if row is None:
             raise LostClaim(self.id)
         self.cursor = dict(cursor)
+        self._stop = bool(row[0])      # 斷點等同一次心跳:這裡不讀旗標的話,頻繁存檔時永遠看不到停止請求
         self._last_beat = time.monotonic()
 
     def requeue(self) -> None:
