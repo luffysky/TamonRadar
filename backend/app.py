@@ -8,6 +8,11 @@ import io
 import json
 import os
 
+import appconfig
+
+# 正式環境缺密鑰就直接拒絕啟動(必須在匯入 auth / db 之前)
+appconfig.assert_production_config()
+
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response

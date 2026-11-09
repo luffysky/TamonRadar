@@ -8,9 +8,12 @@ import jwt
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
+from appconfig import DEV_JWT_SECRET, assert_production_config
 from db import SessionLocal, User
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-insecure-secret-change-me")
+# 正式環境缺密鑰就拒絕啟動,絕不退回開發預設值
+assert_production_config()
+JWT_SECRET = os.environ.get("JWT_SECRET", DEV_JWT_SECRET)
 JWT_ALGO = "HS256"
 TOKEN_TTL_DAYS = 14
 _PBKDF2_ITERATIONS = 200_000

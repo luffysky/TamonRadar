@@ -716,11 +716,21 @@ def get_settings(user_id: int) -> dict:
         st = s.get(Settings, user_id)
         if st is None:
             return {**{k: "" for k in fields}, "daily_digest": False}
-        out = {
-            k: (crypto.decrypt(getattr(st, k)) if k in _SECRET_FIELDS else (getattr(st, k) or ""))
-            for k in fields
-        }
+        out: dict = {}
+        failed: list[str] = []
+        for k in fields:
+            if k not in _SECRET_FIELDS:
+                out[k] = getattr(st, k) or ""
+                continue
+            try:
+                out[k] = crypto.decrypt(getattr(st, k))
+            except crypto.DecryptionError:
+                out[k] = ""
+                failed.append(k)
+        if failed:
+            print(f"[db] ⚠️ user {user_id} 有欄位解密失敗(金鑰可能換錯):{'、'.join(failed)}")
         out["daily_digest"] = bool(st.daily_digest)
+        out["decrypt_failed"] = failed  # 解不開的欄位(值回空字串,但資料庫內的密文保留)
         return out
 
 
@@ -729,6 +739,14 @@ _SECRET_FIELDS = {
     "discord_webhook", "telegram_token", "telegram_chat_id",
     "openai_key", "anthropic_key", "gemini_key", "groq_key", "openrouter_key",
 }
+
+
+def _undecryptable(raw: str | None) -> bool:
+    try:
+        crypto.decrypt(raw or "")
+        return False
+    except crypto.DecryptionError:
+        return True
 
 
 def save_settings(user_id: int, data: dict) -> None:
@@ -741,6 +759,8 @@ def save_settings(user_id: int, data: dict) -> None:
             s.add(st)
         for key in fields:
             if key in data and data[key] is not None:
+                if key in _SECRET_FIELDS and not data[key] and _undecryptable(getattr(st, key, "")):
+                    continue  # 解不開的密文別被空值覆蓋:前端讀到空字串再存回來會把資料洗掉
                 value = crypto.encrypt(data[key]) if key in _SECRET_FIELDS else data[key]
                 setattr(st, key, value)
         if "daily_digest" in data and data["daily_digest"] is not None:
@@ -1715,14 +1735,21 @@ def get_ai_config(masked: bool = True) -> dict:
     out = {"default_provider": default_provider, "providers": {}}
     for p in AI_PROVIDERS:
         raw = rows.get(f"ai:{p}:key", "")
-        key = crypto.decrypt(raw) if raw else ""
+        failed = False
+        try:
+            key = crypto.decrypt(raw) if raw else ""
+        except crypto.DecryptionError:
+            key, failed = "", True
+            print(f"[db] ⚠️ AI 金鑰解密失敗(金鑰可能換錯):{p}")
         info = {
             "model": rows.get(f"ai:{p}:model", ""),
             "enabled": rows.get(f"ai:{p}:enabled", "1") != "0",
             "has_key": bool(key),
+            "decrypt_failed": failed,
         }
         if masked:
-            info["key_hint"] = (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("已設定" if key else "")
+            info["key_hint"] = "解密失敗,請檢查 ENCRYPTION_KEY" if failed else (
+                (key[:6] + "…" + key[-4:]) if len(key) > 12 else ("已設定" if key else ""))
         else:
             info["key"] = key
         out["providers"][p] = info
@@ -1756,7 +1783,11 @@ def ai_db_setting(provider: str, field: str) -> str:
         row = s.get(AppSetting, f"ai:{provider}:{field}")
         val = row.value if row else ""
     if field == "key" and val:
-        return crypto.decrypt(val)
+        try:
+            return crypto.decrypt(val)
+        except crypto.DecryptionError:
+            print(f"[db] ⚠️ AI 金鑰解密失敗(金鑰可能換錯):{provider}")
+            return ""
     return val or ""
 
 
