@@ -10,11 +10,13 @@ import requests
 
 import ai
 import db
+import ratelimit
 from knowledge import KNOWLEDGE
 
 
-def answer(question: str) -> str:
-    question = (question or "").strip()
+def answer(question: str, actor: str) -> str:
+    """actor 是提問來源(telegram:<chat_id> / discord:<user>),用來限流與記錄成本。"""
+    question = (question or "").strip()[:2000]
     if not question:
         return "請問我關於 TamonRadar 的問題 🙂"
     if not ai.ai_available():
@@ -25,7 +27,10 @@ def answer(question: str) -> str:
         "若問題和 TamonRadar 有關,優先參考上面的網站說明;若是一般性問題(購物、比價、生活、知識等),"
         "也請正常、實用地回答,不要拒答。只有在被要求做違法或有害的事時才婉拒。\n\n問題:" + question
     )
-    text, _ = ai.ai_complete(prompt, max_tokens=800)
+    try:
+        text, _ = ai.ai_complete(prompt, max_tokens=800, actor=actor)
+    except ratelimit.RateLimited as e:
+        return e.message
     return text or "抱歉,我這邊暫時無法回答,請稍後再試。"
 
 
@@ -62,7 +67,7 @@ def _handle_telegram(update: dict) -> None:
         _ok, msg = db.consume_bind_code(code, "telegram", str(chat_id))
         telegram_send(chat_id, msg)
         return
-    ans = answer(text)
+    ans = answer(text, f"telegram:{chat_id}")
     uname = (msg.get("from", {}).get("username") or msg.get("from", {}).get("first_name") or str(chat_id))
     db.add_bot_chat_log("telegram", uname, text, ans)
     telegram_send(chat_id, ans)
@@ -131,7 +136,7 @@ def _discord_followup(app_id: str, token: str, content: str) -> None:
 
 def handle_discord_command_async(app_id: str, token: str, question: str, user: str = "") -> None:
     def _run():
-        ans = answer(question)
+        ans = answer(question, f"discord:{user or token[:12]}")
         db.add_bot_chat_log("discord", user, question, ans)
         _discord_followup(app_id, token, ans)
     threading.Thread(target=_run, daemon=True).start()

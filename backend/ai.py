@@ -6,6 +6,8 @@
 """
 import os
 
+import quota
+
 ORDER = ["openai", "gemini", "groq", "openrouter", "anthropic"]
 
 # OpenAI 相容端點(anthropic 另外處理)
@@ -104,24 +106,37 @@ def _cost_usd(model: str, in_tok: int, out_tok: int) -> float:
     return round(in_tok / 1_000_000 * pin + out_tok / 1_000_000 * pout, 6)
 
 
-def _record(user_id, provider, model, in_tok, out_tok):
-    if not user_id:
+def _record(user_id, provider, model, in_tok, out_tok, actor=""):
+    if not user_id and not actor:
         return
     try:
         import db
         db.record_ai_cost(user_id, provider, model, int(in_tok or 0), int(out_tok or 0),
-                          _cost_usd(model, in_tok or 0, out_tok or 0))
+                          _cost_usd(model, in_tok or 0, out_tok or 0), actor=actor)
     except Exception:
         pass
 
 
+# 每次呼叫模型的硬上限(不論從哪個入口進來)
+MAX_PROMPT_CHARS = int(os.environ.get("AI_MAX_PROMPT_CHARS", "60000"))
+MAX_OUTPUT_TOKENS = 4000
+_IMAGE_COST_USD = 0.04  # 圖片生成以單張估算
+
+
 def ai_complete(prompt: str, max_tokens: int = 1500,
                 user_keys: dict | None = None, prefer: str = "",
-                user_id: int | None = None) -> tuple[str | None, str]:
+                user_id: int | None = None, actor: str = "") -> tuple[str | None, str]:
+    """所有文字 AI 呼叫的唯一入口。user_id=登入使用者;actor=機器人來源(如 telegram:123)。
+
+    額度在這裡統一檢查(超過丟 quota.QuotaExceeded),呼叫端不用也不該自己扣額度。
+    """
     user_keys = user_keys or {}
     provider = _pick(user_keys, prefer)
     if not provider:
         return None, ""
+    quota.gate_ai(user_id, actor)
+    prompt = prompt[:MAX_PROMPT_CHARS]
+    max_tokens = min(max_tokens, MAX_OUTPUT_TOKENS)
     key = _key_for(provider, user_keys)
 
     if provider == "anthropic":
@@ -132,7 +147,7 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
                                     messages=[{"role": "user", "content": prompt}])
         text = "".join(b.text for b in m.content if getattr(b, "type", "") == "text")
         u = getattr(m, "usage", None)
-        _record(user_id, "anthropic", model, getattr(u, "input_tokens", 0), getattr(u, "output_tokens", 0))
+        _record(user_id, "anthropic", model, getattr(u, "input_tokens", 0), getattr(u, "output_tokens", 0), actor)
         return text, f"anthropic:{model}"
 
     cfg = _OPENAI_COMPATIBLE[provider]
@@ -142,15 +157,16 @@ def ai_complete(prompt: str, max_tokens: int = 1500,
     r = client.chat.completions.create(model=model, max_tokens=max_tokens,
                                        messages=[{"role": "user", "content": prompt}])
     u = getattr(r, "usage", None)
-    _record(user_id, provider, model, getattr(u, "prompt_tokens", 0), getattr(u, "completion_tokens", 0))
+    _record(user_id, provider, model, getattr(u, "prompt_tokens", 0), getattr(u, "completion_tokens", 0), actor)
     return (r.choices[0].message.content or ""), f"{provider}:{model}"
 
 
-def generate_image(prompt: str, user_keys: dict | None = None) -> bytes | None:
-    """用 OpenAI 產生封面圖,回傳 PNG bytes;沒 key 或失敗回 None。"""
+def generate_image(prompt: str, user_keys: dict | None = None, user_id: int | None = None) -> bytes | None:
+    """用 OpenAI 產生封面圖,回傳 PNG bytes;沒 key 或失敗回 None。額度超過丟 quota.QuotaExceeded。"""
     key = (user_keys or {}).get("openai_key", "") or _db("openai", "key") or os.environ.get("OPENAI_API_KEY", "")
     if not key:
         return None
+    quota.gate_image(user_id)
     try:
         from openai import OpenAI
         client = OpenAI(api_key=key)
@@ -159,6 +175,11 @@ def generate_image(prompt: str, user_keys: dict | None = None) -> bytes | None:
         except Exception:
             r = client.images.generate(model="dall-e-3", prompt=prompt[:900], size="1024x1024", n=1)
         d = r.data[0]
+        try:
+            import db
+            db.record_ai_cost(user_id, "openai", "image", 0, 0, _IMAGE_COST_USD)
+        except Exception:
+            pass
         import base64
         if getattr(d, "b64_json", None):
             return base64.b64decode(d.b64_json)

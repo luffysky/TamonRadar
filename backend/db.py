@@ -378,7 +378,8 @@ class Notification(Base):
 class AiCost(Base):
     __tablename__ = "tr_ai_cost"
     id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("tr_users.id"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("tr_users.id"), index=True, nullable=True)  # 機器人呼叫沒有 user
+    actor: Mapped[str] = mapped_column(String(80), default="")            # 機器人來源(telegram:123 / discord:name)
     provider: Mapped[str] = mapped_column(String(20), default="")
     model: Mapped[str] = mapped_column(String(80), default="")
     in_tokens: Mapped[int] = mapped_column(default=0)
@@ -492,6 +493,18 @@ def _ensure_columns() -> None:
             if col not in cols:
                 with engine.begin() as conn:
                     conn.execute(text(ddl))
+
+    if "tr_ai_cost" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_ai_cost")}
+        if "actor" not in cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE tr_ai_cost ADD COLUMN actor VARCHAR(80) DEFAULT ''"))
+        if engine.dialect.name == "postgresql":  # 機器人成本沒有 user_id(SQLite 改不了 NOT NULL,僅本機開發受影響)
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE tr_ai_cost ALTER COLUMN user_id DROP NOT NULL"))
+            except Exception:
+                pass
 
     if "tr_user_settings" in tables:
         cols = {c["name"] for c in insp.get_columns("tr_user_settings")}
@@ -1210,9 +1223,10 @@ def list_ai_chat_logs(user_id: int, limit: int = 30) -> list[dict]:
                  "created_at": r.created_at.isoformat() if r.created_at else None} for r in rows]
 
 
-def record_ai_cost(user_id: int, provider: str, model: str, in_tok: int, out_tok: int, cost_usd: float) -> None:
+def record_ai_cost(user_id: int | None, provider: str, model: str, in_tok: int, out_tok: int, cost_usd: float,
+                   actor: str = "") -> None:
     with SessionLocal() as s:
-        s.add(AiCost(user_id=user_id, provider=provider, model=model,
+        s.add(AiCost(user_id=user_id, actor=(actor or "")[:80], provider=provider, model=model,
                      in_tokens=in_tok, out_tokens=out_tok, cost_usd=cost_usd))
         s.commit()
 
@@ -1228,10 +1242,10 @@ def admin_ai_costs(limit: int = 50) -> dict:
                         select(AiCost.model, func.count(), func.sum(AiCost.cost_usd))
                         .group_by(AiCost.model).order_by(func.sum(AiCost.cost_usd).desc())).all()]
         rows = s.execute(
-            select(AiCost, User.email).join(User, AiCost.user_id == User.id)
+            select(AiCost, User.email).outerjoin(User, AiCost.user_id == User.id)
             .order_by(AiCost.created_at.desc()).limit(limit)).all()
         recent = [{
-            "email": email, "provider": a.provider, "model": a.model,
+            "email": email or a.actor or "(未知)", "provider": a.provider, "model": a.model,
             "in_tokens": a.in_tokens, "out_tokens": a.out_tokens, "cost": round(a.cost_usd, 6),
             "created_at": a.created_at.isoformat() if a.created_at else None,
         } for a, email in rows]

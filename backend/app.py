@@ -25,6 +25,7 @@ from crawler.reporter import to_dataframe, save_excel, save_markdown_report
 import db
 import auth
 import ai
+import quota
 import ratelimit
 import mailer
 import notify
@@ -405,40 +406,37 @@ def discord_setup(admin=Depends(auth.get_admin)):
 
 
 @app.post("/api/assistant")
-def assistant(req: AssistantRequest, user=Depends(auth.get_optional_user)):
-    """前台 AI 助手:回答網站問題;若已登入,還會帶入使用者最近的搜尋結果以便比價/找代購。"""
+def assistant(req: AssistantRequest, user=Depends(auth.get_current_user)):
+    """前台 AI 助手(需登入):回答網站問題,並帶入使用者最近的搜尋結果以便比價/找代購。"""
+    _require_max_len(req.question, _MAX_QUESTION_CHARS, "問題")
     from knowledge import KNOWLEDGE
     import money
 
-    args = _ai_args(user) if user else {}
+    args = _ai_args(user)
     if not ai.ai_available(**args):
         return {"available": False, "answer": "AI 助手暫時無法使用(尚未設定 AI 金鑰)。"}
 
     # 帶入該使用者最近一次的搜尋結果,讓小幫手能回答「哪個最便宜 / 哪裡有代購」
     context = ""
-    if user:
-        try:
-            runs = db.list_runs(user.id)
-            if runs:
-                run = db.get_run(runs[0]["id"], user.id) or {}
-                slim = [{
-                    "title": r.get("title", ""), "url": r.get("url", ""), "domain": r.get("domain", ""),
-                    "price": r.get("price", ""), "price_twd": money.to_twd(r.get("price", "")),
-                    "category": r.get("category", ""), "is_listing": r.get("is_listing", False),
-                } for r in run.get("records", [])[:60]]
-                if slim:
-                    kw = "、".join(run.get("keywords", []))
-                    context = (
-                        f"\n\n【使用者最近一次搜尋「{kw}」的結果】(JSON;price_twd 是換算後台幣可用來比價;"
-                        f"is_listing=true 代表是搜尋/列表頁、不是單一商品):\n{json.dumps(slim, ensure_ascii=False)}"
-                    )
-        except Exception:
-            context = ""
+    try:
+        runs = db.list_runs(user.id)
+        if runs:
+            run = db.get_run(runs[0]["id"], user.id) or {}
+            slim = [{
+                "title": r.get("title", ""), "url": r.get("url", ""), "domain": r.get("domain", ""),
+                "price": r.get("price", ""), "price_twd": money.to_twd(r.get("price", "")),
+                "category": r.get("category", ""), "is_listing": r.get("is_listing", False),
+            } for r in run.get("records", [])[:60]]
+            if slim:
+                kw = "、".join(run.get("keywords", []))
+                context = (
+                    f"\n\n【使用者最近一次搜尋「{kw}」的結果】(JSON;price_twd 是換算後台幣可用來比價;"
+                    f"is_listing=true 代表是搜尋/列表頁、不是單一商品):\n{json.dumps(slim, ensure_ascii=False)}"
+                )
+    except Exception:
+        context = ""
 
-    hist = ""
-    for h in (req.history or [])[-6:]:
-        who = "使用者" if h.get("role") == "user" else "助手"
-        hist += f"{who}:{h.get('content', '')}\n"
+    hist = _history_text(req.history)
 
     prompt = (
         KNOWLEDGE + context
@@ -448,9 +446,8 @@ def assistant(req: AssistantRequest, user=Depends(auth.get_optional_user)):
         + (f"先前對話:\n{hist}\n" if hist else "")
         + f"使用者問題:{req.question}"
     )
-    answer, _ = ai.ai_complete(prompt, max_tokens=900, user_id=(user.id if user else None), **args)
-    if user:
-        db.add_ai_chat_log(user.id, "assistant", req.question, answer or "")
+    answer, _ = ai.ai_complete(prompt, max_tokens=900, user_id=user.id, **args)
+    db.add_ai_chat_log(user.id, "assistant", req.question, answer or "")
     return {"available": True, "answer": answer}
 
 
@@ -488,7 +485,8 @@ def insights_compare(run_id: str):
 
 
 @app.post("/api/insights/ai")
-def insights_ai(req: InsightsRequest, user=Depends(auth.get_optional_user)):
+def insights_ai(req: InsightsRequest, user=Depends(auth.get_current_user)):
+    _require_max_records(req.records)
     records = req.records
     if records is None and req.run_id:
         run = db.get_run(req.run_id)
@@ -503,8 +501,8 @@ def insights_ai(req: InsightsRequest, user=Depends(auth.get_optional_user)):
         f"領域:{req.vertical}\n行情:{st}\n好價:{deals}\n跨站聚合:{clusters}\n"
         f"狀態分佈:{ins.get('status_dist')}\n來源分佈:{ins.get('trust_dist')}\n異常:{[o.get('title') for o in ins.get('outliers', [])]}"
     )
-    keys = db.get_settings(user.id) if user else {}
-    text, model = ai.ai_complete(prompt, max_tokens=900, user_keys=keys, user_id=(user.id if user else None))
+    keys = db.get_settings(user.id)
+    text, model = ai.ai_complete(prompt, max_tokens=900, user_keys=keys, user_id=user.id)
     if not text:
         raise HTTPException(400, "AI 暫時無法使用,請於後台設定 AI 金鑰")
     # 可點實體:把洞察提到的關鍵商品附上連結
@@ -811,15 +809,31 @@ def _ai_args(user) -> dict:
 
 
 def _enforce_quota(user, kind: str) -> None:
-    """免費使用者的每日額度;特權或付費方案不受限。"""
-    if user is None or getattr(user, "privileged", False) or getattr(user, "plan", "free") != "free":
-        return
-    if auth.is_admin(user):
-        return
-    limit = int(os.environ.get("FREE_AI_DAILY", "30") if kind == "ai" else os.environ.get("FREE_SEARCH_DAILY", "15"))
-    ok, _used = db.quota_use(user.id, kind, limit)
-    if not ok:
-        raise HTTPException(429, f"今日免費{'AI' if kind == 'ai' else '搜尋'}額度已用完(每日 {limit} 次)。升級方案或明天再來。")
+    """搜尋額度(AI 額度由 ai.ai_complete 統一扣,不在這裡)。"""
+    quota.enforce(user, kind)
+
+
+_MAX_QUESTION_CHARS = 2000
+_MAX_CLIENT_RECORDS = 2000
+
+
+def _require_max_len(value: str | None, limit: int, label: str) -> None:
+    if value and len(value) > limit:
+        raise HTTPException(400, f"{label}太長了(上限 {limit} 字)")
+
+
+def _require_max_records(records: list | None) -> None:
+    if records is not None and len(records) > _MAX_CLIENT_RECORDS:
+        raise HTTPException(400, f"資料筆數太多(上限 {_MAX_CLIENT_RECORDS} 筆)")
+
+
+def _history_text(history: list[dict] | None) -> str:
+    """最近幾輪對話轉成文字;每則限長,避免 history 被塞超大內容。"""
+    hist = ""
+    for h in (history or [])[-6:]:
+        who = "使用者" if h.get("role") == "user" else "助手"
+        hist += f"{who}:{str(h.get('content', ''))[:_MAX_QUESTION_CHARS]}\n"
+    return hist
 
 
 @app.get("/api/push/key")
@@ -862,7 +876,7 @@ def read_notifications(user=Depends(auth.get_current_user)):
 
 @app.get("/api/quota")
 def get_quota(user=Depends(auth.get_current_user)):
-    unlimited = bool(getattr(user, "privileged", False)) or getattr(user, "plan", "free") != "free" or auth.is_admin(user)
+    unlimited = quota.is_unlimited(user)
     used = db.quota_today(user.id)
     return {
         "unlimited": unlimited,
@@ -874,15 +888,12 @@ def get_quota(user=Depends(auth.get_current_user)):
 
 @app.post("/api/ai/chat")
 def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
-    _enforce_quota(user, "ai")
+    _require_max_len(req.question, _MAX_QUESTION_CHARS, "問題")
     records = _user_records(req.run_id, user)
     args = _ai_args(user)
     if not ai.ai_available(**args):
         return {"available": False, "answer": "尚未設定 AI 金鑰(可在「設定」填自己的,或由後端提供)。"}
-    hist = ""
-    for h in (req.history or [])[-6:]:
-        who = "使用者" if h.get("role") == "user" else "助手"
-        hist += f"{who}:{h.get('content', '')}\n"
+    hist = _history_text(req.history)
     prompt = (
         "你是一個資料查詢助理。以下是一批網路搜尋結果(JSON)。請根據這些資料用繁體中文回答"
         "使用者的問題;提到具體項目時附上連結(若有價格、日期、數據也一併附上),"
@@ -898,7 +909,6 @@ def ai_chat(req: ChatRequest, user=Depends(auth.get_current_user)):
 
 @app.post("/api/ai/compare")
 def ai_compare(req: CompareRequest, user=Depends(auth.get_current_user)):
-    _enforce_quota(user, "ai")
     records = _user_records(req.run_id, user)
     args = _ai_args(user)
     if not ai.ai_available(**args):
@@ -924,10 +934,10 @@ def ai_compare(req: CompareRequest, user=Depends(auth.get_current_user)):
 
 @app.post("/api/ai/keywords")
 def ai_keywords(req: KeywordsRequest, user=Depends(auth.get_current_user)):
+    _require_max_len(req.query, 500, "需求")
     args = _ai_args(user)
     if not ai.ai_available(**args):
         return {"available": False, "keywords": []}
-    _enforce_quota(user, "ai")
     prompt = (
         "把以下需求展開成 5-8 個適合在購物/搜尋引擎使用的繁體中文關鍵字。"
         "只回 JSON 字串陣列,不要其他文字。\n需求:" + req.query
@@ -952,7 +962,6 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
     args = _ai_args(user)
     if not ai.ai_available(**args):
         return {"available": False, "noise_urls": [], "message": "尚未設定 AI 金鑰"}
-    _enforce_quota(user, "ai")
     prompt = (
         "以下是一批網路搜尋結果 JSON。請判斷哪些是『沒有實質內容的雜訊』"
         "(例如純搜尋結果頁、空白/錯誤頁、與搜尋主題明顯無關的內容)。\n"
@@ -975,6 +984,8 @@ def ai_clean(req: SummarizeRequest, user=Depends(auth.get_current_user)):
 
 @app.post("/api/summarize")
 def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
+    _require_max_records(req.records)
+    _require_max_len(req.query, 200, "主題")
     if req.records is not None:
         records = req.records
     elif req.run_id:
@@ -988,7 +999,6 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
             "available": False,
             "summary": "尚未設定 AI 金鑰(可在「設定」填自己的,或由後端提供),無法產生 AI 摘要。",
         }
-    _enforce_quota(user, "ai")
 
     # 自動讀出這次搜尋的主題,讓 AI 針對主題抓重點(支援搜尋任何東西)
     topics = ", ".join(sorted({r.get("keyword", "") for r in records if r.get("keyword")}))[:200] or "(未指定)"
@@ -1806,6 +1816,7 @@ class AiWriteRequest(BaseModel):
 
 @app.post("/api/blog/ai-write")
 def blog_ai_write(req: AiWriteRequest, user=Depends(auth.get_current_user)):
+    _require_max_len(req.topic, 500, "主題")
     keys = db.get_settings(user.id)
     if req.mode == "outline":
         prompt = f"為主題「{req.topic}」用繁體中文寫一份結構化部落格大綱(H2/H3 標題 + 重點),Markdown 格式。"
@@ -1853,11 +1864,13 @@ class AiCoverRequest(BaseModel):
 @app.post("/api/blog/ai-cover")
 def blog_ai_cover(req: AiCoverRequest, user=Depends(auth.get_current_user)):
     import uploader
+    _require_max_len(req.title, 200, "標題")
+    _require_max_len(req.style, 40, "風格")
     if not uploader.r2_available():
         raise HTTPException(400, "尚未設定 R2 圖片儲存,無法保存生成的封面")
     keys = db.get_settings(user.id)
     prompt = f"部落格封面圖,主題:{req.title}。風格:{req.style}、乾淨、無文字、適合做標題圖。"
-    data = ai.generate_image(prompt, user_keys=keys)
+    data = ai.generate_image(prompt, user_keys=keys, user_id=user.id)
     if not data:
         raise HTTPException(400, "封面生成失敗(需 OpenAI 金鑰且帳號支援圖片生成)")
     url = uploader.upload(f"blog-cover-{user.id}.png", data, "image/png")
