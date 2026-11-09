@@ -1,0 +1,12 @@
+tests/
+data/
+output/
+__pycache__/
+.pytest_cache/
+.env
+.env.*
+Dockerfile
+Dockerfile.selenium
+requirements-dev.txt
+requirements-selenium.txt
+db_check.py

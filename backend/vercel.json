@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["sin1"],
+  "functions": {
+    "app.py": {
+      "maxDuration": 800,
+      "excludeFiles": "{tests/**,migrations/**,scripts/**,data/**,output/**,__pycache__/**,**/__pycache__/**,.pytest_cache/**,Dockerfile*}"
+    }
+  },
+  "crons": [
+    { "path": "/api/internal/dispatch", "schedule": "* * * * *" },
+    { "path": "/api/internal/worker", "schedule": "* * * * *" }
+  ]
+}

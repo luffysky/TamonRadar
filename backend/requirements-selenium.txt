@@ -1,0 +1,6 @@
+# 只給本機或 Dockerfile.selenium:Vercel 部署不裝瀏覽器相關套件
+-r requirements.txt
+uvicorn[standard]>=0.30.0
+selenium>=4.21.0
+webdriver-manager>=4.0.2
+matplotlib>=3.9.0
