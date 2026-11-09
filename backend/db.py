@@ -685,6 +685,13 @@ def get_run(run_id: str, user_id: int | None = None) -> dict | None:
         }
 
 
+def run_access(run_id: str) -> tuple[int, bool] | None:
+    """存取檢查用:回傳 (擁有者 id, 是否公開分享);不存在回 None。"""
+    with SessionLocal() as s:
+        run = s.get(Run, run_id)
+        return (run.user_id, bool(run.shared)) if run is not None else None
+
+
 def set_run_shared(run_id: str, user_id: int, shared: bool) -> bool:
     with SessionLocal() as s:
         run = s.get(Run, run_id)

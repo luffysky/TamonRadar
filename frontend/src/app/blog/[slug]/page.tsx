@@ -76,7 +76,7 @@ export default async function ArticlePage({ params }: { params: { slug: string }
   return (
     <article className="mx-auto max-w-3xl">
       <ReadingProgress />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
       <Link href="/blog" className="text-sm text-brand-600 hover:underline dark:text-brand-300">← 回部落格</Link>
       {post.category && (
         <span className="mt-3 inline-block rounded-full bg-brand-100 px-2 py-0.5 text-xs text-brand-700">{post.category}</span>

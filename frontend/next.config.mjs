@@ -1,9 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  images: {
-    // 商品圖來自各種外站,放寬限制讓 <img> 能直接顯示(教學用途)
-    remotePatterns: [{ protocol: "https", hostname: "**" }, { protocol: "http", hostname: "**" }],
-  },
+  // 商品圖來自各種外站,全站用一般 <img> 直接顯示,不經過 next/image;
+  // 不開 remotePatterns 萬用字元,否則 /_next/image 會變成任何人都能用的開放圖片代理。
 };
 
 export default nextConfig;

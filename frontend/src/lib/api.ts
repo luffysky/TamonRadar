@@ -158,18 +158,26 @@ export async function startCrawl(params: CrawlParams): Promise<{ job_id: string 
     body: JSON.stringify(params),
   });
   check401(res);
-  if (!res.ok) throw new Error("啟動爬蟲失敗");
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "啟動爬蟲失敗");
   return res.json();
 }
 
 export async function stopCrawl(jobId: string): Promise<void> {
-  await fetch(`${API_BASE}/api/crawl/${jobId}/stop`, { method: "POST" });
+  await fetch(`${API_BASE}/api/crawl/${jobId}/stop`, { method: "POST", headers: authHeaders() });
 }
 
 export async function getCrawl(jobId: string) {
-  const res = await fetch(`${API_BASE}/api/crawl/${jobId}`);
+  const res = await fetch(`${API_BASE}/api/crawl/${jobId}`, { headers: authHeaders() });
   if (!res.ok) throw new Error("讀取任務失敗");
   return res.json();
+}
+
+/** EventSource 不能帶 Authorization 標頭,先換一張短效票證放在網址上。 */
+async function getStreamTicket(jobId: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/api/crawl/${jobId}/stream-ticket`, { method: "POST", headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("讀取任務失敗");
+  return (await res.json()).ticket;
 }
 
 /** 用 SSE 訂閱進度,對斷線有韌性:短暫斷線自動重連、已完成則補抓結果、真的沒了才報錯。 */
@@ -183,8 +191,16 @@ export function streamCrawl(
   let retries = 0;
   let es: EventSource | null = null;
 
-  const open = () => {
-    es = new EventSource(`${API_BASE}/api/crawl/${jobId}/stream`);
+  const open = async () => {
+    let ticket: string;
+    try {
+      ticket = await getStreamTicket(jobId);
+    } catch {
+      if (!closed) onError();
+      return;
+    }
+    if (closed) return;
+    es = new EventSource(`${API_BASE}/api/crawl/${jobId}/stream?ticket=${encodeURIComponent(ticket)}`);
 
     es.addEventListener("progress", (ev) => {
       try {
@@ -209,7 +225,7 @@ export function streamCrawl(
       if (closed) return;
       // 嘗試從狀態端點補救:已完成就直接給結果,還在跑就重連
       try {
-        const r = await fetch(`${API_BASE}/api/crawl/${jobId}`);
+        const r = await fetch(`${API_BASE}/api/crawl/${jobId}`, { headers: authHeaders() });
         if (r.ok) {
           const data = await r.json();
           if (["done", "error", "stopped"].includes(data.status)) {
@@ -261,8 +277,19 @@ export async function summarize(runId: string): Promise<{ available: boolean; su
   return res.json();
 }
 
-export function exportUrl(runId: string, fmt: "csv" | "xlsx" | "md"): string {
-  return `${API_BASE}/api/export/${runId}.${fmt}`;
+/** 匯出需要驗證身分:用 fetch 帶 token 下載,再交給瀏覽器存檔。 */
+export async function downloadExport(runId: string, fmt: "csv" | "xlsx" | "md"): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/export/${runId}.${fmt}`, { headers: authHeaders() });
+  check401(res);
+  if (!res.ok) throw new Error("匯出失敗");
+  const url = URL.createObjectURL(await res.blob());
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `tammon_${runId}.${fmt}`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 // ---------- AI ----------
@@ -412,7 +439,7 @@ export async function updateSchedule(id: number, data: ScheduleInput): Promise<S
     method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify(data),
   });
   check401(res);
-  if (!res.ok) throw new Error("更新排程失敗");
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "更新排程失敗");
   return res.json();
 }
 
@@ -471,7 +498,7 @@ export async function updateWatch(id: number, data: WatchInput): Promise<Watch> 
     method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify(data),
   });
   check401(res);
-  if (!res.ok) throw new Error("更新監看失敗");
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "更新監看失敗");
   return res.json();
 }
 
@@ -799,7 +826,7 @@ export interface RunCompare {
   new_items?: string[]; gone?: string[];
 }
 export async function getRunCompare(runId: string): Promise<RunCompare> {
-  const res = await fetch(`${API_BASE}/api/insights/compare/${runId}`);
+  const res = await fetch(`${API_BASE}/api/insights/compare/${runId}`, { headers: authHeaders() });
   if (!res.ok) return { has_previous: false };
   return res.json();
 }
@@ -823,7 +850,7 @@ export async function getPreviewToken(postId: number): Promise<{ token: string }
 
 export async function getInsights(runId?: string, records?: unknown[], vertical = ""): Promise<DeepInsights> {
   const res = await fetch(`${API_BASE}/api/insights`, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: jsonAuthHeaders(),
     body: JSON.stringify(runId ? { run_id: runId, vertical } : { records, vertical }),
   });
   if (!res.ok) throw new Error("分析失敗");
@@ -1175,7 +1202,7 @@ export async function addFavorite(data: { url: string; title?: string; image_url
 export async function setFavoriteTarget(id: number, target_twd: number | null): Promise<Favorite> {
   const res = await fetch(`${API_BASE}/api/favorites/${id}`, { method: "PATCH", headers: jsonAuthHeaders(), body: JSON.stringify({ target_twd }) });
   check401(res);
-  if (!res.ok) throw new Error("設定失敗");
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "設定失敗");
   return res.json();
 }
 

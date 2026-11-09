@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { CrawlResult, CrawlRecord } from "@/lib/types";
-import { exportUrl, aiClean, aiCompare, getFavorites, addFavorite, removeFavorite } from "@/lib/api";
+import { downloadExport, aiClean, aiCompare, getFavorites, addFavorite, removeFavorite } from "@/lib/api";
 import { useAuth } from "./AuthProvider";
 import { getVertical } from "@/lib/verticals";
 import { Sparkles, GitCompare } from "lucide-react";
@@ -127,6 +127,14 @@ export default function ResultsView({
     }
   }
 
+  async function doExport(fmt: "csv" | "xlsx" | "md") {
+    try {
+      await downloadExport(runId, fmt);
+    } catch {
+      setCleanMsg("匯出失敗,請確認已登入後再試。");
+    }
+  }
+
   async function clean() {
     setCleaning(true);
     setCleanMsg(null);
@@ -161,16 +169,16 @@ export default function ResultsView({
               {loadingAll ? "載入中…" : "載入完整資料"}
             </button>
           )}
-          <a href={exportUrl(runId, "csv")} className="text-xs text-brand-600 hover:underline dark:text-brand-300">或匯出 CSV(完整)</a>
+          <button onClick={() => doExport("csv")} className="text-xs text-brand-600 hover:underline dark:text-brand-300">或匯出 CSV(完整)</button>
         </div>
       )}
 
 
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-slate-600 dark:text-slate-300">匯出:</span>
-        <a href={exportUrl(runId, "csv")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">CSV</a>
-        <a href={exportUrl(runId, "xlsx")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">Excel</a>
-        <a href={exportUrl(runId, "md")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">Markdown 報告</a>
+        <button onClick={() => doExport("csv")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">CSV</button>
+        <button onClick={() => doExport("xlsx")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">Excel</button>
+        <button onClick={() => doExport("md")} className="rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-1.5 text-sm hover:bg-slate-50 dark:bg-slate-900">Markdown 報告</button>
         <div className="ml-auto flex items-center gap-2">
           {cleanMsg && <span className="text-xs text-slate-400">{cleanMsg}</span>}
           {hiddenUrls.size > 0 && (

@@ -472,16 +472,20 @@ class InsightsRequest(BaseModel):
 
 
 @app.post("/api/insights")
-def insights_endpoint(req: InsightsRequest):
+def insights_endpoint(req: InsightsRequest, user=Depends(auth.get_optional_user)):
+    _require_max_records(req.records)
     records = req.records
     if records is None and req.run_id:
+        _require_run_access(req.run_id, user, allow_shared=True)
         run = db.get_run(req.run_id)
         records = (run or {}).get("records", []) if run else []
     return insights_mod.deep_insights(records or [], req.vertical)
 
 
 @app.get("/api/insights/compare/{run_id}")
-def insights_compare(run_id: str):
+def insights_compare(run_id: str, user=Depends(auth.get_current_user)):
+    # 比較會讀到擁有者其他次搜尋的資料,分享連結不開放
+    _require_run_access(run_id, user)
     return db.compare_runs(run_id)
 
 
@@ -490,6 +494,7 @@ def insights_ai(req: InsightsRequest, user=Depends(auth.get_current_user)):
     _require_max_records(req.records)
     records = req.records
     if records is None and req.run_id:
+        _require_run_access(req.run_id, user, allow_shared=True)
         run = db.get_run(req.run_id)
         records = (run or {}).get("records", []) if run else []
     ins = insights_mod.deep_insights(records or [], req.vertical)
@@ -613,10 +618,8 @@ def start_crawl(req: CrawlRequest, user=Depends(auth.get_current_user)):
 
 
 @app.get("/api/crawl/{job_id}")
-def get_crawl(job_id: str):
-    job = manager.get(job_id)
-    if not job:
-        raise HTTPException(404, "找不到這個任務")
+def get_crawl(job_id: str, user=Depends(auth.get_current_user)):
+    job = _owned_job(job_id, user)
     return {
         "job_id": job.id,
         "status": job.status,
@@ -627,18 +630,23 @@ def get_crawl(job_id: str):
 
 
 @app.post("/api/crawl/{job_id}/stop")
-def stop_crawl(job_id: str):
-    job = manager.get(job_id)
-    if not job:
-        raise HTTPException(404, "找不到這個任務")
+def stop_crawl(job_id: str, user=Depends(auth.get_current_user)):
+    job = _owned_job(job_id, user)
     job.request_stop()
     return {"job_id": job.id, "status": "stopping"}
 
 
+@app.post("/api/crawl/{job_id}/stream-ticket")
+def crawl_stream_ticket(job_id: str, user=Depends(auth.get_current_user)):
+    """EventSource 無法帶 Authorization 標頭,改用短效票證(不把長效 JWT 放進網址)。"""
+    job = _owned_job(job_id, user)
+    return {"ticket": auth.create_stream_ticket(job.id, user.id)}
+
+
 @app.get("/api/crawl/{job_id}/stream")
-async def stream_crawl(job_id: str):
+async def stream_crawl(job_id: str, ticket: str = ""):
     job = manager.get(job_id)
-    if not job:
+    if not job or auth.verify_stream_ticket(ticket, job_id) is None:
         raise HTTPException(404, "找不到這個任務")
 
     async def event_generator():
@@ -716,16 +724,13 @@ def history_diff(run_id: str, user=Depends(auth.get_current_user)):
 @app.get("/api/run/{run_id}/items")
 def run_items(run_id: str, offset: int = 0, limit: int = 100, user=Depends(auth.get_current_user)):
     """大型整站爬:分頁取得完整項目(預覽以外的資料)。"""
-    run = db.get_run(run_id)
-    if run and run.get("user_id") not in (None, user.id) and not auth.is_admin(user):
-        raise HTTPException(403, "不是你的紀錄")
+    _require_run_access(run_id, user, allow_shared=True)
     return {"items": db.list_crawl_items(run_id, max(0, offset), max(1, min(limit, 500))),
             "total": db.count_crawl_items(run_id)}
 
 
 # ---------- export ----------
-# 注意:匯出是瀏覽器直接點連結下載,沒法帶 Authorization header,
-# 所以這裡靠「不可猜的 run_id」當作存取權杖(與 SSE 串流同一個取捨)。
+# 前端用 fetch 帶 Authorization 下載;已公開分享的結果不用登入也能匯出。
 
 def _records_for(run_id: str) -> list[dict]:
     """匯出時的資料來源:大型整站爬的完整項目存在 tr_crawl_items(串流),優先用它(全量)。"""
@@ -744,7 +749,8 @@ def _records_for(run_id: str) -> list[dict]:
 
 
 @app.get("/api/export/{run_id}.csv")
-def export_csv(run_id: str):
+def export_csv(run_id: str, user=Depends(auth.get_optional_user)):
+    _require_run_access(run_id, user, allow_shared=True)
     df = to_dataframe(_records_for(run_id))
     buf = io.StringIO()
     df.to_csv(buf, index=False)
@@ -757,7 +763,8 @@ def export_csv(run_id: str):
 
 
 @app.get("/api/export/{run_id}.xlsx")
-def export_xlsx(run_id: str):
+def export_xlsx(run_id: str, user=Depends(auth.get_optional_user)):
+    _require_run_access(run_id, user, allow_shared=True)
     import tempfile
     from pathlib import Path
 
@@ -773,7 +780,8 @@ def export_xlsx(run_id: str):
 
 
 @app.get("/api/export/{run_id}.md")
-def export_md(run_id: str):
+def export_md(run_id: str, user=Depends(auth.get_optional_user)):
+    _require_run_access(run_id, user, allow_shared=True)
     import tempfile
     from pathlib import Path
 
@@ -823,6 +831,32 @@ def _enforce_quota(user, kind: str) -> None:
 
 _MAX_QUESTION_CHARS = 2000
 _MAX_CLIENT_RECORDS = 2000
+
+
+def _require_run_access(run_id: str, user, allow_shared: bool = False) -> None:
+    """run_id 的存取控制:擁有者或管理員;allow_shared=True 時公開分享的結果也可讀。
+
+    不符合一律回 404,不透露這筆資料是否存在。
+    """
+    if user is not None:
+        job = manager.get(run_id)
+        if job is not None and (job.user_id == user.id or auth.is_admin(user)):
+            return
+    access = db.run_access(run_id)
+    if access is not None:
+        owner_id, shared = access
+        if allow_shared and shared:
+            return
+        if user is not None and (owner_id == user.id or auth.is_admin(user)):
+            return
+    raise HTTPException(404, "找不到資料")
+
+
+def _owned_job(job_id: str, user):
+    job = manager.get(job_id)
+    if job is None or (job.user_id != user.id and not auth.is_admin(user)):
+        raise HTTPException(404, "找不到這個任務")
+    return job
 
 
 def _safe_url(url: str, resolve: bool = True) -> str:
@@ -1042,6 +1076,7 @@ def summarize(req: SummarizeRequest, user=Depends(auth.get_current_user)):
     if req.records is not None:
         records = req.records
     elif req.run_id:
+        _require_run_access(req.run_id, user, allow_shared=True)
         records = _records_for(req.run_id)
     else:
         raise HTTPException(400, "請提供 run_id 或 records")
@@ -1652,14 +1687,19 @@ def admin_resolve_report(report_id: int, admin=Depends(auth.get_admin)):
 
 
 # ---- SEO 中繼資料 ----
+# 匿名可讀的設定白名單:tr_app_settings 也存加密金鑰等內部設定,絕不能整包回傳
+_PUBLIC_SEO_KEYS = ("site_title", "site_description", "og_image", "keywords")
+
+
 @app.get("/api/seo")
 def public_seo():
-    return db.get_app_settings()
+    settings = db.get_app_settings()
+    return {k: settings[k] for k in _PUBLIC_SEO_KEYS if k in settings}
 
 
 @app.post("/api/admin/seo")
 def admin_save_seo(req: dict, admin=Depends(auth.get_admin)):
-    allowed = {k: str(v) for k, v in req.items() if k in ("site_title", "site_description", "og_image", "keywords")}
+    allowed = {k: str(v) for k, v in req.items() if k in _PUBLIC_SEO_KEYS}
     db.save_app_settings(allowed)
     db.log_audit(admin.email, "save_seo", "", ", ".join(allowed.keys()))
     return {"ok": True}
