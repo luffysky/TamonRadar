@@ -11,7 +11,8 @@ import crypto
 import money
 
 from sqlalchemy import (
-    JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, create_engine, func, inspect, select, text,
+    JSON, DateTime, ForeignKey, String, Text, UniqueConstraint, create_engine, delete, func, inspect, select, text,
+    update,
 )
 from sqlalchemy.orm import (
     DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker,
@@ -70,6 +71,7 @@ class User(Base):
     privileged: Mapped[bool] = mapped_column(default=False)              # 特權:全功能/全 AI 免費、跳過所有額度
     banned: Mapped[bool] = mapped_column(default=False)                  # 停權:無法登入/使用
     email_verified: Mapped[bool] = mapped_column(default=False)          # Email 是否已驗證
+    token_version: Mapped[int] = mapped_column(default=0)                # 改密碼時 +1,讓舊 JWT / 重設連結失效
     ai_used: Mapped[int] = mapped_column(default=0)                      # AI 累計呼叫次數
     admin_note: Mapped[str] = mapped_column(Text, default="")           # 後台備註(CRM)
     tags: Mapped[list] = mapped_column(JSON, default=list)              # 後台標籤(CRM)
@@ -415,6 +417,7 @@ def _ensure_columns() -> None:
             ("privileged", "ALTER TABLE tr_users ADD COLUMN privileged BOOLEAN DEFAULT false"),
             ("banned", "ALTER TABLE tr_users ADD COLUMN banned BOOLEAN DEFAULT false"),
             ("email_verified", "ALTER TABLE tr_users ADD COLUMN email_verified BOOLEAN DEFAULT false"),
+            ("token_version", "ALTER TABLE tr_users ADD COLUMN token_version INTEGER DEFAULT 0"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -996,14 +999,28 @@ def delete_user(user_id: int) -> bool:
         return True
 
 
-def change_password(user_id: int, new_hash: str) -> bool:
+def change_password(user_id: int, new_hash: str) -> int | None:
+    """改密碼並讓既有 JWT 全部失效。回傳新的 token_version;使用者不存在回 None。"""
     with SessionLocal() as s:
         u = s.get(User, user_id)
         if u is None:
-            return False
+            return None
         u.password_hash = new_hash
+        u.token_version = (u.token_version or 0) + 1
         s.commit()
-        return True
+        return u.token_version
+
+
+def reset_password(user_id: int, new_hash: str, expected_version: int) -> bool:
+    """用重設連結改密碼:只有 version 還對得上才成功(原子更新),同一張 token 無法用第二次。"""
+    with SessionLocal() as s:
+        result = s.execute(
+            update(User)
+            .where(User.id == user_id, func.coalesce(User.token_version, 0) == expected_version)
+            .values(password_hash=new_hash, token_version=expected_version + 1)
+        )
+        s.commit()
+        return result.rowcount == 1
 
 
 def bump_ai_usage(user_id: int) -> None:
@@ -2256,9 +2273,13 @@ def increment_post_views(post_id: int) -> int:
 
 
 def check_post_password(post_id: int, password: str) -> bool:
+    """只有「已發布且確實設了密碼」的文章能解鎖,草稿與無密碼文章一律 False。"""
+    import hmac
     with SessionLocal() as s:
         p = s.get(Post, post_id)
-        return bool(p) and (not p.password or p.password == password)
+        if p is None or not p.published or not p.password:
+            return False
+        return hmac.compare_digest(p.password.encode(), (password or "").encode())
 
 
 def get_post(post_id: int) -> dict | None:

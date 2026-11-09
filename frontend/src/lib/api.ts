@@ -1,5 +1,5 @@
 import type { CrawlResult, HistoryRun, ProgressEvent } from "./types";
-import { authHeaders, clearSession, type AuthUser } from "./auth";
+import { authHeaders, clearSession, getStoredUser, setSession, type AuthUser } from "./auth";
 
 export const API_BASE =
   (process.env.NEXT_PUBLIC_API_BASE ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
@@ -45,6 +45,10 @@ export async function changePassword(current_password: string, new_password: str
   });
   check401(res);
   if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail ?? "改密碼失敗");
+  // 改密碼後舊 token 全部失效,換上後端發的新 token 維持登入
+  const data = await res.json().catch(() => ({}));
+  const user = getStoredUser();
+  if (data.token && user) setSession(data.token, user);
 }
 
 export async function deleteAccount(): Promise<void> {

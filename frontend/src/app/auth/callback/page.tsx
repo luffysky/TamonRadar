@@ -11,6 +11,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   token: "無法取得 Google 授權。",
   email: "無法取得你的 email。",
   oauth: "Google 登入過程發生錯誤。",
+  unverified: "你的 Google 帳號 email 尚未驗證,無法登入。",
+  unverified_local: "這個 email 已有尚未驗證的帳號。請先用密碼登入並完成 Email 驗證,或用「忘記密碼」重設後再試。",
 };
 
 export default function AuthCallbackPage() {

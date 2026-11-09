@@ -15,7 +15,7 @@ appconfig.assert_production_config()
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sse_starlette.sse import EventSourceResponse
@@ -25,6 +25,7 @@ from crawler.reporter import to_dataframe, save_excel, save_markdown_report
 import db
 import auth
 import ai
+import ratelimit
 import mailer
 import notify
 import scheduler
@@ -37,6 +38,11 @@ from jobs import manager
 
 app = FastAPI(title="TamonRadar API", version="2.0")
 app.include_router(google_router)
+
+
+@app.exception_handler(ratelimit.RateLimited)
+def _rate_limited(_request: Request, exc: ratelimit.RateLimited):
+    return JSONResponse(status_code=429, content={"detail": exc.message})
 
 
 @app.on_event("startup")
@@ -155,10 +161,18 @@ class WatchRequest(BaseModel):
 # ---------- helpers ----------
 
 def _ip(request: Request) -> str:
-    """取用戶端 IP(優先 Cloudflare/反代標頭)。"""
-    return (request.headers.get("cf-connecting-ip")
-            or (request.headers.get("x-forwarded-for", "").split(",")[0].strip())
-            or (request.client.host if request.client else "")) or ""
+    """取用戶端 IP(限流/稽核用)。
+
+    標頭可被偽造:只信任 TRUSTED_IP_HEADER 指定的標頭(例:cf-connecting-ip);
+    沒設時取 X-Forwarded-For「最右邊」那段,也就是最後一層反代實際看到的來源。
+    """
+    trusted = os.environ.get("TRUSTED_IP_HEADER", "").strip().lower()
+    if trusted:
+        value = request.headers.get(trusted, "").split(",")[-1].strip()
+        if value:
+            return value
+    forwarded = request.headers.get("x-forwarded-for", "").split(",")[-1].strip()
+    return forwarded or (request.client.host if request.client else "") or ""
 
 
 # ---------- auth ----------
@@ -172,8 +186,8 @@ def _public_user(user) -> dict:
         "plan": "max" if priv else getattr(user, "plan", "free"),
         "privileged": priv,
         "email_verified": bool(getattr(user, "email_verified", False)) or getattr(user, "provider", "local") != "local",
-        "is_admin": auth.is_admin(user.email),
-        "is_owner": auth.is_owner(user.email),
+        "is_admin": auth.is_admin(user),
+        "is_owner": auth.is_owner(user),
     }
 
 
@@ -195,7 +209,8 @@ def _send_verify_email(user) -> None:
 
 
 @app.post("/api/auth/register")
-def register(req: AuthRequest):
+def register(req: AuthRequest, request: Request):
+    ratelimit.enforce(f"register:ip:{_ip(request)}", 10, 3600, "註冊太頻繁,請稍後再試。")
     email = req.email.strip().lower()
     if "@" not in email or len(email) < 5:
         raise HTTPException(400, "請輸入有效的 email")
@@ -210,7 +225,7 @@ def register(req: AuthRequest):
         s.commit()
         s.refresh(user)
         _send_verify_email(user)
-        return {"token": auth.create_token(user.id), "user": _public_user(user)}
+        return {"token": auth.create_token(user.id, user.token_version), "user": _public_user(user)}
 
 
 class VerifyEmailRequest(BaseModel):
@@ -229,6 +244,7 @@ def verify_email(req: VerifyEmailRequest):
 @app.post("/api/auth/resend-verify")
 def resend_verify(user=Depends(auth.get_current_user)):
     import mailer
+    ratelimit.enforce(f"resend-verify:{user.id}", 3, 3600, "驗證信寄太頻繁,請稍後再試。")
     if not mailer.mail_available():
         raise HTTPException(400, "後端尚未設定寄信")
     _send_verify_email(user)
@@ -236,13 +252,15 @@ def resend_verify(user=Depends(auth.get_current_user)):
 
 
 @app.post("/api/auth/login")
-def login(req: AuthRequest):
+def login(req: AuthRequest, request: Request):
     email = req.email.strip().lower()
+    ratelimit.enforce(f"login:ip:{_ip(request)}", 30, 300, "登入嘗試太頻繁,請稍後再試。")
+    ratelimit.enforce(f"login:email:{email}", 10, 300, "登入嘗試太頻繁,請稍後再試。")
     with db.SessionLocal() as s:
         user = s.scalar(select(db.User).where(db.User.email == email))
         if user is None or not auth.verify_password(req.password, user.password_hash):
             raise HTTPException(401, "email 或密碼錯誤")
-        return {"token": auth.create_token(user.id), "user": _public_user(user)}
+        return {"token": auth.create_token(user.id, user.token_version), "user": _public_user(user)}
 
 
 @app.get("/api/auth/me")
@@ -263,8 +281,9 @@ def change_password(req: ChangePwRequest, user=Depends(auth.get_current_user)):
         raise HTTPException(401, "目前密碼錯誤")
     if len(req.new_password) < 6:
         raise HTTPException(400, "新密碼至少 6 個字")
-    db.change_password(user.id, auth.hash_password(req.new_password))
-    return {"ok": True}
+    version = db.change_password(user.id, auth.hash_password(req.new_password))
+    # 舊 JWT 全部失效;回傳新 token 讓目前這個分頁維持登入
+    return {"ok": True, "token": auth.create_token(user.id, version or 0)}
 
 
 @app.delete("/api/auth/me")
@@ -274,13 +293,17 @@ def delete_account(user=Depends(auth.get_current_user)):
 
 
 @app.post("/api/auth/forgot")
-def forgot_password(req: ForgotRequest):
+def forgot_password(req: ForgotRequest, request: Request):
     email = req.email.strip().lower()
+    ratelimit.enforce(f"forgot:ip:{_ip(request)}", 10, 900, "申請太頻繁,請稍後再試。")
+    generic = {"ok": True, "message": "若這個 email 有註冊,我們已寄出重設連結,請查收信箱。"}
+    if not ratelimit.hit(f"forgot:email:{email}", 3, 3600):
+        return generic  # 同一信箱超量:靜默略過,避免信箱轟炸也不洩漏帳號是否存在
     with db.SessionLocal() as s:
         user = s.scalar(select(db.User).where(db.User.email == email))
     # 不論帳號是否存在都回相同訊息,避免洩漏哪些 email 有註冊
     if user and user.provider == "local" and mailer.mail_available():
-        token = auth.create_reset_token(user.id)
+        token = auth.create_reset_token(user.id, user.token_version)
         link = f"{_frontend_url()}/reset#token={token}"
         html = (
             "<div style='font-family:sans-serif'>"
@@ -290,22 +313,20 @@ def forgot_password(req: ForgotRequest):
             "<p>如果不是你本人申請,忽略這封信即可。</p></div>"
         )
         mailer.send_email(email, "TamonRadar 密碼重設", html)
-    return {"ok": True, "message": "若這個 email 有註冊,我們已寄出重設連結,請查收信箱。"}
+    return generic
 
 
 @app.post("/api/auth/reset")
-def reset_password(req: ResetRequest):
-    user_id = auth.verify_reset_token(req.token)
-    if not user_id:
+def reset_password(req: ResetRequest, request: Request):
+    ratelimit.enforce(f"reset:ip:{_ip(request)}", 10, 900, "嘗試太頻繁,請稍後再試。")
+    decoded = auth.verify_reset_token(req.token)
+    if not decoded:
         raise HTTPException(400, "重設連結已失效或不正確,請重新申請")
     if len(req.password) < 6:
         raise HTTPException(400, "密碼至少 6 個字")
-    with db.SessionLocal() as s:
-        user = s.get(db.User, user_id)
-        if not user:
-            raise HTTPException(404, "使用者不存在")
-        user.password_hash = auth.hash_password(req.password)
-        s.commit()
+    user_id, version = decoded
+    if not db.reset_password(user_id, auth.hash_password(req.password), version):
+        raise HTTPException(400, "重設連結已失效或不正確,請重新申請")
     return {"ok": True}
 
 
@@ -340,7 +361,7 @@ async def upload_file(file: UploadFile = File(...), user=Depends(auth.get_curren
 
 @app.post("/api/telegram/webhook/{secret}")
 async def telegram_webhook(secret: str, request: Request):
-    if secret != os.environ.get("TELEGRAM_WEBHOOK_SECRET", "tamon"):
+    if not bots.telegram_webhook_secret_ok(secret):
         raise HTTPException(403, "invalid secret")
     update = await request.json()
     bots.handle_telegram_async(update)
@@ -690,7 +711,7 @@ def history_diff(run_id: str, user=Depends(auth.get_current_user)):
 def run_items(run_id: str, offset: int = 0, limit: int = 100, user=Depends(auth.get_current_user)):
     """大型整站爬:分頁取得完整項目(預覽以外的資料)。"""
     run = db.get_run(run_id)
-    if run and run.get("user_id") not in (None, user.id) and not auth.is_admin(user.email):
+    if run and run.get("user_id") not in (None, user.id) and not auth.is_admin(user):
         raise HTTPException(403, "不是你的紀錄")
     return {"items": db.list_crawl_items(run_id, max(0, offset), max(1, min(limit, 500))),
             "total": db.count_crawl_items(run_id)}
@@ -793,7 +814,7 @@ def _enforce_quota(user, kind: str) -> None:
     """免費使用者的每日額度;特權或付費方案不受限。"""
     if user is None or getattr(user, "privileged", False) or getattr(user, "plan", "free") != "free":
         return
-    if auth.is_admin(user.email):
+    if auth.is_admin(user):
         return
     limit = int(os.environ.get("FREE_AI_DAILY", "30") if kind == "ai" else os.environ.get("FREE_SEARCH_DAILY", "15"))
     ok, _used = db.quota_use(user.id, kind, limit)
@@ -841,7 +862,7 @@ def read_notifications(user=Depends(auth.get_current_user)):
 
 @app.get("/api/quota")
 def get_quota(user=Depends(auth.get_current_user)):
-    unlimited = bool(getattr(user, "privileged", False)) or getattr(user, "plan", "free") != "free" or auth.is_admin(user.email)
+    unlimited = bool(getattr(user, "privileged", False)) or getattr(user, "plan", "free") != "free" or auth.is_admin(user)
     used = db.quota_today(user.id)
     return {
         "unlimited": unlimited,
@@ -1640,7 +1661,7 @@ def blog_manage_get(post_id: int, user=Depends(auth.get_current_user)):
     owner = db.post_owner(post_id)
     if owner is None:
         raise HTTPException(404, "找不到文章")
-    if owner != user.id and not auth.is_admin(user.email):
+    if owner != user.id and not auth.is_admin(user):
         raise HTTPException(403, "不是你的文章")
     return db.get_post(post_id)
 
@@ -1681,7 +1702,7 @@ def blog_update(post_id: int, req: PostRequest, user=Depends(auth.get_current_us
     owner = db.post_owner(post_id)
     if owner is None:
         raise HTTPException(404, "找不到文章")
-    if owner != user.id and not auth.is_admin(user.email):
+    if owner != user.id and not auth.is_admin(user):
         raise HTTPException(403, "不是你的文章")
     was_published = (db.get_post(post_id) or {}).get("published", False)
     post = db.update_post(post_id, req.model_dump())
@@ -1695,7 +1716,7 @@ def blog_delete(post_id: int, user=Depends(auth.get_current_user)):
     owner = db.post_owner(post_id)
     if owner is None:
         raise HTTPException(404, "找不到文章")
-    if owner != user.id and not auth.is_admin(user.email):
+    if owner != user.id and not auth.is_admin(user):
         raise HTTPException(403, "不是你的文章")
     db.delete_post(post_id)
     return {"ok": True}
@@ -1732,7 +1753,7 @@ def blog_get(slug: str, user=Depends(auth.get_optional_user)):
     if not p:
         raise HTTPException(404, "找不到文章")
     # 密碼文章:未解鎖前不送內文(作者/管理員例外)
-    if p.get("has_password") and not (user and (user.id == p.get("author_id") or auth.is_admin(user.email))):
+    if p.get("has_password") and not (user and (user.id == p.get("author_id") or auth.is_admin(user))):
         p["content"] = ""
         p["locked"] = True
     p["comments"] = db.list_post_comments(p["id"])
@@ -1745,7 +1766,8 @@ class UnlockRequest(BaseModel):
 
 
 @app.post("/api/blog/{post_id}/unlock")
-def blog_unlock(post_id: int, req: UnlockRequest):
+def blog_unlock(post_id: int, req: UnlockRequest, request: Request):
+    ratelimit.enforce(f"unlock:{post_id}:{_ip(request)}", 10, 300, "嘗試太頻繁,請稍後再試。")
     if not db.check_post_password(post_id, req.password):
         raise HTTPException(403, "密碼錯誤")
     full = db.get_post(post_id)
@@ -1762,7 +1784,7 @@ def blog_preview_token(post_id: int, user=Depends(auth.get_current_user)):
     owner = db.post_owner(post_id)
     if owner is None:
         raise HTTPException(404, "找不到文章")
-    if owner != user.id and not auth.is_admin(user.email):
+    if owner != user.id and not auth.is_admin(user):
         raise HTTPException(403, "不是你的文章")
     return {"token": db.ensure_preview_token(post_id)}
 
@@ -2037,13 +2059,13 @@ def forum_reply(thread_id: int, req: ReplyRequest, user=Depends(auth.get_current
 
 @app.delete("/api/forum/threads/{thread_id}")
 def forum_delete_thread(thread_id: int, user=Depends(auth.get_current_user)):
-    if not db.delete_thread(thread_id, user.id, auth.is_admin(user.email)):
+    if not db.delete_thread(thread_id, user.id, auth.is_admin(user)):
         raise HTTPException(404, "找不到主題或沒有權限")
     return {"ok": True}
 
 
 @app.delete("/api/forum/replies/{reply_id}")
 def forum_delete_reply(reply_id: int, user=Depends(auth.get_current_user)):
-    if not db.delete_reply(reply_id, user.id, auth.is_admin(user.email)):
+    if not db.delete_reply(reply_id, user.id, auth.is_admin(user)):
         raise HTTPException(404, "找不到回覆或沒有權限")
     return {"ok": True}

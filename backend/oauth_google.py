@@ -92,6 +92,8 @@ def google_callback(request: Request, code: str = "", state: str = ""):
         email = (info.get("email") or "").strip().lower()
         if not email:
             return RedirectResponse(f"{fe}/auth/callback#error=email")
+        if info.get("verified_email") is False:  # Google 明確表示此 email 未驗證
+            return RedirectResponse(f"{fe}/auth/callback#error=unverified")
     except Exception:
         return RedirectResponse(f"{fe}/auth/callback#error=oauth")
 
@@ -99,10 +101,13 @@ def google_callback(request: Request, code: str = "", state: str = ""):
         user = s.scalar(select(db.User).where(db.User.email == email))
         if user is None:
             uname = (info.get("name") or info.get("given_name") or email.split("@")[0])[:60]
-            user = db.User(email=email, password_hash="", provider="google", username=uname)
+            user = db.User(email=email, password_hash="", provider="google", username=uname, email_verified=True)
             s.add(user)
             s.commit()
             s.refresh(user)
-        jwt_token = auth.create_token(user.id)
+        elif not auth.is_email_verified(user):
+            # 未驗證的本機帳號可能是別人搶先用這個 email 註冊的,不可自動綁定
+            return RedirectResponse(f"{fe}/auth/callback#error=unverified_local")
+        jwt_token = auth.create_token(user.id, user.token_version)
 
     return RedirectResponse(f"{fe}/auth/callback#token={jwt_token}")

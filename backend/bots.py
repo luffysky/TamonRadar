@@ -2,6 +2,7 @@
 
 回答用後端共用 AI 金鑰 + 網站知識庫。需設定對應的 bot 環境變數。
 """
+import hmac
 import os
 import threading
 
@@ -71,13 +72,21 @@ def handle_telegram_async(update: dict) -> None:
     threading.Thread(target=_handle_telegram, args=(update,), daemon=True).start()
 
 
+def telegram_webhook_secret_ok(secret: str) -> bool:
+    """驗證 webhook 路徑上的密鑰;沒設 TELEGRAM_WEBHOOK_SECRET 一律拒絕(fail-closed)。"""
+    expected = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    return bool(expected) and hmac.compare_digest(secret.encode(), expected.encode())
+
+
 def telegram_set_webhook(base_url: str) -> dict:
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
     if not token:
         return {"ok": False, "error": "未設定 TELEGRAM_BOT_TOKEN"}
     if not base_url.startswith("https://"):
         return {"ok": False, "error": f"webhook 必須是 https,目前 base={base_url};請設 OAUTH_REDIRECT_BASE 為後端 https 網址"}
-    secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "tamon")
+    secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET", "").strip()
+    if not secret:
+        return {"ok": False, "error": "未設定 TELEGRAM_WEBHOOK_SECRET,為安全起見拒絕設定 webhook"}
     url = f"{base_url.rstrip('/')}/api/telegram/webhook/{secret}"
     try:
         r = requests.post(
