@@ -1043,16 +1043,51 @@ def delete_user(user_id: int) -> bool:
         u = s.get(User, user_id)
         if u is None:
             return False
-        for model, col in (
-            (Favorite, Favorite.user_id), (Watch, Watch.user_id), (Schedule, Schedule.user_id),
-            (Run, Run.user_id), (Settings, Settings.user_id), (Post, Post.author_id),
-            (Reply, Reply.author_id), (Thread, Thread.author_id),
-        ):
-            for row in s.scalars(select(model).where(col == user_id)).all():
-                s.delete(row)
+        # 有外鍵指向 tr_users 的表都要先清,否則 Postgres 會擋下刪除(SQLite 預設不檢查,測不出來)
+        post_ids = list(s.scalars(select(Post.id).where(Post.author_id == user_id)).all())
+        _delete_post_children(s, post_ids)
+        s.execute(delete(Post).where(Post.author_id == user_id))
+
+        comment_ids = list(s.scalars(select(PostComment.id).where(PostComment.author_id == user_id)).all())
+        if comment_ids:
+            s.execute(delete(PostCommentLike).where(PostCommentLike.comment_id.in_(comment_ids)))
+            s.execute(delete(PostComment).where(PostComment.id.in_(comment_ids)))
+
+        thread_ids = list(s.scalars(select(Thread.id).where(Thread.author_id == user_id)).all())
+        if thread_ids:
+            s.execute(delete(Reply).where(Reply.thread_id.in_(thread_ids)))
+        for r in s.scalars(select(Reply).where(Reply.author_id == user_id)).all():
+            t = s.get(Thread, r.thread_id)
+            if t and t.reply_count:
+                t.reply_count -= 1
+            s.delete(r)
+        s.flush()
+        s.execute(delete(Thread).where(Thread.author_id == user_id))
+
+        run_ids = list(s.scalars(select(Run.id).where(Run.user_id == user_id)).all())
+        if run_ids:
+            s.execute(delete(CrawlItem).where(CrawlItem.run_id.in_(run_ids)))
+        s.execute(delete(Subscription).where(
+            (Subscription.subscriber_id == user_id) | (Subscription.author_id == user_id)))
+        s.execute(delete(Report).where(Report.reporter_id == user_id))
+        for model in (PostLike, PostCommentLike, PostReaction, Favorite, Watch, Schedule, Run, Settings,
+                      AiChatLog, BindCode, PushSub, Notification, AiCost, Usage):
+            s.execute(delete(model).where(model.user_id == user_id))
         s.delete(u)
         s.commit()
         return True
+
+
+def _delete_post_children(s, post_ids: list[int]) -> None:
+    """清掉文章底下所有依賴資料:留言(含留言的讚)、讚、表情回應。"""
+    if not post_ids:
+        return
+    comment_ids = list(s.scalars(select(PostComment.id).where(PostComment.post_id.in_(post_ids))).all())
+    if comment_ids:
+        s.execute(delete(PostCommentLike).where(PostCommentLike.comment_id.in_(comment_ids)))
+    s.execute(delete(PostComment).where(PostComment.post_id.in_(post_ids)))
+    s.execute(delete(PostLike).where(PostLike.post_id.in_(post_ids)))
+    s.execute(delete(PostReaction).where(PostReaction.post_id.in_(post_ids)))
 
 
 def change_password(user_id: int, new_hash: str) -> int | None:
@@ -2277,6 +2312,7 @@ def set_comment_status(comment_id: int, status: str) -> bool:
         if not c:
             return False
         if status == "delete":
+            s.execute(delete(PostCommentLike).where(PostCommentLike.comment_id == comment_id))
             s.delete(c)
         else:
             c.status = "hidden" if status == "hidden" else "visible"
@@ -2484,6 +2520,7 @@ def delete_post(post_id: int) -> bool:
         p = s.get(Post, post_id)
         if p is None:
             return False
+        _delete_post_children(s, [post_id])
         s.delete(p)
         s.commit()
         return True
