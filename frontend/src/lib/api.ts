@@ -473,9 +473,10 @@ export interface Watch {
   notify_on?: string[];
   cta_text?: string;
   cta_url?: string;
+  last_error?: string;
 }
 
-export type WatchInput = Omit<Watch, "id" | "last_status" | "last_checked" | "last_price_twd">;
+export type WatchInput = Omit<Watch, "id" | "last_status" | "last_checked" | "last_price_twd" | "last_error">;
 
 export async function getWatches(): Promise<{ watches: Watch[] }> {
   const res = await fetch(`${API_BASE}/api/watches`, { headers: authHeaders() });

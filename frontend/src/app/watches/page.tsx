@@ -168,6 +168,7 @@ export default function WatchesPage() {
                   每 {w.interval_minutes} 分鐘{w.last_checked ? ` · 上次 ${new Date(w.last_checked).toLocaleString("zh-TW")}` : " · 尚未檢查"}
                   {w.target_price ? ` · 目標 NT$${w.target_price}${w.last_price_twd ? `(現 NT$${w.last_price_twd})` : ""}` : ""}
                 </p>
+                {w.last_error && <p className="mt-0.5 break-words text-xs text-rose-500">⚠️ 上次檢查失敗:{w.last_error}</p>}
               </div>
               <span className={`rounded-full px-2 py-0.5 text-xs ${st.cls}`}>{st.label}</span>
               <span className={`rounded-full px-2 py-0.5 text-xs ${w.enabled ? "bg-brand-100 text-brand-700" : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"}`}>

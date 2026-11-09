@@ -31,6 +31,9 @@ def start() -> None:
     _sched.add_job(_daily_digest, "cron", hour=1, minute=0, id="daily-digest", replace_existing=True)
     # 每分鐘檢查到期的排程推播
     _sched.add_job(_run_due_broadcasts, "interval", minutes=1, id="due-broadcasts", replace_existing=True)
+    # 目標價收藏:每 15 分鐘掃一次到期的(同一個收藏最短間隔見 watcher.FAVORITE_RECHECK_MINUTES)
+    _sched.add_job(watcher.check_due_favorites, "interval", minutes=15, id="favorite-targets",
+                   replace_existing=True, max_instances=1, coalesce=True)
 
 
 def _run_due_broadcasts() -> None:
@@ -43,9 +46,7 @@ def _run_due_broadcasts() -> None:
 def _daily_digest() -> None:
     for uid in db.list_digest_user_ids():
         settings = db.get_settings(uid)
-        has_channel = settings.get("discord_webhook") or (
-            settings.get("telegram_token") and settings.get("telegram_chat_id")
-        )
+        has_channel = notify.has_channel(settings)
         favs = db.list_favorites(uid)
         watches = db.list_watches(uid)
         avail = [w for w in watches if w.get("last_status") == "available"]
@@ -191,25 +192,7 @@ def _run(schedule_id: int) -> None:
     db.touch_schedule(schedule_id)
 
     settings = db.get_settings(sc["user_id"])
-    has_channel = settings.get("discord_webhook") or (
-        settings.get("telegram_token") and settings.get("telegram_chat_id")
-    )
     _msg = _build_message(sc, result, prev)
     db.add_notification(sc["user_id"], f"📡 排程更新:{'、'.join(sc['keywords'])[:40]}", _msg)
-    if has_channel:
+    if notify.has_channel(settings):
         notify.notify_all(settings, _msg)
-        # 收藏的目標價通知:這次結果中有收藏商品降到目標價就提醒
-        try:
-            import money
-            favs = db.list_favorites_with_target(sc["user_id"])
-            by_url = {r.get("url"): r for r in result.get("records", [])}
-            hits = []
-            for f in favs:
-                rec = by_url.get(f["url"])
-                twd = money.to_twd(rec.get("price", "")) if rec else None
-                if twd and f.get("target_twd") and twd <= f["target_twd"]:
-                    hits.append(f"🎯 {f['title'] or f['url']} 降到 NT${twd}(目標 {f['target_twd']})\n{f['url']}")
-            if hits:
-                notify.notify_all(settings, "TamonRadar 目標價通知\n" + "\n".join(hits[:10]))
-        except Exception:
-            pass

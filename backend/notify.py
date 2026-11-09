@@ -87,6 +87,16 @@ def send_discord_dm(bot_token: str, user_id: str, content: str = "", embed: dict
         return False, str(e)[:200]
 
 
+def has_channel(settings: dict) -> bool:
+    """使用者是否有可送達的個人管道:自填的 webhook/bot,或用 /bind 綁定、走平台共用 bot。"""
+    if settings.get("discord_webhook"):
+        return True
+    if settings.get("discord_user_id") and os.environ.get("DISCORD_BOT_TOKEN", ""):
+        return True
+    return bool(settings.get("telegram_chat_id")
+                and (settings.get("telegram_token") or os.environ.get("TELEGRAM_BOT_TOKEN", "")))
+
+
 def notify_all(settings: dict, text: str, embed: dict | None = None) -> dict:
     """推到使用者管道;沒填自己的就用平台共用 bot(Telegram 用 chat_id、Discord 用 user id DM)。"""
     results = {}

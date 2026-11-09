@@ -151,6 +151,7 @@ class Watch(Base):
     notify_on: Mapped[list] = mapped_column(JSON, default=list)           # content 要通知的事件:new/removed/price
     cta_text: Mapped[str] = mapped_column(String(60), default="")         # 對方頁面 CTA 文字(立即購買/加入購物車)
     cta_url: Mapped[str] = mapped_column(String(1000), default="")        # CTA 連結
+    last_error: Mapped[str] = mapped_column(Text, default="")             # 上次檢查失敗原因(成功時清空)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -254,6 +255,9 @@ class Favorite(Base):
     domain: Mapped[str] = mapped_column(String(200), default="")
     price: Mapped[str] = mapped_column(String(50), default="")
     target_twd: Mapped[int | None] = mapped_column(nullable=True)  # 目標價(台幣),低於就通知
+    last_price_twd: Mapped[int | None] = mapped_column(nullable=True)   # 上次抓到的現價
+    last_checked: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
 
@@ -489,6 +493,19 @@ def _ensure_columns() -> None:
             ("notify_on", "ALTER TABLE tr_watches ADD COLUMN notify_on JSON"),
             ("cta_text", "ALTER TABLE tr_watches ADD COLUMN cta_text VARCHAR(60) DEFAULT ''"),
             ("cta_url", "ALTER TABLE tr_watches ADD COLUMN cta_url VARCHAR(1000) DEFAULT ''"),
+            ("last_error", "ALTER TABLE tr_watches ADD COLUMN last_error TEXT DEFAULT ''"),
+        ):
+            if col not in cols:
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
+
+    if "tr_favorites" in tables:
+        cols = {c["name"] for c in insp.get_columns("tr_favorites")}
+        ts_type = "TIMESTAMPTZ" if engine.dialect.name == "postgresql" else "TIMESTAMP"
+        for col, ddl in (
+            ("last_price_twd", "ALTER TABLE tr_favorites ADD COLUMN last_price_twd INTEGER"),
+            ("last_checked", f"ALTER TABLE tr_favorites ADD COLUMN last_checked {ts_type}"),
+            ("last_error", "ALTER TABLE tr_favorites ADD COLUMN last_error TEXT DEFAULT ''"),
         ):
             if col not in cols:
                 with engine.begin() as conn:
@@ -904,6 +921,7 @@ def _watch_dict(w: "Watch") -> dict:
         "notify_on": w.notify_on or ["new", "removed", "price", "restock"],
         "cta_text": w.cta_text or "",
         "cta_url": w.cta_url or "",
+        "last_error": w.last_error or "",
     }
 
 
@@ -984,8 +1002,19 @@ def set_watch_status(watch_id: int, status: str, price_twd: int | None = None) -
         if w:
             w.last_status = status
             w.last_checked = _now()
+            w.last_error = ""
             if price_twd is not None:
                 w.last_price_twd = price_twd
+            s.commit()
+
+
+def set_watch_error(watch_id: int, error: str) -> None:
+    """記錄檢查失敗:更新檢查時間與原因,但保留 last_status(失敗不是狀態變化)。"""
+    with SessionLocal() as s:
+        w = s.get(Watch, watch_id)
+        if w:
+            w.last_error = (error or "")[:500]
+            w.last_checked = _now()
             s.commit()
 
 
@@ -1923,6 +1952,9 @@ def _fav_dict(f: "Favorite") -> dict:
     return {
         "id": f.id, "url": f.url, "title": f.title, "image_url": f.image_url,
         "domain": f.domain, "price": f.price, "target_twd": f.target_twd,
+        "user_id": f.user_id, "last_price_twd": f.last_price_twd,
+        "last_checked": f.last_checked.isoformat() if f.last_checked else None,
+        "last_error": f.last_error or "",
         "created_at": f.created_at.isoformat() if f.created_at else None,
     }
 
@@ -1958,6 +1990,8 @@ def set_favorite_target(fav_id: int, user_id: int, target_twd: int | None) -> di
         f = s.get(Favorite, fav_id)
         if f is None or f.user_id != user_id:
             return None
+        if f.target_twd != target_twd:
+            f.last_price_twd = None  # 目標價改了:下次檢查重新判斷是否達標
         f.target_twd = target_twd
         s.commit()
         s.refresh(f)
@@ -1997,6 +2031,29 @@ def list_favorites_with_target(user_id: int) -> list[dict]:
     with SessionLocal() as s:
         rows = s.scalars(select(Favorite).where(Favorite.user_id == user_id, Favorite.target_twd.isnot(None))).all()
         return [_fav_dict(f) for f in rows]
+
+
+def list_due_favorites(checked_before: datetime) -> list[dict]:
+    """有設目標價、且超過指定時間沒檢查的收藏;從最久沒檢查的開始。"""
+    with SessionLocal() as s:
+        rows = s.scalars(
+            select(Favorite)
+            .where(Favorite.target_twd.isnot(None),
+                   (Favorite.last_checked.is_(None)) | (Favorite.last_checked < checked_before))
+            .order_by(Favorite.last_checked.asc().nullsfirst())
+        ).all()
+        return [_fav_dict(f) for f in rows]
+
+
+def set_favorite_check(fav_id: int, price_twd: int | None = None, error: str = "") -> None:
+    with SessionLocal() as s:
+        f = s.get(Favorite, fav_id)
+        if f:
+            f.last_checked = _now()
+            f.last_error = (error or "")[:500]
+            if price_twd is not None:
+                f.last_price_twd = price_twd
+            s.commit()
 
 
 def set_user_note(user_id: int, note: str, tags: list) -> bool:
