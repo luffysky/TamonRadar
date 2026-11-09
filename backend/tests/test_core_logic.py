@@ -12,7 +12,7 @@ import scheduler
 import watcher
 from crawler import runner
 from crawler.config import CrawlConfig
-from jobs import Job, JobManager
+from jobs import manager
 
 # ---------- 雷達 ----------
 
@@ -74,7 +74,7 @@ def test_scheduled_run_compares_same_keywords(make_user, monkeypatch):
     add_run(u.id, "related", ["貓砂"], T0, records=[{"title": "貓", "url": "c", "price": "NT$100"}])
     sc = db.create_schedule(u.id, {"keywords": ["貓砂"], "enabled": True, "provider": "duckduckgo"})
     seen = {}
-    monkeypatch.setattr(scheduler, "run_crawl", lambda c: {"records": [], "summary": {}})
+    monkeypatch.setattr(scheduler, "run_crawl", lambda c, **k: {"records": [], "summary": {}})
     monkeypatch.setattr(scheduler, "_build_message", lambda sc, result, prev: seen.update(prev=prev) or "msg")
     scheduler._run(sc["id"])
     assert seen["prev"]["id"] == "related"
@@ -103,7 +103,7 @@ def test_scheduled_alert_reaches_bound_user(make_user, monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "central")
     sc = db.create_schedule(u.id, {"keywords": ["k"], "enabled": True, "provider": "duckduckgo"})
     sent = []
-    monkeypatch.setattr(scheduler, "run_crawl", lambda c: {"records": [], "summary": {}})
+    monkeypatch.setattr(scheduler, "run_crawl", lambda c, **k: {"records": [], "summary": {}})
     monkeypatch.setattr(notify, "notify_all", lambda st, text, embed=None: sent.append(text) or {})
     scheduler._run(sc["id"])
     assert len(sent) == 1
@@ -255,6 +255,8 @@ def _seed_everything(uid, other_id):
             db.PushSub(user_id=uid, endpoint="https://push.example.com/1"), db.Notification(user_id=uid),
             db.AiCost(user_id=uid), db.Usage(user_id=uid, day="2026-01-01"),
             db.CrawlItem(run_id="run1", payload={"title": "x"}),
+            db.Job(id="job1", user_id=uid, kind="crawl"),
+            db.PriceObservation(user_id=uid, url="https://x.example.com", url_hash="h", price_twd=1),
         ])
         s.commit()
         return own_post.id, other_post.id, own_thread.id, other_thread.id
@@ -274,19 +276,11 @@ def test_foreign_keys_are_actually_enforced():
             s.commit()
 
 
-def test_startup_ddl_upgrades_old_schema():
-    """舊資料庫沒有新欄位:啟動時要自動補上,否則 ORM 查詢會直接炸掉。"""
-    added = {"tr_users": ["token_version"], "tr_watches": ["last_error"], "tr_ai_cost": ["actor"],
-             "tr_favorites": ["last_price_twd", "last_checked", "last_error"]}
-    with db.engine.begin() as conn:
-        for table, cols in added.items():
-            for col in cols:
-                conn.exec_driver_sql(f"ALTER TABLE {table} DROP COLUMN {col}")
-    db._ensure_columns()
-    insp = inspect(db.engine)
-    for table, cols in added.items():
-        present = {c["name"] for c in insp.get_columns(table)}
-        assert set(cols) <= present, table
+def test_no_ddl_on_postgres_startup(monkeypatch):
+    """Postgres 的結構由 migrate.py 管理:init_db 在非 SQLite 上不能碰 schema。"""
+    monkeypatch.setattr(db, "IS_SQLITE", False)
+    monkeypatch.setattr(db.Base.metadata, "create_all", lambda *a, **k: pytest.fail("冷啟動不可跑 DDL"))
+    db.init_db()
 
 
 def test_seed_covers_every_user_fk_table(make_user):
@@ -353,17 +347,16 @@ def test_admin_delete_comment_with_likes(make_user):
 # ---------- 資料遺失 ----------
 
 def test_failed_job_still_saved(make_user, monkeypatch):
-    import jobs as jobs_module
+    import worker
     u = make_user()
 
-    def boom(config, on_event, should_stop):
+    def boom(config, **kw):
         raise RuntimeError("爬蟲炸了")
 
-    monkeypatch.setattr(jobs_module, "run_crawl", boom)
-    mgr = JobManager()
-    job = Job(CrawlConfig(keywords=["k"]), u.id)
-    mgr._run(job)
-    assert job.status == "error"
+    monkeypatch.setattr(worker, "run_crawl", boom)
+    job = manager.create(CrawlConfig(keywords=["k"]), u.id)
+    worker.run_job(job.id)
+    assert manager.get(job.id).status == "error"
     saved = db.get_run(job.id, u.id)
     assert saved is not None and saved["status"] == "error" and saved["keywords"] == ["k"]
 

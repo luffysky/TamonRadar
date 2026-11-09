@@ -259,20 +259,20 @@ def test_spoofed_forwarded_header_cannot_bypass_ip_limit(client):
 
 def test_telegram_webhook_fails_closed_when_unset(client, monkeypatch):
     monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
-    monkeypatch.setattr(bots, "handle_telegram_async", lambda u: pytest.fail("不應處理"))
+    monkeypatch.setattr(bots, "handle_telegram", lambda u: pytest.fail("不應處理"))
     assert client.post("/api/telegram/webhook/tamon", json={}).status_code == 403
 
 
 def test_telegram_webhook_rejects_wrong_secret(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "right-secret")
-    monkeypatch.setattr(bots, "handle_telegram_async", lambda u: pytest.fail("不應處理"))
+    monkeypatch.setattr(bots, "handle_telegram", lambda u: pytest.fail("不應處理"))
     assert client.post("/api/telegram/webhook/wrong", json={}).status_code == 403
 
 
 def test_telegram_webhook_accepts_right_secret(client, monkeypatch):
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "right-secret")
     calls = []
-    monkeypatch.setattr(bots, "handle_telegram_async", calls.append)
+    monkeypatch.setattr(bots, "handle_telegram", calls.append)
     assert client.post("/api/telegram/webhook/right-secret", json={"update_id": 1}).status_code == 200
     assert len(calls) == 1
 

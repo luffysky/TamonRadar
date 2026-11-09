@@ -1,14 +1,24 @@
-"""測試環境:在匯入任何 app 程式前,強制使用暫存 SQLite 與假密鑰,並擋掉真實網路。"""
+"""測試環境:在匯入任何 app 程式前,強制使用暫存 SQLite 與假密鑰,並擋掉真實網路。
+
+設定 TAMON_PG_TEST_URL 可改跑真實 Postgres(網址必須帶 options=-csearch_path=pytest_xxx,確保只動專用 schema)。
+"""
 import os
 import socket
 import sys
 import tempfile
 from pathlib import Path
-from unittest import mock
 
 _TMP = tempfile.mkdtemp(prefix="tamon_test_")
+_PG_URL = os.environ.get("TAMON_PG_TEST_URL", "").strip()
+if _PG_URL:
+    assert "search_path" in _PG_URL and "pytest_" in _PG_URL, "Postgres 測試必須指定 pytest_ 開頭的專用 schema"
 _FORCED_ENV = {
-    "DATABASE_URL": f"sqlite:///{Path(_TMP, 'test.db').as_posix()}",
+    "DATABASE_URL": _PG_URL or f"sqlite:///{Path(_TMP, 'test.db').as_posix()}",
+    "CRON_SECRET": "test-cron-secret",
+    "WORKER_TRIGGER_BASE": "",
+    "VERCEL_URL": "",
+    "VERCEL_PROJECT_PRODUCTION_URL": "",
+    "VERCEL": "",
     "APP_ENV": "test",
     "JWT_SECRET": "test-jwt-secret-not-real-0123456789abcdef",
     "ENCRYPTION_KEY": "test-encryption-key-not-real",
@@ -35,37 +45,25 @@ for _k in _CLEARED_ENV:
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-# Selenium 路徑不是測試需要的;沒裝時用假模組讓 crawler.runner 能匯入
-try:
-    import selenium  # noqa: F401
-    import webdriver_manager  # noqa: F401
-except ImportError:
-    for _name in ("selenium", "selenium.webdriver", "selenium.webdriver.chrome", "selenium.webdriver.chrome.options",
-                  "selenium.webdriver.chrome.service", "selenium.webdriver.common", "selenium.webdriver.common.by",
-                  "selenium.webdriver.support", "selenium.webdriver.support.ui", "selenium.webdriver.support.expected_conditions",
-                  "selenium.common", "selenium.common.exceptions", "webdriver_manager", "webdriver_manager.chrome"):
-        sys.modules[_name] = mock.MagicMock()
-
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import event  # noqa: E402
 
 import db  # noqa: E402
 
-assert db.IS_SQLITE and _TMP.replace("\\", "/") in db._url.replace("\\", "/"), "測試必須使用暫存 SQLite"
+assert bool(_PG_URL) or (db.IS_SQLITE and _TMP.replace("\\", "/") in db._url.replace("\\", "/")), "測試必須使用暫存 SQLite"
 
 
-@event.listens_for(db.engine, "connect")
-def _enable_foreign_keys(dbapi_conn, _record):
-    # SQLite 預設不檢查外鍵;打開才測得出 Postgres 上會發生的 FK 失敗
-    dbapi_conn.execute("PRAGMA foreign_keys=ON")
+if db.IS_SQLITE:
+    @event.listens_for(db.engine, "connect")
+    def _enable_foreign_keys(dbapi_conn, _record):
+        # SQLite 預設不檢查外鍵;打開才測得出 Postgres 上會發生的 FK 失敗
+        dbapi_conn.execute("PRAGMA foreign_keys=ON")
 
 
 import app as app_module  # noqa: E402
 import auth  # noqa: E402
 import ratelimit  # noqa: E402
-import scheduler  # noqa: E402
-from jobs import manager  # noqa: E402
 
 _LOOPBACK = {"127.0.0.1", "::1", "localhost"}
 _real_connect = socket.socket.connect
@@ -92,14 +90,27 @@ def no_real_network(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def fresh_state(monkeypatch):
-    db.Base.metadata.drop_all(db.engine)
-    db.init_db()
+def fresh_state():
+    if db.IS_SQLITE:
+        db.Base.metadata.drop_all(db.engine)
+        db.init_db()
+    else:
+        _reset_postgres()
     ratelimit.reset()
-    manager._jobs.clear()
-    monkeypatch.setattr(scheduler, "sync", lambda *a, **k: None)
-    monkeypatch.setattr(scheduler, "sync_watch", lambda *a, **k: None)
     yield
+
+
+_pg_ready = False
+
+
+def _reset_postgres():
+    global _pg_ready
+    with db.engine.begin() as conn:
+        if not _pg_ready:
+            db.Base.metadata.create_all(conn)
+            _pg_ready = True
+        names = ", ".join(t.name for t in db.Base.metadata.sorted_tables)
+        conn.exec_driver_sql(f"TRUNCATE {names} RESTART IDENTITY CASCADE")
 
 
 @pytest.fixture

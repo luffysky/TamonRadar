@@ -1,10 +1,9 @@
 """擁有者檢查、公開設定白名單、部落格解鎖。"""
 import pytest
 
-import auth
 import db
 from crawler.config import CrawlConfig
-from jobs import Job, manager
+from jobs import manager
 
 
 @pytest.fixture
@@ -29,10 +28,11 @@ def run_id(owner):
 
 @pytest.fixture
 def job(owner):
-    j = Job(CrawlConfig(keywords=["kw"]), owner.id)
-    j.status = "running"
-    manager._jobs[j.id] = j
-    return j
+    view = manager.create(CrawlConfig(keywords=["kw"]), owner.id)
+    with db.SessionLocal() as s:
+        s.get(db.Job, view.id).status = "running"
+        s.commit()
+    return view
 
 
 # ---------- 匯出 ----------
@@ -116,32 +116,16 @@ def test_crawl_status_requires_owner(client, job, owner, other, bearer):
 def test_crawl_stop_requires_owner(client, job, owner, other, bearer):
     assert client.post(f"/api/crawl/{job.id}/stop").status_code == 401
     assert client.post(f"/api/crawl/{job.id}/stop", headers=bearer(other)).status_code == 404
-    assert job.should_stop() is False
+    assert manager.get(job.id).stop_requested is False
     assert client.post(f"/api/crawl/{job.id}/stop", headers=bearer(owner)).status_code == 200
-    assert job.should_stop() is True
+    assert manager.get(job.id).stop_requested is True
 
 
-def test_stream_needs_valid_ticket(client, job):
-    assert client.get(f"/api/crawl/{job.id}/stream").status_code == 404
-    assert client.get(f"/api/crawl/{job.id}/stream", params={"ticket": "garbage"}).status_code == 404
-
-
-def test_stream_ticket_only_for_owner(client, job, owner, other, bearer):
-    assert client.post(f"/api/crawl/{job.id}/stream-ticket", headers=bearer(other)).status_code == 404
-    r = client.post(f"/api/crawl/{job.id}/stream-ticket", headers=bearer(owner))
-    assert r.status_code == 200
-    assert auth.verify_stream_ticket(r.json()["ticket"], job.id) == owner.id
-
-
-def test_stream_ticket_bound_to_job(owner):
-    ticket = auth.create_stream_ticket("job-a", owner.id)
-    assert auth.verify_stream_ticket(ticket, "job-b") is None
-
-
-def test_stream_ticket_cannot_authenticate(client, job, owner):
-    ticket = auth.create_stream_ticket(job.id, owner.id)
-    r = client.get("/api/auth/me", headers={"Authorization": f"Bearer {ticket}"})
-    assert r.status_code == 401
+def test_events_require_owner(client, job, owner, other, bearer):
+    assert client.get(f"/api/crawl/{job.id}/events").status_code == 401
+    assert client.get(f"/api/crawl/{job.id}/events", headers=bearer(other)).status_code == 404
+    r = client.get(f"/api/crawl/{job.id}/events", headers=bearer(owner))
+    assert r.status_code == 200 and r.json()["events"][0]["type"] == "queued"
 
 
 # ---------- 公開設定白名單 ----------

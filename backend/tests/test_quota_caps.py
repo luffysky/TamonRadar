@@ -10,7 +10,7 @@ import db
 import quota
 import ratelimit
 from crawler.config import CrawlConfig
-from jobs import Job, TooManyJobs, manager
+from jobs import TooManyJobs, manager
 
 
 @pytest.fixture
@@ -284,10 +284,15 @@ def test_site_crawl_pro_keeps_env_cap(client, make_user, bearer, captured_jobs, 
     assert captured_jobs[0].config.site_max_pages == 5000
 
 
+def _set_status(job_id, status):
+    with db.SessionLocal() as s:
+        s.get(db.Job, job_id).status = status
+        s.commit()
+
+
 def _running_job(user_id):
-    job = Job(CrawlConfig(keywords=["k"]), user_id)
-    job.status = "running"
-    manager._jobs[job.id] = job
+    job = manager.create(CrawlConfig(keywords=["k"]), user_id)
+    _set_status(job.id, "running")
     return job
 
 
@@ -308,7 +313,7 @@ def test_manager_enforces_limit_atomically(make_user):
 
 def test_finished_job_frees_slot(make_user):
     user = make_user()
-    _running_job(user.id).status = "done"
+    _set_status(_running_job(user.id).id, "done")
     assert manager.active_count(user.id) == 0
 
 
@@ -365,7 +370,7 @@ def test_scheduled_run_consumes_search_quota_and_skips_when_exhausted(make_user,
     monkeypatch.setenv("FREE_SEARCH_DAILY", "0")
     user = make_user()
     sc = db.create_schedule(user.id, {"keywords": ["k"], "enabled": True})
-    monkeypatch.setattr(scheduler, "run_crawl", lambda c: pytest.fail("額度用完不該爬"))
+    monkeypatch.setattr(scheduler, "run_crawl", lambda c, **k: pytest.fail("額度用完不該爬"))
     scheduler._run(sc["id"])
     assert db.list_notifications(user.id)["items"][0]["title"] == "📡 排程略過"
 
